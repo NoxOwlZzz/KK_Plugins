@@ -1,0 +1,88 @@
+<?xml version="1.0" encoding="utf-8" standalone="no"?>
+<manifest schema-ver="1">
+  <guid>{{Mod GUID}}</guid>
+  <name>{{Mod name}}</name>
+  <version>{{Mod version}}</version>
+  <author>{{Mod author}}</author>
+  <description>{{Mod description}}</description>
+  <website>{{Mod website}}</website>
+
+  <!--
+    schema-ver="1" above is Sideloader's manifest schema.
+    SchemaVersion="2" below enables Material Editor UI metadata.
+    If Material Editor's SchemaVersion is absent or unsupported, the block is
+    interpreted with legacy schema 1 behavior.
+  -->
+  <MaterialEditor SchemaVersion="2">
+    <Shader Name="{{ShaderName}}"
+            AssetBundle="{{asset_bundle_path.unity3d}}"
+            Asset="{{asset_name}}">
+
+      <!-- Existing Float properties remain valid in schema 2. -->
+      <Property Name="Intensity"
+                Type="Float"
+                Range="0,2"
+                DefaultValue="1"
+                DisplayName="Intensity"
+                Category="Surface"
+                CategoryOrder="10"
+                Order="10"
+                UiLevel="Basic"/>
+
+      <!--
+        Toggle is a schema 2 alias for a Float property. OffValue and OnValue
+        are the float values written to the material; they default to 0 and 1.
+      -->
+      <Property Name="DetailEnabled"
+                Type="Toggle"
+                DisplayName="Enable detail"
+                Category="Detail"
+                CategoryOrder="20"
+                Order="10"
+                UiLevel="Basic"
+                OffValue="0"
+                OnValue="1"/>
+
+      <!--
+        Enum is also Float-backed. Options must be direct child elements.
+        Type="Dropdown" is an equivalent schema 2 alias for Type="Enum".
+      -->
+      <Property Name="DetailMode"
+                Type="Enum"
+                DisplayName="Detail mode"
+                Category="Detail"
+                CategoryOrder="20"
+                Order="20"
+                UiLevel="Advanced"
+                ShowIf="DetailEnabled != 0">
+        <Option Value="0" DisplayName="Soft"/>
+        <Option Value="1" DisplayName="Sharp"/>
+        <Option Value="2" DisplayName="Posterized"/>
+      </Property>
+
+      <!--
+        ShowIf forms:
+          Source              source is non-zero
+          !Source             source is zero
+          Source == value     also !=, >, >=, < and <=
+        Numeric values and true/false are accepted. A leading underscore on
+        Source is optional. Only manifest Float or Keyword properties can be
+        resolved as sources, including Hidden properties. A missing or
+        incompatible source, a resolver error, or an invalid condition fails
+        open: the dependent property stays visible.
+      -->
+      <Property Name="DetailStrength"
+                Type="Float"
+                Range="0,1"
+                DisplayName="Detail strength"
+                Category="Detail"
+                CategoryOrder="20"
+                Order="30"
+                UiLevel="Advanced"
+                ShowIf="_DetailEnabled == true"/>
+
+      <!-- Legacy property attributes such as Hidden and the legacy types
+           Color, Texture and Keyword continue to work in schema 2. -->
+    </Shader>
+  </MaterialEditor>
+</manifest>
