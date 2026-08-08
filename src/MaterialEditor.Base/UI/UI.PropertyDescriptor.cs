@@ -22,14 +22,23 @@ namespace MaterialEditorAPI
             Projector = projector;
             MaterialName = materialName;
             Name = definition.Name;
-            DisplayName = definition.Name;
+            DisplayName = string.IsNullOrEmpty(definition.DisplayName)
+                ? definition.Name
+                : definition.DisplayName;
             Type = definition.Type;
             MinValue = definition.MinValue;
             MaxValue = definition.MaxValue;
+            EditorId = string.IsNullOrEmpty(definition.EditorId)
+                ? GetEditorId(definition.Type)
+                : definition.EditorId;
+            EnumOptions = definition.EnumOptions
+                          ?? new List<MaterialEditorEnumOption>();
+            OffValue = definition.OffValue;
+            OnValue = definition.OnValue;
             PublicDescriptor = new MaterialEditorPropertyDescriptor(
                 definition.Name,
-                definition.Name,
-                GetEditorId(definition.Type))
+                DisplayName,
+                EditorId)
             {
                 PropertyName = definition.Name,
                 Category = category ?? string.Empty,
@@ -64,6 +73,10 @@ namespace MaterialEditorAPI
             Type = type;
             MinValue = descriptor.Minimum;
             MaxValue = descriptor.Maximum;
+            EditorId = descriptor.EditorId;
+            EnumOptions = new List<MaterialEditorEnumOption>();
+            OffValue = 0f;
+            OnValue = 1f;
             PublicDescriptor = descriptor;
         }
 
@@ -77,6 +90,11 @@ namespace MaterialEditorAPI
         internal ShaderPropertyType Type { get; }
         internal float? MinValue { get; }
         internal float? MaxValue { get; }
+        internal string EditorId { get; }
+        internal IList<MaterialEditorEnumOption> EnumOptions { get; }
+        internal float OffValue { get; }
+        internal float OnValue { get; }
+        internal System.Action PresentationRefresh { get; set; }
         internal MaterialEditorPropertyDescriptor PublicDescriptor { get; }
 
         private static string GetEditorId(ShaderPropertyType type)
@@ -122,7 +140,13 @@ namespace MaterialEditorAPI
                     rows = new[] { CreateColorRow(descriptor) };
                     break;
                 case ShaderPropertyType.Float:
-                    rows = new[] { CreateFloatRow(descriptor) };
+                    if (descriptor.EditorId == ShaderPropertyEditorIds.Enum
+                        && descriptor.EnumOptions.Count > 0)
+                        rows = new[] { CreateEnumRow(descriptor) };
+                    else if (descriptor.EditorId == ShaderPropertyEditorIds.Toggle)
+                        rows = new[] { CreateFloatToggleRow(descriptor) };
+                    else
+                        rows = new[] { CreateFloatRow(descriptor) };
                     break;
                 case ShaderPropertyType.Keyword:
                     rows = new[] { CreateKeywordRow(descriptor) };
@@ -319,6 +343,108 @@ namespace MaterialEditorAPI
                 () => _editService.RemoveMaterialFloatProperty(data, material, propertyName, gameObject));
         }
 
+        private EnumPropertyRowModel CreateEnumRow(PropertyDescriptor descriptor)
+        {
+            var gameObject = descriptor.GameObject;
+            var data = descriptor.Data;
+            var material = descriptor.Material;
+            var propertyName = descriptor.Name;
+            var value = material.GetFloat($"_{propertyName}");
+            var original =
+                _editService.GetMaterialFloatPropertyValueOriginal(
+                    data,
+                    material,
+                    propertyName,
+                    gameObject)
+                ?? value;
+
+            return new EnumPropertyRowModel(descriptor.DisplayName)
+            {
+                GameObject = gameObject,
+                Data = data,
+                Material = material,
+                Projector = descriptor.Projector,
+                PropertyName = propertyName,
+                PublicDescriptor = descriptor.PublicDescriptor,
+                Value = value,
+                OriginalValue = original,
+                Options = descriptor.EnumOptions,
+                SelectInterpolable = () =>
+                    _actions.SelectInterpolable(
+                        gameObject,
+                        RowModel.RowItemType.FloatProperty,
+                        descriptor.MaterialName,
+                        propertyName,
+                        string.Empty),
+                ValueOnChange = newValue =>
+                    _editService.SetMaterialFloatProperty(
+                        data,
+                        material,
+                        propertyName,
+                        newValue,
+                        gameObject),
+                ValueOnReset = () =>
+                    _editService.RemoveMaterialFloatProperty(
+                        data,
+                        material,
+                        propertyName,
+                        gameObject),
+                PresentationRefresh = descriptor.PresentationRefresh
+            };
+        }
+
+        private FloatTogglePropertyRowModel CreateFloatToggleRow(
+            PropertyDescriptor descriptor)
+        {
+            var gameObject = descriptor.GameObject;
+            var data = descriptor.Data;
+            var material = descriptor.Material;
+            var propertyName = descriptor.Name;
+            var value = material.GetFloat($"_{propertyName}");
+            var original =
+                _editService.GetMaterialFloatPropertyValueOriginal(
+                    data,
+                    material,
+                    propertyName,
+                    gameObject)
+                ?? value;
+
+            return new FloatTogglePropertyRowModel(descriptor.DisplayName)
+            {
+                GameObject = gameObject,
+                Data = data,
+                Material = material,
+                Projector = descriptor.Projector,
+                PropertyName = propertyName,
+                PublicDescriptor = descriptor.PublicDescriptor,
+                Value = value,
+                OriginalValue = original,
+                OffValue = descriptor.OffValue,
+                OnValue = descriptor.OnValue,
+                SelectInterpolable = () =>
+                    _actions.SelectInterpolable(
+                        gameObject,
+                        RowModel.RowItemType.FloatProperty,
+                        descriptor.MaterialName,
+                        propertyName,
+                        string.Empty),
+                ValueOnChange = newValue =>
+                    _editService.SetMaterialFloatProperty(
+                        data,
+                        material,
+                        propertyName,
+                        newValue,
+                        gameObject),
+                ValueOnReset = () =>
+                    _editService.RemoveMaterialFloatProperty(
+                        data,
+                        material,
+                        propertyName,
+                        gameObject),
+                PresentationRefresh = descriptor.PresentationRefresh
+            };
+        }
+
         internal static FloatPropertyRowModel CreateFloatRow(
             PropertyDescriptor descriptor,
             float value,
@@ -341,7 +467,8 @@ namespace MaterialEditorAPI
                 OriginalValue = original,
                 SelectInterpolable = selectInterpolable,
                 ValueOnChange = changeValue,
-                ValueOnReset = resetValue
+                ValueOnReset = resetValue,
+                PresentationRefresh = descriptor.PresentationRefresh
             };
             if (minValue != null)
                 item.SliderMinimum = minValue.Value;
@@ -374,7 +501,8 @@ namespace MaterialEditorAPI
                 ValueOnChange = newValue =>
                     _editService.SetMaterialKeywordProperty(data, material, propertyName, newValue, gameObject),
                 ValueOnReset = () =>
-                    _editService.RemoveMaterialKeywordProperty(data, material, propertyName, gameObject)
+                    _editService.RemoveMaterialKeywordProperty(data, material, propertyName, gameObject),
+                PresentationRefresh = descriptor.PresentationRefresh
             };
         }
 

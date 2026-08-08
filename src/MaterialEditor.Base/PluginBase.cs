@@ -4,6 +4,7 @@ using BepInEx.Configuration;
 using BepInEx.Logging;
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.IO;
 using System.Reflection;
 using System.Xml;
@@ -269,6 +270,12 @@ namespace MaterialEditorAPI
                         XmlDocument doc = new XmlDocument();
                         doc.Load(stream);
                         XmlElement materialEditorElement = doc.DocumentElement;
+                        Action<string> metadataWarning = message =>
+                            Logger?.LogWarning(
+                                "Material Editor default metadata: " + message);
+                        var schemaVersion = ShaderPropertyMetadataParser.ReadSchemaVersion(
+                            materialEditorElement,
+                            metadataWarning);
 
                         var shaderElements = materialEditorElement.GetElementsByTagName("Shader");
                         foreach (var shaderElementObj in shaderElements)
@@ -282,43 +289,26 @@ namespace MaterialEditorAPI
                                     XMLShaderProperties[shaderName] = new Dictionary<string, ShaderPropertyData>();
 
                                     var shaderPropertyElements = shaderElement.GetElementsByTagName("Property");
+                                    var declarationOrder = 0;
                                     foreach (var shaderPropertyElementObj in shaderPropertyElements)
                                     {
                                         if (shaderPropertyElementObj != null)
                                         {
                                             var shaderPropertyElement = (XmlElement)shaderPropertyElementObj;
                                             {
-                                                string propertyName = shaderPropertyElement.GetAttribute("Name");
-                                                ShaderPropertyType propertyType = (ShaderPropertyType)Enum.Parse(typeof(ShaderPropertyType), shaderPropertyElement.GetAttribute("Type"));
-                                                string defaultValue = shaderPropertyElement.GetAttribute("DefaultValue");
-                                                string defaultValueAB = shaderPropertyElement.GetAttribute("DefaultValueAssetBundle");
-                                                string anisoLevel = shaderPropertyElement.GetAttribute("AnisoLevel");
-                                                string filterMode = shaderPropertyElement.GetAttribute("FilterMode");
-                                                string wrapMode = shaderPropertyElement.GetAttribute("WrapMode");
-                                                string range = shaderPropertyElement.GetAttribute("Range");
-                                                string min = null;
-                                                string max = null;
-                                                if (!range.IsNullOrWhiteSpace())
+                                                ShaderPropertyData shaderPropertyData;
+                                                if (!ShaderPropertyData.TryParse(
+                                                        shaderPropertyElement,
+                                                        metadataWarning,
+                                                        out shaderPropertyData,
+                                                        schemaVersion))
                                                 {
-                                                    var rangeSplit = range.Split(',');
-                                                    if (rangeSplit.Length == 2)
-                                                    {
-                                                        min = rangeSplit[0];
-                                                        max = rangeSplit[1];
-                                                    }
+                                                    declarationOrder++;
+                                                    continue;
                                                 }
-                                                string hidden = shaderPropertyElement.GetAttribute("Hidden");
-                                                string category = shaderPropertyElement.GetAttribute("Category");
 
-                                                ShaderPropertyData shaderPropertyData = new ShaderPropertyData(
-                                                    propertyName, propertyType,
-                                                    defaultValue, defaultValueAB,
-                                                    anisoLevel, filterMode, wrapMode,
-                                                    min, max,
-                                                    hidden, category
-                                                );
-
-                                                XMLShaderProperties["default"][propertyName] = shaderPropertyData;
+                                                shaderPropertyData.DeclarationOrder = declarationOrder++;
+                                                XMLShaderProperties["default"][shaderPropertyData.Name] = shaderPropertyData;
                                             }
                                         }
                                     }
@@ -491,6 +481,16 @@ namespace MaterialEditorAPI
             /// Category of the shader property.
             /// </summary>
             public string Category;
+            internal int? CategoryOrder;
+            internal int DeclarationOrder;
+            internal string DisplayName;
+            internal int? Order;
+            internal string EditorId;
+            internal MaterialEditorPropertyUiLevel UiLevel;
+            internal MaterialEditorPropertyCondition ShowIf;
+            internal List<MaterialEditorEnumOption> EnumOptions;
+            internal float OffValue;
+            internal float OnValue;
 
             /// <summary>
             /// Initializes a new instance of the <see cref="ShaderPropertyData"/> class.
@@ -516,6 +516,11 @@ namespace MaterialEditorAPI
             {
                 Name = name;
                 Type = type;
+                DisplayName = name;
+                UiLevel = MaterialEditorPropertyUiLevel.Basic;
+                EnumOptions = new List<MaterialEditorEnumOption>();
+                OffValue = 0f;
+                OnValue = 1f;
                 DefaultValue = defaultValue.IsNullOrEmpty() ? null : defaultValue;
                 DefaultValueAssetBundle = defaultValueAB.IsNullOrEmpty() ? null : defaultValueAB;
 
@@ -539,7 +544,8 @@ namespace MaterialEditorAPI
 
                 if (!minValue.IsNullOrWhiteSpace() && !maxValue.IsNullOrWhiteSpace())
                 {
-                    if (float.TryParse(minValue, out float min) && float.TryParse(maxValue, out float max))
+                    if (TryParseManifestFloat(minValue, out float min)
+                        && TryParseManifestFloat(maxValue, out float max))
                     {
                         MinValue = min;
                         MaxValue = max;
@@ -548,6 +554,200 @@ namespace MaterialEditorAPI
 
                 Hidden = bool.TryParse(hidden, out bool result) && result;
                 Category = category;
+            }
+
+            internal static bool TryParse(
+                XmlElement propertyElement,
+                Action<string> warning,
+                out ShaderPropertyData propertyData,
+                int schemaVersion = 2)
+            {
+                propertyData = null;
+                if (propertyElement == null)
+                    return false;
+
+                var propertyName = propertyElement.GetAttribute("Name").Trim();
+                if (propertyName.Length == 0)
+                {
+                    warning?.Invoke("A shader Property without a Name was ignored.");
+                    return false;
+                }
+
+                var declaredPropertyType = propertyElement.GetAttribute("Type");
+                ShaderPropertyType propertyType;
+                string aliasEditorId;
+                if (!TryParsePropertyType(
+                        declaredPropertyType,
+                        schemaVersion,
+                        out propertyType,
+                        out aliasEditorId))
+                {
+                    warning?.Invoke(
+                        "Shader property '" + propertyName + "' has unknown Type '"
+                        + declaredPropertyType + "' and was ignored.");
+                    return false;
+                }
+
+                string min = null;
+                string max = null;
+                var range = propertyElement.GetAttribute("Range");
+                if (!range.IsNullOrWhiteSpace())
+                {
+                    var rangeSplit = range.Split(',');
+                    float parsedMinimum;
+                    float parsedMaximum;
+                    if (rangeSplit.Length == 2
+                        && TryParseManifestFloat(rangeSplit[0], out parsedMinimum)
+                        && TryParseManifestFloat(rangeSplit[1], out parsedMaximum))
+                    {
+                        min = parsedMinimum.ToString(CultureInfo.InvariantCulture);
+                        max = parsedMaximum.ToString(CultureInfo.InvariantCulture);
+                    }
+                    else
+                    {
+                        warning?.Invoke(
+                            "Shader property '" + propertyName + "' has invalid Range '"
+                            + range + "'; the default slider range will be used.");
+                    }
+                }
+
+                propertyData = new ShaderPropertyData(
+                    propertyName,
+                    propertyType,
+                    propertyElement.GetAttribute("DefaultValue"),
+                    propertyElement.GetAttribute("DefaultValueAssetBundle"),
+                    propertyElement.GetAttribute("AnisoLevel"),
+                    propertyElement.GetAttribute("FilterMode"),
+                    propertyElement.GetAttribute("WrapMode"),
+                    min,
+                    max,
+                    propertyElement.GetAttribute("Hidden"),
+                    propertyElement.GetAttribute("Category"));
+
+                if (schemaVersion != 2)
+                    return true;
+
+                var metadata = ShaderPropertyMetadataParser.Parse(
+                    propertyElement,
+                    warning);
+                var hasExplicitEditor =
+                    !propertyElement.GetAttribute("Editor").IsNullOrWhiteSpace();
+                if (!hasExplicitEditor
+                    && metadata.EditorId.IsNullOrEmpty()
+                    && !aliasEditorId.IsNullOrEmpty())
+                {
+                    metadata.EditorId = aliasEditorId;
+                }
+
+                if (!IsEditorCompatibleWithPropertyType(
+                        metadata.EditorId,
+                        propertyType))
+                {
+                    warning?.Invoke(
+                        "Shader property '" + propertyName + "' declares Editor '"
+                        + propertyElement.GetAttribute("Editor") + "' for Type '"
+                        + declaredPropertyType + "' (normalized backing Type '"
+                        + propertyType + "'); its type editor will be used.");
+                    metadata.EditorId = null;
+                }
+
+                if (metadata.EditorId == ShaderPropertyEditorIds.Enum
+                    && metadata.EnumOptions.Count == 0)
+                {
+                    warning?.Invoke(
+                        "Shader property '" + propertyName + "' declares Type '"
+                        + declaredPropertyType
+                        + "' as a dropdown without any valid Option elements; "
+                        + "the Float editor will be used.");
+                    metadata.EditorId = null;
+                }
+
+                propertyData.DisplayName = metadata.DisplayName.IsNullOrEmpty()
+                    ? propertyName
+                    : metadata.DisplayName;
+                propertyData.Order = metadata.Order;
+                propertyData.CategoryOrder = metadata.CategoryOrder;
+                propertyData.EditorId = metadata.EditorId;
+                propertyData.UiLevel = metadata.UiLevel;
+                propertyData.ShowIf = metadata.ShowIf;
+                propertyData.EnumOptions.AddRange(metadata.EnumOptions);
+                propertyData.OffValue = metadata.OffValue;
+                propertyData.OnValue = metadata.OnValue;
+                return true;
+            }
+
+            private static bool IsEditorCompatibleWithPropertyType(
+                string editorId,
+                ShaderPropertyType propertyType)
+            {
+                if (editorId.IsNullOrEmpty())
+                    return true;
+
+                return (editorId != ShaderPropertyEditorIds.Enum
+                        && editorId != ShaderPropertyEditorIds.Toggle)
+                       || propertyType == ShaderPropertyType.Float;
+            }
+
+            private static bool TryParsePropertyType(
+                string value,
+                int schemaVersion,
+                out ShaderPropertyType propertyType,
+                out string aliasEditorId)
+            {
+                propertyType = default(ShaderPropertyType);
+                aliasEditorId = null;
+                if (value.IsNullOrWhiteSpace())
+                    return false;
+
+                var normalizedType = value.Trim();
+                string aliasType;
+                if (ShaderPropertyMetadataParser.TryResolvePropertyTypeAlias(
+                        normalizedType,
+                        schemaVersion,
+                        out aliasType,
+                        out aliasEditorId))
+                {
+                    normalizedType = aliasType;
+                }
+
+                try
+                {
+                    var parsed = (ShaderPropertyType)Enum.Parse(
+                        typeof(ShaderPropertyType),
+                        normalizedType,
+                        true);
+                    if (!Enum.IsDefined(typeof(ShaderPropertyType), parsed))
+                        return false;
+
+                    propertyType = parsed;
+                    return true;
+                }
+                catch (ArgumentException)
+                {
+                    return false;
+                }
+                catch (OverflowException)
+                {
+                    return false;
+                }
+            }
+
+            private static bool TryParseManifestFloat(string value, out float result)
+            {
+                if ((float.TryParse(
+                         value,
+                         NumberStyles.Float,
+                         CultureInfo.InvariantCulture,
+                         out result)
+                     || float.TryParse(value, out result))
+                    && !float.IsNaN(result)
+                    && !float.IsInfinity(result))
+                {
+                    return true;
+                }
+
+                result = 0f;
+                return false;
             }
         }
     }

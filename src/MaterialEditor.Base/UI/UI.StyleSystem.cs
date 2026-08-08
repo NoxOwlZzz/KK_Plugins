@@ -36,6 +36,9 @@ namespace MaterialEditorAPI
         internal const float FloatSliderWidth = ContentWidth - 94f;
         internal const float FloatInputWidth = 94f;
         internal const float KeywordToggleWidth = ContentWidth;
+        internal const int DropdownFontSize = 16;
+        internal const int DropdownMinimumFontSize = 12;
+        internal const float DropdownTextVerticalInset = 1f;
 
         internal static readonly RectOffset RowPadding = new RectOffset(1, 1, 1, 1);
     }
@@ -201,10 +204,33 @@ namespace MaterialEditorAPI
             if (dropdown == null)
                 return;
 
-            ApplyText(dropdown.captionText, MaterialEditorTextRole.Input);
-            if (dropdown.itemText != null)
-                ApplyText(dropdown.itemText, MaterialEditorTextRole.Input);
+            ApplyDropdownText(dropdown.captionText);
+            ApplyDropdownText(dropdown.itemText);
             ApplyTypography(dropdown.gameObject);
+        }
+
+        private static void ApplyDropdownText(Text text)
+        {
+            if (text == null)
+                return;
+
+            ApplyText(text, MaterialEditorTextRole.Input);
+            text.fontSize = MaterialEditorLayout.DropdownFontSize;
+            text.resizeTextForBestFit = true;
+            text.resizeTextMinSize =
+                MaterialEditorLayout.DropdownMinimumFontSize;
+            text.resizeTextMaxSize = MaterialEditorLayout.DropdownFontSize;
+            text.horizontalOverflow = HorizontalWrapMode.Wrap;
+            text.verticalOverflow = VerticalWrapMode.Truncate;
+
+            var rect = text.rectTransform;
+            rect.offsetMin = new Vector2(
+                rect.offsetMin.x,
+                MaterialEditorLayout.DropdownTextVerticalInset);
+            rect.offsetMax = new Vector2(
+                rect.offsetMax.x,
+                -MaterialEditorLayout.DropdownTextVerticalInset);
+            text.SetVerticesDirty();
         }
 
         internal static void ApplyScrollView(ScrollRect scrollRect)

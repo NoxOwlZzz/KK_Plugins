@@ -98,6 +98,14 @@ namespace KK_Plugins.MaterialEditor
             string sourceId)
         {
             if (materialEditorElement == null) return;
+            Action<string> metadataWarning = message => Logger.LogWarning(
+                "Material Editor metadata in '"
+                + (sourceId ?? "unknown source")
+                + "': "
+                + message);
+            var schemaVersion = ShaderPropertyMetadataParser.ReadSchemaVersion(
+                materialEditorElement,
+                metadataWarning);
             var tooltipCatalog = LoadTooltipCatalogs(
                 materialEditorElement,
                 sourceId ?? "unknown source");
@@ -108,65 +116,80 @@ namespace KK_Plugins.MaterialEditor
                 {
                     var shaderElement = (XmlElement)shaderElementObj;
                     string shaderName = shaderElement.GetAttribute("Name");
-                    var shaderMetadata = tooltipCatalog.ResolveShader(shaderName);
-                    ShaderUiMetadataRegistry.SetShader(shaderName, shaderMetadata);
-
-                    if (LoadedShaders.ContainsKey(shaderName))
+                    var isReservedDefault =
+                        ShaderPropertyFallbackPolicy.IsReservedShaderName(shaderName);
+                    Shader shader = null;
+                    if (isReservedDefault)
                     {
-                        Destroy(LoadedShaders[shaderName].Shader);
-                        LoadedShaders.Remove(shaderName);
+                        metadataWarning(
+                            "Shader Name 'default' is reserved; its properties "
+                            + "will be merged into the global legacy fallback "
+                            + "without shader-specific metadata.");
                     }
-                    var shader = LoadShader(shaderName, shaderElement.GetAttribute("AssetBundle"), shaderElement.GetAttribute("Asset"));
-                    LoadedShaders[shaderName] = new ShaderData(shader, shaderName, shaderElement.GetAttribute("RenderQueue"), shaderElement.GetAttribute("ShaderOptimization"));
-
-                    XMLShaderProperties[shaderName] = new Dictionary<string, ShaderPropertyData>();
-                    if (shader != null && shader.name != shaderName)
+                    else
                     {
-                        XMLShaderProperties[shader.name] = new Dictionary<string, ShaderPropertyData>();
-                        ShaderUiMetadataRegistry.SetShader(shader.name, shaderMetadata);
+                        var shaderMetadata = tooltipCatalog.ResolveShader(shaderName);
+                        ShaderUiMetadataRegistry.SetShader(shaderName, shaderMetadata);
+
+                        if (LoadedShaders.ContainsKey(shaderName))
+                        {
+                            Destroy(LoadedShaders[shaderName].Shader);
+                            LoadedShaders.Remove(shaderName);
+                        }
+                        shader = LoadShader(
+                            shaderName,
+                            shaderElement.GetAttribute("AssetBundle"),
+                            shaderElement.GetAttribute("Asset"));
+                        LoadedShaders[shaderName] = new ShaderData(
+                            shader,
+                            shaderName,
+                            shaderElement.GetAttribute("RenderQueue"),
+                            shaderElement.GetAttribute("ShaderOptimization"));
+
+                        XMLShaderProperties[shaderName] =
+                            new Dictionary<string, ShaderPropertyData>();
+                        if (shader != null && shader.name != shaderName)
+                        {
+                            XMLShaderProperties[shader.name] =
+                                new Dictionary<string, ShaderPropertyData>();
+                            ShaderUiMetadataRegistry.SetShader(
+                                shader.name,
+                                shaderMetadata);
+                        }
                     }
 
                     var shaderPropertyElements = shaderElement.GetElementsByTagName("Property");
+                    var declarationOrder = 0;
                     foreach (var shaderPropertyElementObj in shaderPropertyElements)
                     {
                         if (shaderPropertyElementObj != null)
                         {
                             var shaderPropertyElement = (XmlElement)shaderPropertyElementObj;
-
-                            string propertyName = shaderPropertyElement.GetAttribute("Name");
-                            ShaderPropertyType propertyType = (ShaderPropertyType)Enum.Parse(typeof(ShaderPropertyType), shaderPropertyElement.GetAttribute("Type"));
-                            string defaultValue = shaderPropertyElement.GetAttribute("DefaultValue");
-                            string defaultValueAB = shaderPropertyElement.GetAttribute("DefaultValueAssetBundle");
-                            string anisoLevel = shaderPropertyElement.GetAttribute("AnisoLevel");
-                            string filterMode = shaderPropertyElement.GetAttribute("FilterMode");
-                            string wrapMode = shaderPropertyElement.GetAttribute("WrapMode");
-                            string range = shaderPropertyElement.GetAttribute("Range");
-                            string min = null;
-                            string max = null;
-                            if (!range.IsNullOrWhiteSpace())
+                            ShaderPropertyData shaderPropertyData;
+                            if (!ShaderPropertyData.TryParse(
+                                    shaderPropertyElement,
+                                    metadataWarning,
+                                    out shaderPropertyData,
+                                    schemaVersion))
                             {
-                                var rangeSplit = range.Split(',');
-                                if (rangeSplit.Length == 2)
+                                declarationOrder++;
+                                continue;
+                            }
+
+                            shaderPropertyData.DeclarationOrder = declarationOrder++;
+                            ShaderPropertyFallbackPolicy.MergeInto(
+                                XMLShaderProperties["default"],
+                                shaderPropertyData);
+                            if (!isReservedDefault)
+                            {
+                                XMLShaderProperties[shaderName][shaderPropertyData.Name] =
+                                    shaderPropertyData;
+                                if (shader != null && shader.name != shaderName)
                                 {
-                                    min = rangeSplit[0];
-                                    max = rangeSplit[1];
+                                    XMLShaderProperties[shader.name][shaderPropertyData.Name] =
+                                        shaderPropertyData;
                                 }
                             }
-                            string hidden = shaderPropertyElement.GetAttribute("Hidden");
-                            string category = shaderPropertyElement.GetAttribute("Category");
-
-                            ShaderPropertyData shaderPropertyData = new ShaderPropertyData(
-                                propertyName, propertyType,
-                                defaultValue, defaultValueAB,
-                                anisoLevel, filterMode, wrapMode,
-                                min, max,
-                                hidden, category
-                            );
-
-                            XMLShaderProperties["default"][propertyName] = shaderPropertyData;
-                            XMLShaderProperties[shaderName][propertyName] = shaderPropertyData;
-                            if (shader != null && shader.name != shaderName)
-                                XMLShaderProperties[shader.name][propertyName] = shaderPropertyData;
                         }
                     }
                 }

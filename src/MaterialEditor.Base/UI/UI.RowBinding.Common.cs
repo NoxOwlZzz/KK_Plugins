@@ -167,6 +167,7 @@ namespace MaterialEditorAPI
                 else
                     changeValue(getValue());
                 refresh();
+                item.PresentationRefresh?.Invoke();
             });
 
             listeners.Listen(controls.ResetButton, () =>
@@ -175,6 +176,7 @@ namespace MaterialEditorAPI
                 controls.Toggle.Set(getValue(), false);
                 resetValue();
                 refresh();
+                item.PresentationRefresh?.Invoke();
             });
         }
     }

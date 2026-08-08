@@ -57,7 +57,9 @@ namespace MaterialEditorAPI
             _registry.Register(
                 floatKeyword,
                 RowModel.RowItemType.FloatProperty,
-                RowModel.RowItemType.KeywordProperty);
+                RowModel.RowItemType.KeywordProperty,
+                RowModel.RowItemType.EnumProperty,
+                RowModel.RowItemType.FloatToggleProperty);
         }
 
         internal void Bind(RowModel item, bool force)

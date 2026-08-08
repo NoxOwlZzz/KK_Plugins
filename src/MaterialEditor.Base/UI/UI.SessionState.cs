@@ -3,6 +3,12 @@ using UnityEngine;
 
 namespace MaterialEditorAPI
 {
+    internal enum MaterialEditorUiMode
+    {
+        Basic,
+        Advanced
+    }
+
     internal sealed class MaterialEditorSessionState
     {
         internal GameObject CurrentGameObject;
@@ -18,6 +24,7 @@ namespace MaterialEditorAPI
 
         internal bool ListsVisible;
         internal bool RenameListVisible;
+        internal MaterialEditorUiMode UiMode = MaterialEditorUiMode.Basic;
 
         private bool _objExportPending;
         private Renderer _objRenderer;

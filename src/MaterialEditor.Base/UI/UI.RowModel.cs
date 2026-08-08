@@ -21,6 +21,7 @@ namespace MaterialEditorAPI
         internal Material Material { get; set; }
         internal Projector Projector { get; set; }
         internal string PropertyName { get; set; }
+        internal Action PresentationRefresh { get; set; }
         internal MaterialEditorPropertyDescriptor PublicDescriptor { get; set; }
 
         internal enum RowItemType
@@ -39,7 +40,9 @@ namespace MaterialEditorAPI
             TextureOffsetScale,
             ColorProperty,
             FloatProperty,
-            KeywordProperty
+            KeywordProperty,
+            EnumProperty,
+            FloatToggleProperty
         }
     }
 

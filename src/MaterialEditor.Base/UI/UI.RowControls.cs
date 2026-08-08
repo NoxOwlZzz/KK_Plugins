@@ -27,19 +27,22 @@ namespace MaterialEditorAPI
             Text label,
             Toggle toggle,
             Button resetButton,
-            LabelClickTrigger labelClickTrigger = null)
+            LabelClickTrigger labelClickTrigger = null,
+            Button selectInterpolableButton = null)
             : base(panel)
         {
             Label = label;
             Toggle = toggle;
             ResetButton = resetButton;
             LabelClickTrigger = labelClickTrigger;
+            SelectInterpolableButton = selectInterpolableButton;
         }
 
         internal Text Label { get; }
         internal Toggle Toggle { get; }
         internal Button ResetButton { get; }
         internal LabelClickTrigger LabelClickTrigger { get; }
+        internal Button SelectInterpolableButton { get; }
     }
 
     internal sealed class RendererRowControls : RowControls
@@ -259,6 +262,26 @@ namespace MaterialEditorAPI
         internal Button ResetButton { get; }
     }
 
+    internal sealed class EnumRowControls : RowControls
+    {
+        internal EnumRowControls(RowBinder owner)
+            : base(owner.GetUIComponent<CanvasGroup>("EnumPanel"))
+        {
+            Label = owner.GetUIComponent<Text>("EnumLabel");
+            LabelClickTrigger = owner.GetUIComponent<LabelClickTrigger>("EnumLabel");
+            SelectInterpolableButton = owner.GetUIComponent<Button>(
+                "SelectInterpolableEnumButton");
+            Dropdown = owner.GetUIComponent<Dropdown>("EnumDropdown");
+            ResetButton = owner.GetUIComponent<Button>("EnumResetButton");
+        }
+
+        internal Text Label { get; }
+        internal LabelClickTrigger LabelClickTrigger { get; }
+        internal Button SelectInterpolableButton { get; }
+        internal Dropdown Dropdown { get; }
+        internal Button ResetButton { get; }
+    }
+
     internal sealed class RowControlSet
     {
         private readonly List<RowControls> _rows;
@@ -289,6 +312,12 @@ namespace MaterialEditorAPI
             Color = new ColorRowControls(owner);
             Float = new FloatRowControls(owner);
             Keyword = CreateToggle(owner, "Keyword", "KeywordLabel");
+            Enum = new EnumRowControls(owner);
+            FloatToggle = CreateToggle(
+                owner,
+                "FloatToggle",
+                "FloatToggleLabel",
+                "SelectInterpolableFloatToggleButton");
 
             _rows = new List<RowControls>
             {
@@ -306,7 +335,9 @@ namespace MaterialEditorAPI
                 OffsetScale,
                 Color,
                 Float,
-                Keyword
+                Keyword,
+                Enum,
+                FloatToggle
             };
         }
 
@@ -325,6 +356,8 @@ namespace MaterialEditorAPI
         internal ColorRowControls Color { get; }
         internal FloatRowControls Float { get; }
         internal ToggleRowControls Keyword { get; }
+        internal EnumRowControls Enum { get; }
+        internal ToggleRowControls FloatToggle { get; }
 
         internal static RowControlSet Create(RowBinder owner)
         {
@@ -340,7 +373,8 @@ namespace MaterialEditorAPI
         private static ToggleRowControls CreateToggle(
             RowBinder owner,
             string prefix,
-            string labelClickObjectName = null)
+            string labelClickObjectName = null,
+            string selectInterpolableObjectName = null)
         {
             return new ToggleRowControls(
                 owner.GetUIComponent<CanvasGroup>($"{prefix}Panel"),
@@ -349,7 +383,10 @@ namespace MaterialEditorAPI
                 owner.GetUIComponent<Button>($"{prefix}ResetButton"),
                 labelClickObjectName == null
                     ? null
-                    : owner.GetUIComponent<LabelClickTrigger>(labelClickObjectName));
+                    : owner.GetUIComponent<LabelClickTrigger>(labelClickObjectName),
+                selectInterpolableObjectName == null
+                    ? null
+                    : owner.GetUIComponent<Button>(selectInterpolableObjectName));
         }
     }
 }

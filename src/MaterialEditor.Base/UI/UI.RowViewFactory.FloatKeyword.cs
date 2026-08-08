@@ -10,6 +10,8 @@ namespace MaterialEditorAPI
         {
             CreateFloatRow(parent);
             CreateKeywordRow(parent);
+            CreateEnumRow(parent);
+            CreateFloatToggleRow(parent);
         }
 
         private static void CreateFloatRow(Transform parent)
@@ -83,6 +85,79 @@ namespace MaterialEditorAPI
 
             var reset = MaterialEditorControlFactory.CreateButton(
                 "KeywordResetButton",
+                panel.transform,
+                "Reset");
+            RowViewFactorySupport.SetWidth(reset, ResetButtonWidth);
+            TooltipManager.AddTooltip(
+                reset.gameObject,
+                "Reset the selected property to its original value");
+        }
+
+        private static void CreateEnumRow(Transform parent)
+        {
+            var panel = RowViewFactorySupport.CreatePanel(
+                "EnumPanel",
+                parent,
+                ItemColor,
+                true);
+
+            var label = RowViewFactorySupport.CreateLabel(
+                "EnumLabel",
+                panel.transform,
+                string.Empty,
+                LabelWidth,
+                1f);
+            label.gameObject.AddComponent<LabelClickTrigger>();
+
+            RowViewFactorySupport.CreateInterpolableButton(
+                "SelectInterpolableEnumButton",
+                panel.transform,
+                "Select currently selected enum property as interpolable in timeline");
+
+            var dropdown = MaterialEditorControlFactory.CreateDropdown(
+                "EnumDropdown",
+                panel.transform);
+            RowViewFactorySupport.SetWidth(dropdown, ContentFullWidth);
+
+            var reset = MaterialEditorControlFactory.CreateButton(
+                "EnumResetButton",
+                panel.transform,
+                "Reset");
+            RowViewFactorySupport.SetWidth(reset, ResetButtonWidth);
+            TooltipManager.AddTooltip(
+                reset.gameObject,
+                "Reset the selected property to its original value");
+        }
+
+        private static void CreateFloatToggleRow(Transform parent)
+        {
+            var panel = RowViewFactorySupport.CreatePanel(
+                "FloatTogglePanel",
+                parent,
+                ItemColor,
+                true);
+
+            var label = RowViewFactorySupport.CreateLabel(
+                "FloatToggleLabel",
+                panel.transform,
+                string.Empty,
+                LabelWidth,
+                1f);
+            label.gameObject.AddComponent<LabelClickTrigger>();
+
+            RowViewFactorySupport.CreateInterpolableButton(
+                "SelectInterpolableFloatToggleButton",
+                panel.transform,
+                "Select currently selected toggle property as interpolable in timeline");
+
+            var toggle = MaterialEditorControlFactory.CreateToggle(
+                "FloatToggleToggle",
+                panel.transform,
+                string.Empty);
+            RowViewFactorySupport.SetWidth(toggle, KeywordToggleWidth);
+
+            var reset = MaterialEditorControlFactory.CreateButton(
+                "FloatToggleResetButton",
                 panel.transform,
                 "Reset");
             RowViewFactorySupport.SetWidth(reset, ResetButtonWidth);

@@ -11,12 +11,15 @@ namespace MaterialEditorAPI
         internal Canvas Window { get; private set; }
         internal Image MainPanel { get; private set; }
         internal Image HeaderPanel { get; private set; }
+        internal Image ModePanel { get; private set; }
         internal Text HeaderTitle { get; private set; }
         internal ScrollRect ScrollableUI { get; private set; }
         internal InputField FilterInputField { get; private set; }
         internal Button CategoryNavigatorButton { get; private set; }
         internal Button CollapseAllCategoriesButton { get; private set; }
         internal Button ViewListButton { get; private set; }
+        internal Button BasicModeButton { get; private set; }
+        internal Button AdvancedModeButton { get; private set; }
 
         internal SelectListPanel RendererList { get; private set; }
         internal SelectListPanel MaterialList { get; private set; }
@@ -34,12 +37,14 @@ namespace MaterialEditorAPI
             Action close,
             Action toggleSidePanels,
             Action toggleAllCategories,
+            Action<MaterialEditorUiMode> changeUiMode,
             Action<CategoryNavigationTarget> navigateToCategory,
             Action<CategoryNavigationTarget> toggleCategory)
         {
             Build(
                 owner, filter, refresh, close, toggleSidePanels,
-                toggleAllCategories, navigateToCategory, toggleCategory);
+                toggleAllCategories, changeUiMode,
+                navigateToCategory, toggleCategory);
         }
 
         internal void PrepareForDisplay(string filter)
@@ -117,6 +122,7 @@ namespace MaterialEditorAPI
             Action close,
             Action toggleSidePanels,
             Action toggleAllCategories,
+            Action<MaterialEditorUiMode> changeUiMode,
             Action<CategoryNavigationTarget> navigateToCategory,
             Action<CategoryNavigationTarget> toggleCategory)
         {
@@ -210,6 +216,44 @@ namespace MaterialEditorAPI
 
             MaterialEditorStyles.ApplyTypography(HeaderPanel.gameObject);
 
+            ModePanel = MaterialEditorControlFactory.CreatePanel(
+                "MaterialEditorModePanel",
+                MainPanel.transform,
+                MaterialEditorPanelRole.Header);
+            ModePanel.transform.SetRect(
+                0f, 1f, 1f, 1f,
+                0f,
+                -MaterialEditorLayout.HeaderHeight * 2f,
+                0f,
+                -MaterialEditorLayout.HeaderHeight);
+
+            BasicModeButton = MaterialEditorControlFactory.CreateButton(
+                "MaterialEditorBasicModeButton",
+                ModePanel.transform,
+                "Basic");
+            BasicModeButton.transform.SetRect(
+                0f, 0f, 0f, 1f,
+                1f, 1f, 66f, -1f);
+            BasicModeButton.onClick.AddListener(
+                () => changeUiMode(MaterialEditorUiMode.Basic));
+            TooltipManager.AddTooltip(
+                BasicModeButton.gameObject,
+                "Show commonly used material properties.");
+
+            AdvancedModeButton = MaterialEditorControlFactory.CreateButton(
+                "MaterialEditorAdvancedModeButton",
+                ModePanel.transform,
+                "Advanced");
+            AdvancedModeButton.transform.SetRect(
+                0f, 0f, 0f, 1f,
+                67f, 1f, 147f, -1f);
+            AdvancedModeButton.onClick.AddListener(
+                () => changeUiMode(MaterialEditorUiMode.Advanced));
+            TooltipManager.AddTooltip(
+                AdvancedModeButton.gameObject,
+                "Show all material properties.");
+            MaterialEditorStyles.ApplyTypography(ModePanel.gameObject);
+
             ScrollableUI = MaterialEditorControlFactory.CreateScrollView("MaterialEditorWindow", MainPanel.transform);
             ScrollableUI.transform.SetRect(
                 0f,
@@ -219,7 +263,8 @@ namespace MaterialEditorAPI
                 MaterialEditorLayout.Margin,
                 MaterialEditorLayout.Margin,
                 -MaterialEditorLayout.Margin,
-                -MaterialEditorLayout.HeaderHeight - MaterialEditorLayout.Margin / 2f);
+                -MaterialEditorLayout.HeaderHeight * 2f
+                - MaterialEditorLayout.Margin / 2f);
             ScrollableUI.gameObject.AddComponent<Mask>();
             ScrollableUI.content.gameObject.AddComponent<VerticalLayoutGroup>();
             ScrollableUI.content.gameObject.AddComponent<ContentSizeFitter>().verticalFit = ContentSizeFitter.FitMode.PreferredSize;
@@ -253,6 +298,14 @@ namespace MaterialEditorAPI
                 presentation != null && presentation.AllCategoriesCollapsed
                     ? FoldGlyphs.AllExpanded
                     : FoldGlyphs.AllCollapsed;
+        }
+
+        internal void SetUiMode(MaterialEditorUiMode mode)
+        {
+            if (BasicModeButton != null)
+                BasicModeButton.interactable = mode != MaterialEditorUiMode.Basic;
+            if (AdvancedModeButton != null)
+                AdvancedModeButton.interactable = mode != MaterialEditorUiMode.Advanced;
         }
 
         private void ToggleCategoryNavigator()
