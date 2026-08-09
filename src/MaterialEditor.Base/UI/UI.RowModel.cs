@@ -14,6 +14,7 @@ namespace MaterialEditorAPI
 
         internal RowItemType ItemType { get; }
         internal string LabelText { get; set; }
+        internal bool IsAdvanced { get; set; }
         internal string TooltipText { get; set; }
         internal GameObject GameObject { get; set; }
         internal object Data { get; set; }

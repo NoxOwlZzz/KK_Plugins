@@ -120,6 +120,7 @@ namespace MaterialEditorAPI
             Label = owner.GetUIComponent<Text>("ShaderLabel");
             LabelClickTrigger = owner.GetUIComponent<LabelClickTrigger>("ShaderLabel");
             Dropdown = owner.GetUIComponent<Dropdown>("ShaderDropdown");
+            UiModeButton = owner.GetUIComponent<Button>("ShaderUiModeButton");
             SelectInterpolableButton = owner.GetUIComponent<Button>("SelectInterpolableShaderButton");
             ResetButton = owner.GetUIComponent<Button>("ShaderResetButton");
         }
@@ -129,6 +130,7 @@ namespace MaterialEditorAPI
         internal Text Label { get; }
         internal LabelClickTrigger LabelClickTrigger { get; }
         internal Dropdown Dropdown { get; }
+        internal Button UiModeButton { get; }
         internal Button SelectInterpolableButton { get; }
         internal Button ResetButton { get; }
     }

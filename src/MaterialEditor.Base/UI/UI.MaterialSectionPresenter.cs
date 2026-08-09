@@ -127,6 +127,8 @@ namespace MaterialEditorAPI
                 context.Material);
             if (originalShaderName.IsNullOrEmpty())
                 originalShaderName = context.ShaderName;
+            var hasAdvancedProperties = HasAdvancedProperties(context);
+            var uiMode = _session.ShaderUiModes.GetMode(context.ShaderName);
             var shaderItem = new ShaderRowModel()
             {
                 GameObject = context.GameObject,
@@ -137,6 +139,8 @@ namespace MaterialEditorAPI
                 OriginalShaderName = originalShaderName,
                 TooltipText = ShaderUiMetadataRegistry.GetShaderTooltip(
                     context.ShaderName),
+                HasAdvancedProperties = hasAdvancedProperties,
+                UiMode = uiMode,
                 Collapsed = collapsed,
                 CollapsedOnChange = value =>
                 {
@@ -172,6 +176,11 @@ namespace MaterialEditorAPI
                         string.Empty,
                         string.Empty)
             };
+            shaderItem.UiModeOnChange = value =>
+            {
+                if (_session.ShaderUiModes.SetMode(shaderItem.ShaderName, value))
+                    _actions.Refresh(context.GameObject, context.Data, context.Filter);
+            };
             context.Rows.Add(shaderItem);
 
             if (collapsed)
@@ -196,6 +205,20 @@ namespace MaterialEditorAPI
                     context.Edits.ResetRenderQueue(context.Material)
             });
             return shaderItem;
+        }
+
+        private bool HasAdvancedProperties(MaterialSectionContext context)
+        {
+            var shaderKey = XMLShaderProperties.ContainsKey(context.ShaderName)
+                ? context.ShaderName
+                : "default";
+            return XMLShaderProperties[shaderKey].Values.Any(property =>
+                property.UiLevel == MaterialEditorPropertyUiLevel.Advanced
+                && (property.Type == ShaderPropertyType.Keyword
+                    || context.Material.HasProperty($"_{property.Name}"))
+                && !_actions.IsPropertyBlacklisted(
+                    context.MaterialName,
+                    property.Name));
         }
 
         private void AddPropertyRows(
@@ -233,7 +256,8 @@ namespace MaterialEditorAPI
                         || context.Material.HasProperty($"_{property.Name}"))
                     .Where(property =>
                         property.UiLevel == MaterialEditorPropertyUiLevel.Basic
-                        || _session.UiMode == MaterialEditorUiMode.Advanced)
+                        || _session.ShaderUiModes.GetMode(context.ShaderName)
+                        == MaterialEditorUiMode.Advanced)
                     .Where(property =>
                         MaterialEditorConditionPolicy.Evaluate(
                             property.ShowIf,

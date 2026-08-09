@@ -93,6 +93,21 @@ namespace MaterialEditorAPI
                     controls.CategoriesCollapseButton,
                     () => item.CategoriesCollapsedOnChange(!item.AllCategoriesCollapsed));
 
+            controls.UiModeButton.gameObject.SetActive(item.HasAdvancedProperties);
+            if (item.HasAdvancedProperties)
+            {
+                controls.UiModeButton.GetComponentInChildren<Text>().text =
+                    item.UiMode == MaterialEditorUiMode.Advanced
+                        ? "Advanced"
+                        : "Basic";
+                listeners.Listen(
+                    controls.UiModeButton,
+                    () => item.UiModeOnChange(
+                        item.UiMode == MaterialEditorUiMode.Advanced
+                            ? MaterialEditorUiMode.Basic
+                            : MaterialEditorUiMode.Advanced));
+            }
+
             System.Action refresh = () =>
                 ChangedStateBinding.Apply(
                     controls.Label,

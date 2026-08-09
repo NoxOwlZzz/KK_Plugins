@@ -28,6 +28,7 @@ namespace MaterialEditorAPI
             Type = definition.Type;
             MinValue = definition.MinValue;
             MaxValue = definition.MaxValue;
+            IsAdvanced = definition.UiLevel == MaterialEditorPropertyUiLevel.Advanced;
             EditorId = string.IsNullOrEmpty(definition.EditorId)
                 ? GetEditorId(definition.Type)
                 : definition.EditorId;
@@ -88,6 +89,7 @@ namespace MaterialEditorAPI
         internal ShaderPropertyType Type { get; }
         internal float? MinValue { get; }
         internal float? MaxValue { get; }
+        internal bool IsAdvanced { get; }
         internal string EditorId { get; }
         internal IList<MaterialEditorEnumOption> EnumOptions { get; }
         internal bool Invert { get; }
@@ -152,7 +154,10 @@ namespace MaterialEditorAPI
                     rows = new RowModel[0];
                     break;
             }
-            return WithTooltip(rows, descriptor.PublicDescriptor?.TooltipText);
+            return WithMetadata(
+                rows,
+                descriptor.PublicDescriptor?.TooltipText,
+                descriptor.IsAdvanced);
         }
 
         internal IEnumerable<RowModel> CreateExtension(
@@ -165,9 +170,10 @@ namespace MaterialEditorAPI
             if (editor == null)
                 return new RowModel[0];
 
-            return WithTooltip(
+            return WithMetadata(
                 CreateExtensionRows(context, descriptor, editor),
-                descriptor.TooltipText);
+                descriptor.TooltipText,
+                false);
         }
 
         private IEnumerable<RowModel> CreateExtensionRows(
@@ -196,12 +202,17 @@ namespace MaterialEditorAPI
             return new RowModel[0];
         }
 
-        private static IEnumerable<RowModel> WithTooltip(
+        private static IEnumerable<RowModel> WithMetadata(
             IEnumerable<RowModel> rows,
-            string tooltipText)
+            string tooltipText,
+            bool isAdvanced)
         {
             foreach (var row in rows)
             {
+                row.IsAdvanced = isAdvanced;
+                row.LabelText = MaterialEditorAdvancedPropertyPresentation.FormatLabel(
+                    row.LabelText,
+                    isAdvanced);
                 row.TooltipText = tooltipText;
                 yield return row;
             }

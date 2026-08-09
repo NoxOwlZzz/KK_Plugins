@@ -25,6 +25,7 @@ namespace MaterialEditorAPI
         internal const float RendererDropdownWidth = 94f;
         internal const float MaterialButtonWidth = ButtonWidth * 0.75f;
         internal const float MaterialRenameButtonWidth = SmallButtonWidth;
+        internal const float ShaderModeButtonWidth = 70f;
         internal const float ShaderDropdownWidth = ContentWidth;
         internal const float RenderQueueInputWidth = 94f;
         internal const float OffsetScaleLabelXWidth = 48f;

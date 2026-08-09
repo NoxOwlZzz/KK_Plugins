@@ -100,6 +100,17 @@ namespace MaterialEditorAPI
                 panel.transform,
                 "Select the currently selected shader property and its render queue as interpolables in timeline");
 
+            var uiMode = MaterialEditorControlFactory.CreateButton(
+                "ShaderUiModeButton",
+                panel.transform,
+                "Basic");
+            RowViewFactorySupport.SetWidth(
+                uiMode,
+                MaterialEditorLayout.ShaderModeButtonWidth);
+            TooltipManager.AddTooltip(
+                uiMode.gameObject,
+                "Switch Basic/Advanced properties for this shader only");
+
             var dropdown = MaterialEditorControlFactory.CreateDropdown(
                 "ShaderDropdown",
                 panel.transform);

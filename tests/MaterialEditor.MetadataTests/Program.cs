@@ -11,6 +11,8 @@ internal static class Program
             InvalidCatalogsAreRejected();
             ShaderHintDisplayPolicyIsIndependentOfStandardTooltips();
             ManifestSchemaV2Tests.Run();
+            ShaderUiModeTests.Run();
+            UiLevelPerShaderContractTests.Run();
             ShaderPropertyFallbackPolicyTests.Run();
             ConditionDeferredRefreshTests.Run();
             SiruSyncPolicyTests.Run();

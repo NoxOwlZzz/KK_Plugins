@@ -3,12 +3,6 @@ using UnityEngine;
 
 namespace MaterialEditorAPI
 {
-    internal enum MaterialEditorUiMode
-    {
-        Basic,
-        Advanced
-    }
-
     internal sealed class MaterialEditorSessionState
     {
         internal GameObject CurrentGameObject;
@@ -21,10 +15,11 @@ namespace MaterialEditorAPI
         internal readonly Dictionary<string, bool> CollapsedPropertyCategories = new Dictionary<string, bool>();
         internal readonly Dictionary<string, bool> CollapsedMaterialSections = new Dictionary<string, bool>();
         internal readonly Dictionary<string, bool> CollapsedShaderSections = new Dictionary<string, bool>();
+        internal readonly MaterialEditorShaderUiModeState ShaderUiModes =
+            new MaterialEditorShaderUiModeState();
 
         internal bool ListsVisible;
         internal bool RenameListVisible;
-        internal MaterialEditorUiMode UiMode = MaterialEditorUiMode.Basic;
 
         private bool _objExportPending;
         private Renderer _objRenderer;

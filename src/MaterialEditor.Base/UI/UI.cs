@@ -184,10 +184,8 @@ namespace MaterialEditorAPI
                 () => Visible = false,
                 () => _selectionController.ToggleSidePanels(),
                 ToggleAllCategories,
-                ChangeUiMode,
                 NavigateToCategory,
                 ToggleCategory);
-            _windowView.SetUiMode(Session.UiMode);
             _selectionController = new MaterialEditorSelectionController(
                 Session,
                 _windowView,
@@ -436,16 +434,6 @@ namespace MaterialEditorAPI
 
             _presentation.SetAllCategoriesCollapsed(
                 !_presentation.AllCategoriesCollapsed);
-            PopulateList(CurrentGameObject, CurrentData, CurrentFilter);
-        }
-
-        private void ChangeUiMode(MaterialEditorUiMode mode)
-        {
-            if (Session.UiMode == mode)
-                return;
-
-            Session.UiMode = mode;
-            _windowView.SetUiMode(mode);
             PopulateList(CurrentGameObject, CurrentData, CurrentFilter);
         }
 
