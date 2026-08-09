@@ -29,7 +29,6 @@ namespace MaterialEditorAPI
         private sealed class DeclaredCategory
         {
             internal string Name;
-            internal int? Order;
             internal int DeclarationOrder;
             internal List<DeclaredProperty> Properties;
         }
@@ -60,22 +59,12 @@ namespace MaterialEditorAPI
                     .Select(group => new DeclaredCategory
                     {
                         Name = group.Key,
-                        // A manifest should use one CategoryOrder per category.
-                        // If it does not, the first explicitly declared value wins.
-                        Order = group
-                            .Where(item => item.Definition.CategoryOrder.HasValue)
-                            .OrderBy(item => item.Definition.DeclarationOrder)
-                            .ThenBy(item => item.FallbackOrder)
-                            .Select(item => item.Definition.CategoryOrder)
-                            .FirstOrDefault(),
                         DeclarationOrder = group.Min(
                             item => item.Definition.DeclarationOrder),
                         Properties = group.ToList()
                     })
                     .OrderBy(category =>
                         category.Name == UncategorizedName ? 1 : 0)
-                    .ThenBy(category => category.Order.HasValue ? 0 : 1)
-                    .ThenBy(category => category.Order ?? 0)
                     .ThenBy(category => category.DeclarationOrder)
                     .ThenBy(category => category.Name)
                     .Select(category => new OrganizedPropertyCategory(
@@ -101,27 +90,20 @@ namespace MaterialEditorAPI
             IEnumerable<DeclaredProperty> source)
         {
             var items = source.ToList();
-            var explicitlyOrdered = items
-                .Where(item => item.Definition.Order.HasValue)
-                .OrderBy(item => item.Definition.Order.Value)
-                .ThenBy(item => item.Definition.DeclarationOrder)
-                .ThenBy(item => item.FallbackOrder);
+            IOrderedEnumerable<DeclaredProperty> legacyOrdered =
+                items.OrderBy(item => 0);
 
-            IOrderedEnumerable<DeclaredProperty> legacyOrdered = items
-                .Where(item => !item.Definition.Order.HasValue)
-                .OrderBy(item => 0);
-
-            // Properties without schema-v2 Order continue to use the existing
-            // sort settings. Explicit Order ties retain declaration order.
+            // Preserve the legacy sort settings. Declaration order provides a
+            // deterministic fallback when the configured sort keys tie or are
+            // disabled.
             if (SortPropertiesByType.Value)
                 legacyOrdered = legacyOrdered.ThenBy(item => item.Definition.Type);
             if (SortPropertiesByName.Value)
                 legacyOrdered = legacyOrdered.ThenBy(item => item.Definition.Name);
 
-            return explicitlyOrdered
-                .Concat(legacyOrdered
-                    .ThenBy(item => item.Definition.DeclarationOrder)
-                    .ThenBy(item => item.FallbackOrder))
+            return legacyOrdered
+                .ThenBy(item => item.Definition.DeclarationOrder)
+                .ThenBy(item => item.FallbackOrder)
                 .Select(item => item.Definition)
                 .ToList();
         }

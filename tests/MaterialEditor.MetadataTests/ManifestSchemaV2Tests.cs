@@ -8,7 +8,7 @@ internal static class ManifestSchemaV2Tests
         SchemaVersionTwoIsAnExplicitCompatibilityGate();
         SchemaTwoMetadataIsParsedWithSafeDefaults();
         FloatBackedAliasesAreLimitedToSchemaTwo();
-        EnumOptionsAreDirectChildrenWithNumericValues();
+        EnumOptionsUseUnityStyleAttributeWithInvariantValues();
         ShowIfSupportsTheDocumentedFormsAndFailsOpen();
     }
 
@@ -57,21 +57,17 @@ internal static class ManifestSchemaV2Tests
         var metadata = ShaderPropertyMetadataParser.Parse(
             Element(
                 "<Property Name=\"Detail\" DisplayName=\"Detail strength\" "
-                + "Order=\"30\" CategoryOrder=\"20\" UiLevel=\"advanced\" "
-                + "Editor=\"Toggle\" OffValue=\"-1.5\" OnValue=\"2.5\" "
+                + "UiLevel=\"advanced\" Editor=\"Toggle\" Invert=\"true\" "
                 + "ShowIf=\"_Enabled &gt;= 1\" />"),
             warnings.Add);
 
         Equal("Detail strength", metadata.DisplayName, "display name");
-        Equal((int?)30, metadata.Order, "property order");
-        Equal((int?)20, metadata.CategoryOrder, "category order");
         Equal(
             MaterialEditorPropertyUiLevel.Advanced,
             metadata.UiLevel,
             "advanced UI level");
         Equal(ShaderPropertyEditorIds.Toggle, metadata.EditorId, "toggle editor");
-        Equal(-1.5f, metadata.OffValue, "toggle off value");
-        Equal(2.5f, metadata.OnValue, "toggle on value");
+        Equal(true, metadata.Invert, "inverted toggle");
         NotNull(metadata.ShowIf, "parsed ShowIf");
         Equal("Enabled", metadata.ShowIf.PropertyName, "normalized condition source");
         Equal(
@@ -84,32 +80,25 @@ internal static class ManifestSchemaV2Tests
         var defaults = ShaderPropertyMetadataParser.Parse(
             Element("<Property Name=\"PlainFloat\" Type=\"Float\" />"));
         Equal(null, defaults.DisplayName, "display name remains optional");
-        Equal(null, defaults.Order, "optional order");
-        Equal(null, defaults.CategoryOrder, "optional category order");
         Equal(
             MaterialEditorPropertyUiLevel.Basic,
             defaults.UiLevel,
             "default UI level");
-        Equal(0f, defaults.OffValue, "default toggle off value");
-        Equal(1f, defaults.OnValue, "default toggle on value");
+        Equal(false, defaults.Invert, "toggle is not inverted by default");
         Equal(0, defaults.EnumOptions.Count, "default enum option count");
 
         warnings.Clear();
         var invalid = ShaderPropertyMetadataParser.Parse(
             Element(
-                "<Property Name=\"Invalid\" Order=\"first\" "
-                + "CategoryOrder=\"early\" UiLevel=\"Expert\" "
-                + "OffValue=\"NaN\" OnValue=\"Infinity\" />"),
+                "<Property Name=\"Invalid\" UiLevel=\"Expert\" "
+                + "Invert=\"sometimes\" />"),
             warnings.Add);
-        Equal(null, invalid.Order, "invalid order fallback");
-        Equal(null, invalid.CategoryOrder, "invalid category order fallback");
         Equal(
             MaterialEditorPropertyUiLevel.Basic,
             invalid.UiLevel,
             "invalid UI level fallback");
-        Equal(0f, invalid.OffValue, "invalid off value fallback");
-        Equal(1f, invalid.OnValue, "invalid on value fallback");
-        Equal(5, warnings.Count, "invalid metadata warning count");
+        Equal(false, invalid.Invert, "invalid invert fallback");
+        Equal(2, warnings.Count, "invalid metadata warning count");
     }
 
     private static void FloatBackedAliasesAreLimitedToSchemaTwo()
@@ -117,9 +106,9 @@ internal static class ManifestSchemaV2Tests
         Alias("Toggle", "Float", ShaderPropertyEditorIds.Toggle);
         Alias("toggle", "Float", ShaderPropertyEditorIds.Toggle);
         Alias("Enum", "Float", ShaderPropertyEditorIds.Enum);
-        Alias("DROPDOWN", "Float", ShaderPropertyEditorIds.Enum);
 
         NoAlias("Float", 2, "ordinary type is not an alias");
+        NoAlias("Dropdown", 2, "dropdown is not a data type alias");
         NoAlias("Toggle", 1, "toggle is not a legacy alias");
         NoAlias("Enum", 1, "enum is not a legacy alias");
         NoAlias("Dropdown", 3, "unknown schema does not enable aliases");
@@ -132,31 +121,58 @@ internal static class ManifestSchemaV2Tests
             "unknown schema fallback remains legacy for aliases");
     }
 
-    private static void EnumOptionsAreDirectChildrenWithNumericValues()
+    private static void EnumOptionsUseUnityStyleAttributeWithInvariantValues()
     {
         var warnings = new List<string>();
-        var metadata = ShaderPropertyMetadataParser.Parse(
-            Element(
-                "<Property Name=\"Mode\" Editor=\"Enum\">"
-                + "<Option Value=\"0\" DisplayName=\"Off\" />"
-                + "<Group><Option Value=\"99\" DisplayName=\"Nested\" /></Group>"
-                + "<Option Value=\"1.5\" DisplayName=\"Soft\" />"
-                + "<Option Value=\"2\">Sharp</Option>"
-                + "<Option Value=\"invalid\" DisplayName=\"Invalid\" />"
-                + "<Option Value=\"2\" DisplayName=\"Duplicate\" />"
-                + "</Property>"),
-            warnings.Add);
+        ShaderPropertyUiMetadata metadata;
+        var originalCulture = System.Globalization.CultureInfo.CurrentCulture;
+        try
+        {
+            System.Globalization.CultureInfo.CurrentCulture =
+                new System.Globalization.CultureInfo("fr-FR");
+            metadata = ShaderPropertyMetadataParser.Parse(
+                Element(
+                    "<Property Name=\"Mode\" Editor=\"Enum\" "
+                    + "Enums=\"Off,0, Soft,1.5, Sharp,2\">"
+                    + "<Group><Option Value=\"99\" DisplayName=\"Ignored\" /></Group>"
+                    + "</Property>"),
+                warnings.Add);
+        }
+        finally
+        {
+            System.Globalization.CultureInfo.CurrentCulture = originalCulture;
+        }
 
         Equal(ShaderPropertyEditorIds.Enum, metadata.EditorId, "enum editor");
-        Equal(3, metadata.EnumOptions.Count, "valid direct option count");
+        Equal(3, metadata.EnumOptions.Count, "valid enum option count");
         Option(metadata.EnumOptions[0], 0f, "Off", "first enum option");
         Option(metadata.EnumOptions[1], 1.5f, "Soft", "fractional enum option");
-        Option(metadata.EnumOptions[2], 2f, "Sharp", "text enum option label");
-        Equal(2, warnings.Count, "invalid and duplicate options warn");
+        Option(metadata.EnumOptions[2], 2f, "Sharp", "third enum option");
+        Equal(
+            false,
+            metadata.EnumOptions.Any(option => option.Value == 99f),
+            "nested Option elements are ignored");
+        Equal(0, warnings.Count, "valid enum warning count");
+
+        warnings.Clear();
+        var invalid = ShaderPropertyMetadataParser.Parse(
+            Element(
+                "<Property Name=\"InvalidMode\" Editor=\"Enum\" "
+                + "Enums=\"Off,0,,1,NotFinite,Infinity,"
+                + "DuplicateValue,0,Off,3,Dangling\" />"),
+            warnings.Add);
+        Equal(ShaderPropertyEditorIds.Enum, invalid.EditorId, "partially valid enum editor");
+        Equal(1, invalid.EnumOptions.Count, "only valid unique enum option remains");
+        Option(invalid.EnumOptions[0], 0f, "Off", "surviving enum option");
+        Equal(
+            5,
+            warnings.Count,
+            "odd pair, empty label, non-finite value and duplicates warn");
 
         warnings.Clear();
         var empty = ShaderPropertyMetadataParser.Parse(
-            Element("<Property Name=\"EmptyMode\" Editor=\"Enum\" />"),
+            Element(
+                "<Property Name=\"EmptyMode\" Editor=\"Enum\" Enums=\"\" />"),
             warnings.Add);
         Equal(null, empty.EditorId, "empty enum falls back to the type editor");
         Equal(1, warnings.Count, "empty enum warning count");

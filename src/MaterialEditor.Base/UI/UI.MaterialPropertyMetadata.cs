@@ -108,15 +108,12 @@ namespace MaterialEditorAPI
     internal sealed class ShaderPropertyUiMetadata
     {
         internal string DisplayName;
-        internal int? Order;
-        internal int? CategoryOrder;
         internal string EditorId;
         internal MaterialEditorPropertyUiLevel UiLevel = MaterialEditorPropertyUiLevel.Basic;
         internal MaterialEditorPropertyCondition ShowIf;
         internal readonly List<MaterialEditorEnumOption> EnumOptions =
             new List<MaterialEditorEnumOption>();
-        internal float OffValue;
-        internal float OnValue = 1f;
+        internal bool Invert;
     }
 
     internal static class ShaderPropertyMetadataParser
@@ -162,8 +159,6 @@ namespace MaterialEditorAPI
             };
             var context = GetPropertyContext(propertyElement);
 
-            ParseOrder(propertyElement, metadata, context, warning);
-            ParseCategoryOrder(propertyElement, metadata, context, warning);
             ParseUiLevel(propertyElement, metadata, context, warning);
             metadata.EditorId = ParseEditor(propertyElement, context, warning);
             metadata.ShowIf = ParseConditionAttribute(
@@ -171,16 +166,10 @@ namespace MaterialEditorAPI
                 "ShowIf",
                 context,
                 warning);
-            metadata.OffValue = ParseFloatAttribute(
+            metadata.Invert = ParseBooleanAttribute(
                 propertyElement,
-                "OffValue",
-                0f,
-                context,
-                warning);
-            metadata.OnValue = ParseFloatAttribute(
-                propertyElement,
-                "OnValue",
-                1f,
+                "Invert",
+                false,
                 context,
                 warning);
             ParseEnumOptions(propertyElement, metadata, context, warning);
@@ -191,7 +180,7 @@ namespace MaterialEditorAPI
                 Warn(
                     warning,
                     context
-                    + " declares the Enum editor without any valid Option elements; "
+                    + " declares the Enum editor without a valid Enums attribute; "
                     + "using its type editor instead.");
                 metadata.EditorId = null;
             }
@@ -222,8 +211,7 @@ namespace MaterialEditorAPI
                 return true;
             }
 
-            if (string.Equals(value, "Dropdown", StringComparison.OrdinalIgnoreCase)
-                || string.Equals(value, "Enum", StringComparison.OrdinalIgnoreCase))
+            if (string.Equals(value, "Enum", StringComparison.OrdinalIgnoreCase))
             {
                 normalizedType = "Float";
                 editorId = ShaderPropertyEditorIds.Enum;
@@ -295,43 +283,6 @@ namespace MaterialEditorAPI
                 expected,
                 out condition,
                 warning);
-        }
-
-        private static void ParseOrder(
-            XmlElement element,
-            ShaderPropertyUiMetadata metadata,
-            string context,
-            Action<string> warning)
-        {
-            var raw = ReadAttribute(element, "Order");
-            if (string.IsNullOrEmpty(raw))
-                return;
-
-            int value;
-            if (int.TryParse(raw, NumberStyles.Integer, CultureInfo.InvariantCulture, out value))
-                metadata.Order = value;
-            else
-                Warn(warning, context + " has invalid Order '" + raw + "'; declaration order will be used.");
-        }
-
-        private static void ParseCategoryOrder(
-            XmlElement element,
-            ShaderPropertyUiMetadata metadata,
-            string context,
-            Action<string> warning)
-        {
-            var raw = ReadAttribute(element, "CategoryOrder");
-            if (string.IsNullOrEmpty(raw))
-                return;
-
-            int value;
-            if (int.TryParse(raw, NumberStyles.Integer, CultureInfo.InvariantCulture, out value))
-                metadata.CategoryOrder = value;
-            else
-                Warn(
-                    warning,
-                    context + " has invalid CategoryOrder '" + raw
-                    + "'; category declaration order will be used.");
         }
 
         private static void ParseUiLevel(
@@ -411,10 +362,10 @@ namespace MaterialEditorAPI
             return null;
         }
 
-        private static float ParseFloatAttribute(
+        private static bool ParseBooleanAttribute(
             XmlElement element,
             string attributeName,
-            float fallback,
+            bool fallback,
             string context,
             Action<string> warning)
         {
@@ -422,14 +373,14 @@ namespace MaterialEditorAPI
             if (string.IsNullOrEmpty(raw))
                 return fallback;
 
-            float value;
-            if (TryParseFiniteFloat(raw, out value))
+            bool value;
+            if (bool.TryParse(raw, out value))
                 return value;
 
             Warn(
                 warning,
                 context + " has invalid " + attributeName + " '" + raw + "'; "
-                + fallback.ToString(CultureInfo.InvariantCulture) + " will be used.");
+                + fallback.ToString() + " will be used.");
             return fallback;
         }
 
@@ -439,20 +390,40 @@ namespace MaterialEditorAPI
             string context,
             Action<string> warning)
         {
-            var values = new HashSet<float>();
-            foreach (XmlNode child in element.ChildNodes)
-            {
-                var optionElement = child as XmlElement;
-                if (optionElement == null || optionElement.Name != "Option")
-                    continue;
+            var raw = ReadAttribute(element, "Enums");
+            if (string.IsNullOrEmpty(raw))
+                return;
 
-                var rawValue = ReadAttribute(optionElement, "Value");
+            var tokens = raw.Split(',');
+            if (tokens.Length % 2 != 0)
+            {
+                Warn(
+                    warning,
+                    context + " has an invalid Enums list; labels and values "
+                    + "must be declared in pairs. The unmatched final token was ignored.");
+            }
+
+            var values = new HashSet<float>();
+            var labels = new HashSet<string>(StringComparer.Ordinal);
+            for (var index = 0; index + 1 < tokens.Length; index += 2)
+            {
+                var displayName = tokens[index].Trim();
+                var rawValue = tokens[index + 1].Trim();
+                if (displayName.Length == 0)
+                {
+                    Warn(
+                        warning,
+                        context + " contains an enum option with an empty label; "
+                        + "the option was ignored.");
+                    continue;
+                }
+
                 float value;
                 if (!TryParseFiniteFloat(rawValue, out value))
                 {
                     Warn(
                         warning,
-                        context + " contains an Option with invalid Value '"
+                        context + " contains an enum option with invalid value '"
                         + rawValue + "'; it was ignored.");
                     continue;
                 }
@@ -466,13 +437,15 @@ namespace MaterialEditorAPI
                     continue;
                 }
 
-                var displayName = ReadAttribute(optionElement, "DisplayName");
-                if (string.IsNullOrEmpty(displayName))
-                    displayName = ReadAttribute(optionElement, "Label");
-                if (string.IsNullOrEmpty(displayName))
-                    displayName = ReadAttribute(optionElement, "Name");
-                if (string.IsNullOrEmpty(displayName))
-                    displayName = (optionElement.InnerText ?? string.Empty).Trim();
+                if (!labels.Add(displayName))
+                {
+                    values.Remove(value);
+                    Warn(
+                        warning,
+                        context + " contains duplicate enum option label '"
+                        + displayName + "'; the duplicate was ignored.");
+                    continue;
+                }
 
                 metadata.EnumOptions.Add(
                     new MaterialEditorEnumOption(value, displayName));

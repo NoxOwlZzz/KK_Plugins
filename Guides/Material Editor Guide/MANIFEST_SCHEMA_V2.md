@@ -20,28 +20,31 @@ example described here.
 Schema 2 adds optional attributes to `<Property>`:
 
 - `DisplayName`: label shown in Material Editor; defaults to `Name`.
-- `Order`: property order within its category. Explicit values appear first,
-  from lowest to highest; ties keep declaration order.
-- `CategoryOrder`: category order derived from its properties. Explicit values
-  appear first, from lowest to highest. Use the same value on every property in
-  a category; if values disagree, the first explicit value declared wins.
-- `UiLevel`: `Basic` (the default) or `Advanced`.
+- `UiLevel`: `Basic` (the default) or `Advanced`. When a shader declares at
+  least one Advanced property, its shader row shows a Basic/Advanced selector.
+  Advanced property labels are prefixed with `[A]` when visible. The selection
+  is maintained independently for each shader during the current session.
 
 ## Float-backed controls
 
-`Type="Toggle"` is an alias for a Float property using the toggle editor.
-`OffValue` and `OnValue` select the float values written for each state and
-default to `0` and `1`.
+`Type="Toggle"` is an alias for a Float property using the toggle editor. It
+writes `0` for off and `1` for on. Set `Invert="true"` to reverse the displayed
+toggle while keeping the stored values limited to `0` and `1`.
 
-`Type="Enum"` and `Type="Dropdown"` are equivalent aliases for a Float
-property using the enum editor. Declare choices as direct children:
+`Type="Enum"` is an alias for a Float property using the enum editor. Declare
+choices as alternating labels and numeric values in the `Enums` attribute,
+matching Unity's enum-property style:
 
 ```xml
-<Property Name="BlendMode" Type="Enum" DisplayName="Blend mode">
-  <Option Value="0" DisplayName="Opaque"/>
-  <Option Value="1" DisplayName="Cutout"/>
-</Property>
+<Property Name="BlendMode"
+          Type="Enum"
+          DisplayName="Blend mode"
+          Enums="Opaque,0,Cutout,1"/>
 ```
+
+Labels and values must appear in pairs. Labels cannot be empty, values must be
+finite invariant-culture numbers, and duplicate labels or values are ignored
+with a warning.
 
 The aliases are case-insensitive, but only recognized when
 `SchemaVersion="2"` is active.

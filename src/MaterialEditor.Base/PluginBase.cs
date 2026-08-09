@@ -481,16 +481,13 @@ namespace MaterialEditorAPI
             /// Category of the shader property.
             /// </summary>
             public string Category;
-            internal int? CategoryOrder;
             internal int DeclarationOrder;
             internal string DisplayName;
-            internal int? Order;
             internal string EditorId;
             internal MaterialEditorPropertyUiLevel UiLevel;
             internal MaterialEditorPropertyCondition ShowIf;
             internal List<MaterialEditorEnumOption> EnumOptions;
-            internal float OffValue;
-            internal float OnValue;
+            internal bool Invert;
 
             /// <summary>
             /// Initializes a new instance of the <see cref="ShaderPropertyData"/> class.
@@ -519,8 +516,6 @@ namespace MaterialEditorAPI
                 DisplayName = name;
                 UiLevel = MaterialEditorPropertyUiLevel.Basic;
                 EnumOptions = new List<MaterialEditorEnumOption>();
-                OffValue = 0f;
-                OnValue = 1f;
                 DefaultValue = defaultValue.IsNullOrEmpty() ? null : defaultValue;
                 DefaultValueAssetBundle = defaultValueAB.IsNullOrEmpty() ? null : defaultValueAB;
 
@@ -657,7 +652,7 @@ namespace MaterialEditorAPI
                     warning?.Invoke(
                         "Shader property '" + propertyName + "' declares Type '"
                         + declaredPropertyType
-                        + "' as a dropdown without any valid Option elements; "
+                        + "' as an enum without a valid Enums attribute; "
                         + "the Float editor will be used.");
                     metadata.EditorId = null;
                 }
@@ -665,14 +660,11 @@ namespace MaterialEditorAPI
                 propertyData.DisplayName = metadata.DisplayName.IsNullOrEmpty()
                     ? propertyName
                     : metadata.DisplayName;
-                propertyData.Order = metadata.Order;
-                propertyData.CategoryOrder = metadata.CategoryOrder;
                 propertyData.EditorId = metadata.EditorId;
                 propertyData.UiLevel = metadata.UiLevel;
                 propertyData.ShowIf = metadata.ShowIf;
                 propertyData.EnumOptions.AddRange(metadata.EnumOptions);
-                propertyData.OffValue = metadata.OffValue;
-                propertyData.OnValue = metadata.OnValue;
+                propertyData.Invert = metadata.Invert;
                 return true;
             }
 

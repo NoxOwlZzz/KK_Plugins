@@ -25,40 +25,32 @@
                 DefaultValue="1"
                 DisplayName="Intensity"
                 Category="Surface"
-                CategoryOrder="10"
-                Order="10"
                 UiLevel="Basic"/>
 
       <!--
-        Toggle is a schema 2 alias for a Float property. OffValue and OnValue
-        are the float values written to the material; they default to 0 and 1.
+        Toggle is a schema 2 alias for a Float property. It writes 0 for off
+        and 1 for on. Invert reverses the displayed toggle state.
       -->
       <Property Name="DetailEnabled"
                 Type="Toggle"
                 DisplayName="Enable detail"
                 Category="Detail"
-                CategoryOrder="20"
-                Order="10"
                 UiLevel="Basic"
-                OffValue="0"
-                OnValue="1"/>
+                Invert="false"/>
 
       <!--
-        Enum is also Float-backed. Options must be direct child elements.
-        Type="Dropdown" is an equivalent schema 2 alias for Type="Enum".
+        Enum is also Float-backed. Enums contains alternating labels and
+        invariant-culture numeric values, matching Unity's enum style.
+        Advanced properties appear only when this shader's row is switched to
+        Advanced and are marked with an [A] prefix.
       -->
       <Property Name="DetailMode"
                 Type="Enum"
                 DisplayName="Detail mode"
                 Category="Detail"
-                CategoryOrder="20"
-                Order="20"
                 UiLevel="Advanced"
-                ShowIf="DetailEnabled != 0">
-        <Option Value="0" DisplayName="Soft"/>
-        <Option Value="1" DisplayName="Sharp"/>
-        <Option Value="2" DisplayName="Posterized"/>
-      </Property>
+                ShowIf="DetailEnabled != 0"
+                Enums="Soft,0,Sharp,1,Posterized,2"/>
 
       <!--
         ShowIf forms:
@@ -76,8 +68,6 @@
                 Range="0,1"
                 DisplayName="Detail strength"
                 Category="Detail"
-                CategoryOrder="20"
-                Order="30"
                 UiLevel="Advanced"
                 ShowIf="_DetailEnabled == true"/>
 

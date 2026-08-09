@@ -216,7 +216,7 @@ namespace MaterialEditorAPI
             Action refresh = () =>
             {
                 controls.Toggle.Set(
-                    Mathf.Approximately(item.Value, item.OnValue),
+                    Mathf.Approximately(item.Value, item.Invert ? 0f : 1f),
                     false);
                 ChangedStateBinding.Apply(
                     controls.Label,
@@ -229,7 +229,7 @@ namespace MaterialEditorAPI
             refresh();
             listeners.Listen(controls.Toggle, enabled =>
             {
-                var value = enabled ? item.OnValue : item.OffValue;
+                var value = enabled != item.Invert ? 1f : 0f;
                 if (Mathf.Approximately(value, item.Value))
                     return;
 

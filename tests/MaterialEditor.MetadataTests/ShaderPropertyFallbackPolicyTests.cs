@@ -21,15 +21,12 @@ internal static class ShaderPropertyFallbackPolicyTests
             MaxValue = 8.5f,
             Hidden = true,
             Category = "Surface",
-            CategoryOrder = 20,
             DeclarationOrder = 4,
             DisplayName = "Rendering mode",
-            Order = 30,
             EditorId = ShaderPropertyEditorIds.Enum,
             UiLevel = MaterialEditorPropertyUiLevel.Advanced,
             ShowIf = condition,
-            OffValue = -1f,
-            OnValue = 3f
+            Invert = true
         };
         shaderSpecific.EnumOptions.Add(
             new MaterialEditorEnumOption(2f, "Opaque"));
@@ -71,8 +68,6 @@ internal static class ShaderPropertyFallbackPolicyTests
         Equal(shaderSpecific.Category, fallback.Category, "legacy Category");
 
         Equal(fallback.Name, fallback.DisplayName, "neutral DisplayName");
-        Equal(null, fallback.Order, "neutral Order");
-        Equal(null, fallback.CategoryOrder, "neutral CategoryOrder");
         Equal(0, fallback.DeclarationOrder, "neutral DeclarationOrder");
         Equal(
             MaterialEditorPropertyUiLevel.Basic,
@@ -84,26 +79,19 @@ internal static class ShaderPropertyFallbackPolicyTests
         False(
             ReferenceEquals(shaderSpecific.EnumOptions, fallback.EnumOptions),
             "fallback EnumOptions are isolated");
-        Equal(0f, fallback.OffValue, "neutral OffValue");
-        Equal(1f, fallback.OnValue, "neutral OnValue");
+        Equal(false, fallback.Invert, "neutral Invert");
 
         Equal(
             "Rendering mode",
             shaderSpecific.DisplayName,
             "shader metadata remains intact");
-        Equal(30, shaderSpecific.Order, "shader Order remains intact");
-        Equal(
-            20,
-            shaderSpecific.CategoryOrder,
-            "shader CategoryOrder remains intact");
         Equal(
             ShaderPropertyEditorIds.Enum,
             shaderSpecific.EditorId,
             "shader Editor remains intact");
         Equal(condition, shaderSpecific.ShowIf, "shader ShowIf remains intact");
         Equal(1, shaderSpecific.EnumOptions.Count, "shader options remain intact");
-        Equal(-1f, shaderSpecific.OffValue, "shader OffValue remains intact");
-        Equal(3f, shaderSpecific.OnValue, "shader OnValue remains intact");
+        Equal(true, shaderSpecific.Invert, "shader Invert remains intact");
 
         True(
             ShaderPropertyFallbackPolicy.IsReservedShaderName("default"),
@@ -146,8 +134,6 @@ namespace MaterialEditorAPI
                 DisplayName = name;
                 UiLevel = MaterialEditorPropertyUiLevel.Basic;
                 EnumOptions = new List<MaterialEditorEnumOption>();
-                OffValue = 0f;
-                OnValue = 1f;
             }
 
             public string Name;
@@ -161,16 +147,13 @@ namespace MaterialEditorAPI
             public float? MaxValue;
             public bool Hidden;
             public string Category;
-            internal int? CategoryOrder;
             internal int DeclarationOrder;
             internal string DisplayName;
-            internal int? Order;
             internal string EditorId;
             internal MaterialEditorPropertyUiLevel UiLevel;
             internal MaterialEditorPropertyCondition ShowIf;
             internal List<MaterialEditorEnumOption> EnumOptions;
-            internal float OffValue;
-            internal float OnValue;
+            internal bool Invert;
         }
     }
 }

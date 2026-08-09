@@ -68,8 +68,7 @@ namespace MaterialEditorAPI
 
         internal float Value { get; set; }
         internal float OriginalValue { get; set; }
-        internal float OffValue { get; set; }
-        internal float OnValue { get; set; } = 1f;
+        internal bool Invert { get; set; }
         internal Action SelectInterpolable { get; set; }
         internal Action<float> ValueOnChange { get; set; }
         internal Action ValueOnReset { get; set; }

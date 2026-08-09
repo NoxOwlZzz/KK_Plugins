@@ -33,8 +33,7 @@ namespace MaterialEditorAPI
                 : definition.EditorId;
             EnumOptions = definition.EnumOptions
                           ?? new List<MaterialEditorEnumOption>();
-            OffValue = definition.OffValue;
-            OnValue = definition.OnValue;
+            Invert = definition.Invert;
             PublicDescriptor = new MaterialEditorPropertyDescriptor(
                 definition.Name,
                 DisplayName,
@@ -75,8 +74,7 @@ namespace MaterialEditorAPI
             MaxValue = descriptor.Maximum;
             EditorId = descriptor.EditorId;
             EnumOptions = new List<MaterialEditorEnumOption>();
-            OffValue = 0f;
-            OnValue = 1f;
+            Invert = false;
             PublicDescriptor = descriptor;
         }
 
@@ -92,8 +90,7 @@ namespace MaterialEditorAPI
         internal float? MaxValue { get; }
         internal string EditorId { get; }
         internal IList<MaterialEditorEnumOption> EnumOptions { get; }
-        internal float OffValue { get; }
-        internal float OnValue { get; }
+        internal bool Invert { get; }
         internal System.Action PresentationRefresh { get; set; }
         internal MaterialEditorPropertyDescriptor PublicDescriptor { get; }
 
@@ -419,8 +416,7 @@ namespace MaterialEditorAPI
                 PublicDescriptor = descriptor.PublicDescriptor,
                 Value = value,
                 OriginalValue = original,
-                OffValue = descriptor.OffValue,
-                OnValue = descriptor.OnValue,
+                Invert = descriptor.Invert,
                 SelectInterpolable = () =>
                     _actions.SelectInterpolable(
                         gameObject,

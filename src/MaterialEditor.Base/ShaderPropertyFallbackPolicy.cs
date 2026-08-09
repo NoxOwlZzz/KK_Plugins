@@ -34,16 +34,13 @@ namespace MaterialEditorAPI
                 MaxValue = shaderSpecific.MaxValue,
                 Hidden = shaderSpecific.Hidden,
                 Category = shaderSpecific.Category,
-                CategoryOrder = null,
                 DeclarationOrder = 0,
                 DisplayName = shaderSpecific.Name,
-                Order = null,
                 EditorId = null,
                 UiLevel = MaterialEditorPropertyUiLevel.Basic,
                 ShowIf = null,
                 EnumOptions = new List<MaterialEditorEnumOption>(),
-                OffValue = 0f,
-                OnValue = 1f
+                Invert = false
             };
         }
 
