@@ -42,7 +42,7 @@
         Enum is also Float-backed. Enums contains alternating labels and
         invariant-culture numeric values, matching Unity's enum style.
         Advanced properties appear only when this shader's row is switched to
-        Advanced and are marked with an [A] prefix.
+        Advanced and are marked with a vertical accent bar.
       -->
       <Property Name="DetailMode"
                 Type="Enum"

@@ -6,7 +6,6 @@ internal static class ShaderUiModeTests
     {
         ModesAreIndependentPerShader();
         BasicIsTheDefaultAndRemovesStoredState();
-        AdvancedLabelsHaveAnExplicitMarker();
     }
 
     private static void ModesAreIndependentPerShader()
@@ -45,26 +44,6 @@ internal static class ShaderUiModeTests
             state.SetMode("Shader/A", MaterialEditorUiMode.Basic),
             "returning to Basic removes state");
         Equal(MaterialEditorUiMode.Basic, state.GetMode("Shader/A"), "restored Basic");
-    }
-
-    private static void AdvancedLabelsHaveAnExplicitMarker()
-    {
-        Equal(
-            "Property",
-            MaterialEditorAdvancedPropertyPresentation.FormatLabel(
-                "Property",
-                false),
-            "Basic label");
-        Equal(
-            "[A] Property",
-            MaterialEditorAdvancedPropertyPresentation.FormatLabel(
-                "Property",
-                true),
-            "Advanced label");
-        Equal(
-            "[A] ",
-            MaterialEditorAdvancedPropertyPresentation.FormatLabel(null, true),
-            "null Advanced label");
     }
 
     private static void True(bool value, string name)

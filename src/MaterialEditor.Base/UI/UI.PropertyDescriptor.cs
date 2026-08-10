@@ -210,9 +210,6 @@ namespace MaterialEditorAPI
             foreach (var row in rows)
             {
                 row.IsAdvanced = isAdvanced;
-                row.LabelText = MaterialEditorAdvancedPropertyPresentation.FormatLabel(
-                    row.LabelText,
-                    isAdvanced);
                 row.TooltipText = tooltipText;
                 yield return row;
             }

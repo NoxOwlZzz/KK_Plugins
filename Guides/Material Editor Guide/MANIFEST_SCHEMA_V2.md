@@ -22,7 +22,7 @@ Schema 2 adds optional attributes to `<Property>`:
 - `DisplayName`: label shown in Material Editor; defaults to `Name`.
 - `UiLevel`: `Basic` (the default) or `Advanced`. When a shader declares at
   least one Advanced property, its shader row shows a Basic/Advanced selector.
-  Advanced property labels are prefixed with `[A]` when visible. The selection
+  Advanced property rows show a vertical accent bar when visible. The selection
   is maintained independently for each shader during the current session.
 
 ## Float-backed controls

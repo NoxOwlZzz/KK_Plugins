@@ -19,6 +19,8 @@ namespace MaterialEditorAPI
         internal const float ResetButtonWidth = SmallButtonWidth * 2f;
         internal const float InterpolableButtonWidth = SmallButtonWidth;
         internal const float ContentWidth = 316f;
+        internal const float AdvancedPropertyAccentWidth = 5f;
+        internal const float AdvancedPropertyAccentVerticalInset = 2f;
 
         internal const float RendererButtonWidth = ButtonWidth;
         internal const float RendererToggleWidth = 20f;
@@ -83,6 +85,8 @@ namespace MaterialEditorAPI
         internal static readonly Color ScrollbarColor = new Color(1f, 1f, 1f, 0.6f);
         internal static readonly Color ShaderHintUnderlineColor =
             new Color(0.05f, 0.45f, 1f, 1f);
+        internal static readonly Color AdvancedPropertyAccentColor =
+            new Color32(0x4A, 0xA3, 0xFF, 0xFF);
 
         internal static void ApplyPanel(Image panel, MaterialEditorPanelRole role)
         {

@@ -37,14 +37,4 @@ namespace MaterialEditorAPI
         }
     }
 
-    internal static class MaterialEditorAdvancedPropertyPresentation
-    {
-        internal const string Marker = "[A] ";
-
-        internal static string FormatLabel(string label, bool advanced)
-        {
-            var text = label ?? string.Empty;
-            return advanced ? Marker + text : text;
-        }
-    }
 }

@@ -287,9 +287,14 @@ namespace MaterialEditorAPI
     internal sealed class RowControlSet
     {
         private readonly List<RowControls> _rows;
+        private readonly CanvasGroup _advancedPropertyAccentCanvasGroup;
 
         private RowControlSet(RowBinder owner)
         {
+            AdvancedPropertyAccent =
+                owner.GetUIComponent<Image>("AdvancedPropertyAccent");
+            _advancedPropertyAccentCanvasGroup =
+                AdvancedPropertyAccent.GetComponent<CanvasGroup>();
             Renderer = new RendererRowControls(owner);
             RendererEnabled = CreateToggle(owner, "RendererEnabled");
             RendererShadowCastingMode = new DropdownRowControls(
@@ -344,6 +349,7 @@ namespace MaterialEditorAPI
         }
 
         internal RendererRowControls Renderer { get; }
+        internal Image AdvancedPropertyAccent { get; }
         internal ToggleRowControls RendererEnabled { get; }
         internal DropdownRowControls RendererShadowCastingMode { get; }
         internal ToggleRowControls RendererReceiveShadows { get; }
@@ -370,6 +376,14 @@ namespace MaterialEditorAPI
         {
             foreach (var row in _rows)
                 row.SetVisible(false);
+            SetAdvancedPropertyAccent(false);
+        }
+
+        internal void SetAdvancedPropertyAccent(bool visible)
+        {
+            _advancedPropertyAccentCanvasGroup.alpha = 1f;
+            if (AdvancedPropertyAccent.gameObject.activeSelf != visible)
+                AdvancedPropertyAccent.gameObject.SetActive(visible);
         }
 
         private static ToggleRowControls CreateToggle(

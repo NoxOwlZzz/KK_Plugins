@@ -80,6 +80,7 @@ namespace MaterialEditorAPI
             IRowTypeBinder handler;
             if (_registry.TryGet(item.ItemType, out handler))
                 handler.Bind(item, _listeners);
+            _controls.SetAdvancedPropertyAccent(item.IsAdvanced);
         }
 
         public void SetVisible(bool visible)
