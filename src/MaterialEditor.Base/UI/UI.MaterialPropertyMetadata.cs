@@ -640,7 +640,7 @@ namespace MaterialEditorAPI
                         continue;
                     }
 
-                    if (!Approximately(firstValue, value))
+                    if (firstValue != value)
                     {
                         return new MaterialEditorEnumValueSelection(
                             MaterialEditorEnumValueState.Mixed,
@@ -654,7 +654,7 @@ namespace MaterialEditorAPI
             {
                 for (var index = 0; index < options.Count; index++)
                 {
-                    if (Approximately(options[index].Value, firstValue))
+                    if (options[index].Value == firstValue)
                     {
                         return new MaterialEditorEnumValueSelection(
                             MaterialEditorEnumValueState.Matched,
@@ -672,7 +672,7 @@ namespace MaterialEditorAPI
 
         internal static bool GetBooleanDisplayValue(float storedValue, bool invert)
         {
-            var enabled = !Approximately(storedValue, 0f);
+            var enabled = storedValue != 0f;
             return invert ? !enabled : enabled;
         }
 
@@ -686,7 +686,7 @@ namespace MaterialEditorAPI
             float selectedValue,
             float originalValue)
         {
-            return !wasMixed && Approximately(selectedValue, originalValue);
+            return !wasMixed && selectedValue == originalValue;
         }
 
         internal static void PersistExplicitEnumSelection(
@@ -706,15 +706,6 @@ namespace MaterialEditorAPI
             setOverride(selectedValue);
         }
 
-        internal static bool Approximately(float left, float right)
-        {
-            if (left == right)
-                return true;
-
-            var difference = Math.Abs(left - right);
-            var largest = Math.Max(Math.Abs(left), Math.Abs(right));
-            return difference <= Math.Max(0.000001f * largest, float.Epsilon * 8f);
-        }
     }
 
     internal static class MaterialEditorConditionPolicy

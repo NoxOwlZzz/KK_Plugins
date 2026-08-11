@@ -13,6 +13,7 @@ internal static class ManifestSchemaV2Tests
         EnumSelectionUsesDeclaredValuesAndPreservesSpecialStates();
         ExplicitMixedEnumSelectionRecreatesThePersistedOverride();
         BooleanValuesRoundTripAsFloatZeroOrOne();
+        BindingDoesNotWriteWhileOpeningOrRefreshing();
         ShowIfSupportsTheDocumentedFormsAndFailsOpen();
     }
 
@@ -258,6 +259,40 @@ internal static class ManifestSchemaV2Tests
         Equal(0.25f, declared[decimalSelection.OptionIndex].Value,
             "dropdown writes the declared numeric value, not its index");
 
+        var declaredNegativeSelection =
+            MaterialEditorFloatBackedValuePolicy.ResolveEnumSelection(
+                declared,
+                new[] { -3f });
+        Equal(
+            MaterialEditorEnumValueState.Matched,
+            declaredNegativeSelection.State,
+            "declared negative enum value matches directly");
+        Equal(0, declaredNegativeSelection.OptionIndex,
+            "declared negative enum option index");
+
+        const float nearButDifferent = 0.25000003f;
+        var nearSelection =
+            MaterialEditorFloatBackedValuePolicy.ResolveEnumSelection(
+                declared,
+                new[] { nearButDifferent });
+        Equal(
+            MaterialEditorEnumValueState.Unmatched,
+            nearSelection.State,
+            "nearby float is not an exact enum match");
+        Equal(-1, nearSelection.OptionIndex,
+            "nearby float has no enum option index");
+        Equal(nearButDifferent, nearSelection.CurrentValue,
+            "nearby float remains unchanged");
+
+        var nearMixed =
+            MaterialEditorFloatBackedValuePolicy.ResolveEnumSelection(
+                declared,
+                new[] { 0.25f, nearButDifferent });
+        Equal(
+            MaterialEditorEnumValueState.Mixed,
+            nearMixed.State,
+            "nearby values on different materials remain distinct");
+
         var unmatched =
             MaterialEditorFloatBackedValuePolicy.ResolveEnumSelection(
                 declared,
@@ -269,6 +304,22 @@ internal static class ManifestSchemaV2Tests
         Equal(-1, unmatched.OptionIndex, "unmatched enum has no option index");
         Equal(0.75f, unmatched.CurrentValue,
             "unmatched enum preserves the current float");
+
+        foreach (var unknown in new[] { -99f, 99f })
+        {
+            var unknownSelection =
+                MaterialEditorFloatBackedValuePolicy.ResolveEnumSelection(
+                    declared,
+                    new[] { unknown });
+            Equal(
+                MaterialEditorEnumValueState.Unmatched,
+                unknownSelection.State,
+                "unknown enum value remains unmatched " + unknown);
+            Equal(-1, unknownSelection.OptionIndex,
+                "unknown enum value has no option index " + unknown);
+            Equal(unknown, unknownSelection.CurrentValue,
+                "unknown enum value remains intact " + unknown);
+        }
 
         var mixed = MaterialEditorFloatBackedValuePolicy.ResolveEnumSelection(
             declared,
@@ -307,8 +358,7 @@ internal static class ManifestSchemaV2Tests
         Action<float> legacySetOverride = value =>
         {
             calls.Add("set");
-            if (overrideExists &&
-                MaterialEditorFloatBackedValuePolicy.Approximately(value, original))
+            if (overrideExists && value == original)
             {
                 overrideExists = false;
                 return;
@@ -349,6 +399,11 @@ internal static class ManifestSchemaV2Tests
             MaterialEditorFloatBackedValuePolicy.GetBooleanDisplayValue(-2f, false),
             "legacy non-zero Float reads as enabled without being rewritten");
         True(
+            MaterialEditorFloatBackedValuePolicy.GetBooleanDisplayValue(
+                0.00000001f,
+                false),
+            "small non-zero Float reads directly as enabled without normalization");
+        True(
             MaterialEditorFloatBackedValuePolicy.GetBooleanDisplayValue(0f, true),
             "Invert reverses the displayed state");
 
@@ -381,6 +436,57 @@ internal static class ManifestSchemaV2Tests
                     false),
                 "Boolean Float round-trip " + displayValue);
         }
+    }
+
+    private static void BindingDoesNotWriteWhileOpeningOrRefreshing()
+    {
+        var root = FindRepositoryRoot();
+        var binder = ReadSource(
+            root,
+            "src",
+            "MaterialEditor.Base",
+            "UI",
+            "UI.RowBinder.FloatKeyword.cs");
+
+        var bindEnum = ExtractMethod(binder, "private void BindEnum(");
+        var enumListener = bindEnum.IndexOf(
+            "listeners.Listen(controls.Dropdown",
+            StringComparison.Ordinal);
+        True(enumListener > 0, "Enum listener is present");
+        var enumInitialization = bindEnum.Substring(0, enumListener);
+        Contains(enumInitialization, "controls.Dropdown.Set(selectedIndex);",
+            "Enum initializes the dropdown without a user event");
+        Contains(enumInitialization, "rebuild();\n            refresh();",
+            "Enum draws current state before registering its listener");
+        DoesNotContain(enumInitialization, "item.ValueOnChange",
+            "opening or refreshing Enum does not write a value");
+        DoesNotContain(enumInitialization, "item.ValueOnReset",
+            "opening or refreshing Enum does not reset a value");
+        DoesNotContain(enumInitialization, "item.Value =",
+            "opening or refreshing Enum preserves the material value");
+        Contains(bindEnum, "optionValues.Add(option.Value);",
+            "Enum dropdown stores each declared value directly");
+        Contains(bindEnum, "var value = optionValues[index];",
+            "Enum selection reads the declared value instead of its index");
+
+        var bindBoolean = ExtractMethod(binder, "private void BindFloatToggle(");
+        var booleanListener = bindBoolean.IndexOf(
+            "listeners.Listen(controls.Toggle",
+            StringComparison.Ordinal);
+        True(booleanListener > 0, "Boolean listener is present");
+        var booleanInitialization = bindBoolean.Substring(0, booleanListener);
+        Contains(booleanInitialization, "controls.Toggle.Set(",
+            "Boolean draws its existing material value");
+        Contains(booleanInitialization, "false);",
+            "Boolean initialization suppresses change notification");
+        DoesNotContain(booleanInitialization, "item.ValueOnChange",
+            "opening or refreshing Boolean does not write a value");
+        DoesNotContain(booleanInitialization, "item.ValueOnReset",
+            "opening or refreshing Boolean does not reset a value");
+        DoesNotContain(booleanInitialization, "item.Value =",
+            "opening or refreshing Boolean preserves the material value");
+        Contains(bindBoolean, "GetBooleanStoredValue(",
+            "Boolean user changes use the zero-or-one storage policy");
     }
 
     private static void ShowIfSupportsTheDocumentedFormsAndFailsOpen()
@@ -481,6 +587,52 @@ internal static class ManifestSchemaV2Tests
             ?? throw new InvalidOperationException("XML has no root element.");
     }
 
+    private static string ReadSource(string root, params string[] parts)
+    {
+        var path = parts.Aggregate(root, Path.Combine);
+        return File.ReadAllText(path).Replace("\r\n", "\n");
+    }
+
+    private static string FindRepositoryRoot()
+    {
+        foreach (var start in new[]
+                 {
+                     Directory.GetCurrentDirectory(),
+                     AppContext.BaseDirectory
+                 })
+        {
+            var directory = new DirectoryInfo(start);
+            while (directory != null)
+            {
+                if (File.Exists(Path.Combine(
+                        directory.FullName,
+                        "tests",
+                        "MaterialEditor.MetadataTests",
+                        "MaterialEditor.MetadataTests.csproj")))
+                    return directory.FullName;
+                directory = directory.Parent;
+            }
+        }
+        throw new DirectoryNotFoundException("Could not locate repository root.");
+    }
+
+    private static string ExtractMethod(string source, string signature)
+    {
+        var signatureIndex = source.IndexOf(signature, StringComparison.Ordinal);
+        if (signatureIndex < 0)
+            throw new InvalidOperationException("Method not found: " + signature);
+        var openingBrace = source.IndexOf('{', signatureIndex);
+        var depth = 0;
+        for (var index = openingBrace; index < source.Length; index++)
+        {
+            if (source[index] == '{')
+                depth++;
+            else if (source[index] == '}' && --depth == 0)
+                return source.Substring(openingBrace, index - openingBrace + 1);
+        }
+        throw new InvalidOperationException("Unterminated method: " + signature);
+    }
+
     private static void Alias(
         string declaredType,
         string expectedType,
@@ -553,6 +705,16 @@ internal static class ManifestSchemaV2Tests
     private static void False(bool value, string name)
     {
         Equal(false, value, name);
+    }
+
+    private static void Contains(string source, string value, string name)
+    {
+        True(source.Contains(value, StringComparison.Ordinal), name);
+    }
+
+    private static void DoesNotContain(string source, string value, string name)
+    {
+        False(source.Contains(value, StringComparison.Ordinal), name);
     }
 
     private static void Equal<T>(T expected, T actual, string name)

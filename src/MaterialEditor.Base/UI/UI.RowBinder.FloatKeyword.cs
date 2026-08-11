@@ -198,10 +198,7 @@ namespace MaterialEditorAPI
                     return;
 
                 var value = optionValues[index];
-                if (!isMixed
-                    && MaterialEditorFloatBackedValuePolicy.Approximately(
-                        value,
-                        item.Value))
+                if (!isMixed && value == item.Value)
                     return;
 
                 var wasMixed = isMixed;
@@ -278,9 +275,7 @@ namespace MaterialEditorAPI
                     MaterialEditorFloatBackedValuePolicy.GetBooleanStoredValue(
                         enabled,
                         item.Invert);
-                if (MaterialEditorFloatBackedValuePolicy.Approximately(
-                        value,
-                        item.Value))
+                if (value == item.Value)
                     return;
 
                 item.Value = value;
