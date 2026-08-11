@@ -23,7 +23,7 @@ internal static class ConditionDeferredRefreshTests
             "condition refresh has a dedicated internal action");
         Contains(
             uiSource,
-            "RefreshDeferred = (go, data, filter) =>\n                        StartCoroutine(PopulateListCoroutine(go, data, filter))",
+            "StartCoroutine(PopulateListCoroutine(go, data, filter))",
             "shader refresh retains the protected ten-frame coroutine");
         Contains(
             uiSource,

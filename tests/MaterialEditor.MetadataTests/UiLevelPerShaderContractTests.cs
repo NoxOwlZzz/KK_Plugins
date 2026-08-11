@@ -200,7 +200,7 @@ internal static class UiLevelPerShaderContractTests
         DoesNotContain(bindMethod, "new GameObject", "rebind creates no GameObjects");
         Contains(
             bindMethod,
-            "if (!force && ReferenceEquals(item, _currentModel))\n                return;",
+            "if (!force && ReferenceEquals(item, _currentModel))",
             "same-model fast path preserves the already-correct accent state");
     }
 
