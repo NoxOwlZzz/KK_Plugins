@@ -8,7 +8,11 @@ internal static class ManifestSchemaV2Tests
         SchemaVersionTwoIsAnExplicitCompatibilityGate();
         SchemaTwoMetadataIsParsedWithSafeDefaults();
         FloatBackedAliasesAreLimitedToSchemaTwo();
+        BooleanIsCanonicalAndToggleIsReadCompatible();
         EnumOptionsUseUnityStyleAttributeWithInvariantValues();
+        EnumSelectionUsesDeclaredValuesAndPreservesSpecialStates();
+        ExplicitMixedEnumSelectionRecreatesThePersistedOverride();
+        BooleanValuesRoundTripAsFloatZeroOrOne();
         ShowIfSupportsTheDocumentedFormsAndFailsOpen();
     }
 
@@ -57,7 +61,7 @@ internal static class ManifestSchemaV2Tests
         var metadata = ShaderPropertyMetadataParser.Parse(
             Element(
                 "<Property Name=\"Detail\" DisplayName=\"Detail strength\" "
-                + "UiLevel=\"advanced\" Editor=\"Toggle\" Invert=\"true\" "
+                + "UiLevel=\"advanced\" Editor=\"Boolean\" Invert=\"true\" "
                 + "ShowIf=\"_Enabled &gt;= 1\" />"),
             warnings.Add);
 
@@ -66,8 +70,8 @@ internal static class ManifestSchemaV2Tests
             MaterialEditorPropertyUiLevel.Advanced,
             metadata.UiLevel,
             "advanced UI level");
-        Equal(ShaderPropertyEditorIds.Toggle, metadata.EditorId, "toggle editor");
-        Equal(true, metadata.Invert, "inverted toggle");
+        Equal(ShaderPropertyEditorIds.Toggle, metadata.EditorId, "Boolean uses the Float toggle editor");
+        Equal(true, metadata.Invert, "inverted boolean");
         NotNull(metadata.ShowIf, "parsed ShowIf");
         Equal("Enabled", metadata.ShowIf.PropertyName, "normalized condition source");
         Equal(
@@ -84,7 +88,7 @@ internal static class ManifestSchemaV2Tests
             MaterialEditorPropertyUiLevel.Basic,
             defaults.UiLevel,
             "default UI level");
-        Equal(false, defaults.Invert, "toggle is not inverted by default");
+        Equal(false, defaults.Invert, "boolean is not inverted by default");
         Equal(0, defaults.EnumOptions.Count, "default enum option count");
 
         warnings.Clear();
@@ -103,13 +107,16 @@ internal static class ManifestSchemaV2Tests
 
     private static void FloatBackedAliasesAreLimitedToSchemaTwo()
     {
+        Alias("Boolean", "Float", ShaderPropertyEditorIds.Toggle);
+        Alias("boolean", "Float", ShaderPropertyEditorIds.Toggle);
         Alias("Toggle", "Float", ShaderPropertyEditorIds.Toggle);
         Alias("toggle", "Float", ShaderPropertyEditorIds.Toggle);
         Alias("Enum", "Float", ShaderPropertyEditorIds.Enum);
 
         NoAlias("Float", 2, "ordinary type is not an alias");
         NoAlias("Dropdown", 2, "dropdown is not a data type alias");
-        NoAlias("Toggle", 1, "toggle is not a legacy alias");
+        NoAlias("Boolean", 1, "boolean is not a legacy schema alias");
+        NoAlias("Toggle", 1, "toggle is not a legacy schema alias");
         NoAlias("Enum", 1, "enum is not a legacy alias");
         NoAlias("Dropdown", 3, "unknown schema does not enable aliases");
 
@@ -119,6 +126,40 @@ internal static class ManifestSchemaV2Tests
             "Toggle",
             unknownSchema,
             "unknown schema fallback remains legacy for aliases");
+    }
+
+    private static void BooleanIsCanonicalAndToggleIsReadCompatible()
+    {
+        var canonical = ShaderPropertyMetadataParser.Parse(
+            Element(
+                "<Property Name=\"Enabled\" Type=\"Float\" "
+                + "Editor=\"Boolean\" />"));
+        Equal(
+            ShaderPropertyEditorIds.Toggle,
+            canonical.EditorId,
+            "Float property with canonical Boolean editor");
+
+        var legacyName = ShaderPropertyMetadataParser.Parse(
+            Element(
+                "<Property Name=\"Enabled\" Type=\"Float\" "
+                + "Editor=\"Toggle\" />"));
+        Equal(
+            ShaderPropertyEditorIds.Toggle,
+            legacyName.EditorId,
+            "legacy Toggle editor normalizes to Boolean");
+
+        var legacyId = ShaderPropertyMetadataParser.Parse(
+            Element(
+                "<Property Name=\"Enabled\" Type=\"Float\" "
+                + "Editor=\"materialeditor.toggle\" />"));
+        Equal(
+            ShaderPropertyEditorIds.Toggle,
+            legacyId.EditorId,
+            "legacy Toggle editor ID normalizes to Boolean");
+
+        var plainFloat = ShaderPropertyMetadataParser.Parse(
+            Element("<Property Name=\"Strength\" Type=\"Float\" />"));
+        Equal(null, plainFloat.EditorId, "ordinary Float editor remains unchanged");
     }
 
     private static void EnumOptionsUseUnityStyleAttributeWithInvariantValues()
@@ -176,6 +217,170 @@ internal static class ManifestSchemaV2Tests
             warnings.Add);
         Equal(null, empty.EditorId, "empty enum falls back to the type editor");
         Equal(1, warnings.Count, "empty enum warning count");
+    }
+
+    private static void EnumSelectionUsesDeclaredValuesAndPreservesSpecialStates()
+    {
+        var consecutive = new List<MaterialEditorEnumOption>
+        {
+            new MaterialEditorEnumOption(0f, "Off"),
+            new MaterialEditorEnumOption(1f, "On"),
+            new MaterialEditorEnumOption(2f, "Extra")
+        };
+        var consecutiveSelection =
+            MaterialEditorFloatBackedValuePolicy.ResolveEnumSelection(
+                consecutive,
+                new[] { 1f, 1f });
+        Equal(
+            MaterialEditorEnumValueState.Matched,
+            consecutiveSelection.State,
+            "consecutive enum selection state");
+        Equal(1, consecutiveSelection.OptionIndex, "consecutive enum option index");
+        Equal(1f, consecutive[consecutiveSelection.OptionIndex].Value,
+            "consecutive enum declared value");
+
+        var declared = new List<MaterialEditorEnumOption>
+        {
+            new MaterialEditorEnumOption(-3f, "Off"),
+            new MaterialEditorEnumOption(0.25f, "Low"),
+            new MaterialEditorEnumOption(7.5f, "High")
+        };
+        var decimalSelection =
+            MaterialEditorFloatBackedValuePolicy.ResolveEnumSelection(
+                declared,
+                new[] { 0.25f, 0.25f });
+        Equal(
+            MaterialEditorEnumValueState.Matched,
+            decimalSelection.State,
+            "non-consecutive decimal enum selection state");
+        Equal(1, decimalSelection.OptionIndex,
+            "non-consecutive decimal enum option index");
+        Equal(0.25f, declared[decimalSelection.OptionIndex].Value,
+            "dropdown writes the declared numeric value, not its index");
+
+        var unmatched =
+            MaterialEditorFloatBackedValuePolicy.ResolveEnumSelection(
+                declared,
+                new[] { 0.75f, 0.75f });
+        Equal(
+            MaterialEditorEnumValueState.Unmatched,
+            unmatched.State,
+            "unmatched enum value state");
+        Equal(-1, unmatched.OptionIndex, "unmatched enum has no option index");
+        Equal(0.75f, unmatched.CurrentValue,
+            "unmatched enum preserves the current float");
+
+        var mixed = MaterialEditorFloatBackedValuePolicy.ResolveEnumSelection(
+            declared,
+            new[] { 0.25f, 7.5f });
+        Equal(
+            MaterialEditorEnumValueState.Mixed,
+            mixed.State,
+            "multiple materials preserve mixed enum state");
+        Equal(-1, mixed.OptionIndex, "mixed enum has no option index");
+        False(
+            MaterialEditorFloatBackedValuePolicy.ShouldRemoveEnumOverride(
+                true,
+                0.25f,
+                0.25f),
+            "an explicit selection from Mixed remains persisted even when it matches the representative original");
+        True(
+            MaterialEditorFloatBackedValuePolicy.ShouldRemoveEnumOverride(
+                false,
+                0.25f,
+                0.25f),
+            "a non-mixed value matching the original removes a redundant override");
+    }
+
+    private static void ExplicitMixedEnumSelectionRecreatesThePersistedOverride()
+    {
+        const float original = 0.25f;
+        var overrideExists = true;
+        var storedValue = 7.5f;
+        var calls = new List<string>();
+
+        Action removeOverride = () =>
+        {
+            calls.Add("remove");
+            overrideExists = false;
+        };
+        Action<float> legacySetOverride = value =>
+        {
+            calls.Add("set");
+            if (overrideExists &&
+                MaterialEditorFloatBackedValuePolicy.Approximately(value, original))
+            {
+                overrideExists = false;
+                return;
+            }
+
+            overrideExists = true;
+            storedValue = value;
+        };
+
+        // A direct legacy set demonstrates the cleanup behavior that used to
+        // lose an explicit Mixed -> original selection on the next load.
+        legacySetOverride(original);
+        False(overrideExists, "legacy backend removes an existing original-valued override");
+
+        overrideExists = true;
+        calls.Clear();
+        MaterialEditorFloatBackedValuePolicy.PersistExplicitEnumSelection(
+            removeOverride,
+            legacySetOverride,
+            original);
+
+        True(overrideExists, "explicit Mixed selection remains persisted");
+        Equal(original, storedValue, "persisted enum keeps the selected declared value");
+        Equal("remove", calls[0], "existing override is removed first");
+        Equal("set", calls[1], "selected value is persisted after removal");
+        Equal(2, calls.Count, "force-persist sequence performs exactly two operations");
+    }
+
+    private static void BooleanValuesRoundTripAsFloatZeroOrOne()
+    {
+        False(
+            MaterialEditorFloatBackedValuePolicy.GetBooleanDisplayValue(0f, false),
+            "zero reads as disabled");
+        True(
+            MaterialEditorFloatBackedValuePolicy.GetBooleanDisplayValue(1f, false),
+            "one reads as enabled");
+        True(
+            MaterialEditorFloatBackedValuePolicy.GetBooleanDisplayValue(-2f, false),
+            "legacy non-zero Float reads as enabled without being rewritten");
+        True(
+            MaterialEditorFloatBackedValuePolicy.GetBooleanDisplayValue(0f, true),
+            "Invert reverses the displayed state");
+
+        Equal(
+            0f,
+            MaterialEditorFloatBackedValuePolicy.GetBooleanStoredValue(false, false),
+            "disabled Boolean stores Float zero");
+        Equal(
+            1f,
+            MaterialEditorFloatBackedValuePolicy.GetBooleanStoredValue(true, false),
+            "enabled Boolean stores Float one");
+        Equal(
+            0f,
+            MaterialEditorFloatBackedValuePolicy.GetBooleanStoredValue(true, true),
+            "inverted enabled Boolean stores Float zero");
+        Equal(
+            1f,
+            MaterialEditorFloatBackedValuePolicy.GetBooleanStoredValue(false, true),
+            "inverted disabled Boolean stores Float one");
+
+        foreach (var displayValue in new[] { false, true })
+        {
+            var stored = MaterialEditorFloatBackedValuePolicy.GetBooleanStoredValue(
+                displayValue,
+                false);
+            Equal(
+                displayValue,
+                MaterialEditorFloatBackedValuePolicy.GetBooleanDisplayValue(
+                    stored,
+                    false),
+                "Boolean Float round-trip " + displayValue);
+        }
     }
 
     private static void ShowIfSupportsTheDocumentedFormsAndFailsOpen()

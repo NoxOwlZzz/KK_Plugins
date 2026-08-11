@@ -148,7 +148,7 @@ namespace MaterialEditorAPI
             RowViewFactorySupport.CreateInterpolableButton(
                 "SelectInterpolableFloatToggleButton",
                 panel.transform,
-                "Select currently selected toggle property as interpolable in timeline");
+                "Select currently selected Boolean property as interpolable in timeline");
 
             var toggle = MaterialEditorControlFactory.CreateToggle(
                 "FloatToggleToggle",

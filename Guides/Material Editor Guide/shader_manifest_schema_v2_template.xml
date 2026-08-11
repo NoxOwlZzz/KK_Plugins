@@ -28,15 +28,14 @@
                 UiLevel="Basic"/>
 
       <!--
-        Toggle is a schema 2 alias for a Float property. It writes 0 for off
-        and 1 for on. Invert reverses the displayed toggle state.
+        Boolean is Float-backed and writes 0 for off and 1 for on. Invert is
+        optional, defaults to false, and reverses the displayed state.
       -->
       <Property Name="DetailEnabled"
-                Type="Toggle"
+                Type="Boolean"
                 DisplayName="Enable detail"
                 Category="Detail"
-                UiLevel="Basic"
-                Invert="false"/>
+                UiLevel="Basic"/>
 
       <!--
         Enum is also Float-backed. Enums contains alternating labels and

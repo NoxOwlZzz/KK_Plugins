@@ -124,18 +124,40 @@ namespace MaterialEditorAPI
             TooltipBinding.Bind(controls.Label.gameObject, item.TooltipText);
 
             List<float> optionValues = null;
+            var mixedIndex = -1;
+            var isMixed = false;
             Action rebuild = () =>
             {
                 controls.Dropdown.options.Clear();
                 optionValues = new List<float>();
                 var selectedIndex = -1;
+                mixedIndex = -1;
+                var selection =
+                    MaterialEditorFloatBackedValuePolicy.ResolveEnumSelection(
+                        item.Options,
+                        item.CurrentValues ?? new[] { item.Value });
+                isMixed = selection.State == MaterialEditorEnumValueState.Mixed;
+
+                if (isMixed)
+                {
+                    mixedIndex = optionValues.Count;
+                    selectedIndex = mixedIndex;
+                    optionValues.Add(item.Value);
+                    controls.Dropdown.options.Add(new Dropdown.OptionData("Mixed"));
+                }
 
                 if (item.Options != null)
                 {
-                    foreach (var option in item.Options)
+                    for (var optionIndex = 0;
+                         optionIndex < item.Options.Count;
+                         optionIndex++)
                     {
-                        if (Mathf.Approximately(option.Value, item.Value))
+                        var option = item.Options[optionIndex];
+                        if (selection.State == MaterialEditorEnumValueState.Matched
+                            && selection.OptionIndex == optionIndex)
+                        {
                             selectedIndex = optionValues.Count;
+                        }
                         optionValues.Add(option.Value);
                         controls.Dropdown.options.Add(
                             new Dropdown.OptionData(option.DisplayName));
@@ -143,14 +165,15 @@ namespace MaterialEditorAPI
                 }
 
                 // Preserve values authored outside the declared option set.
-                if (selectedIndex < 0)
+                if (selection.State == MaterialEditorEnumValueState.Unmatched)
                 {
                     selectedIndex = optionValues.Count;
-                    optionValues.Add(item.Value);
+                    optionValues.Add(selection.CurrentValue);
                     controls.Dropdown.options.Add(
                         new Dropdown.OptionData(
                             "Current ("
-                            + item.Value.ToString(CultureInfo.InvariantCulture)
+                            + selection.CurrentValue.ToString(
+                                CultureInfo.InvariantCulture)
                             + ")"));
                 }
 
@@ -159,7 +182,7 @@ namespace MaterialEditorAPI
             Action refresh = () =>
                 ChangedStateBinding.Apply(
                     controls.Label,
-                    item.LabelText,
+                    isMixed ? item.LabelText + " (Mixed)" : item.LabelText,
                     item.Value != item.OriginalValue,
                     controls.ResetButton,
                     controls.Panel);
@@ -170,15 +193,34 @@ namespace MaterialEditorAPI
             {
                 if (optionValues == null
                     || index < 0
-                    || index >= optionValues.Count)
+                    || index >= optionValues.Count
+                    || index == mixedIndex)
                     return;
 
                 var value = optionValues[index];
-                if (Mathf.Approximately(value, item.Value))
+                if (!isMixed
+                    && MaterialEditorFloatBackedValuePolicy.Approximately(
+                        value,
+                        item.Value))
                     return;
 
+                var wasMixed = isMixed;
                 item.Value = value;
-                if (item.Value == item.OriginalValue)
+                item.CurrentValues = new[] { value };
+                if (wasMixed)
+                {
+                    // An explicit choice must be applied to every same-named
+                    // material and remain persisted even when it equals the
+                    // representative material's original value.
+                    MaterialEditorFloatBackedValuePolicy.PersistExplicitEnumSelection(
+                        item.ValueOnReset,
+                        item.ValueOnChange,
+                        item.Value);
+                }
+                else if (MaterialEditorFloatBackedValuePolicy.ShouldRemoveEnumOverride(
+                             wasMixed,
+                             item.Value,
+                             item.OriginalValue))
                     item.ValueOnReset();
                 else
                     item.ValueOnChange(item.Value);
@@ -189,6 +231,7 @@ namespace MaterialEditorAPI
             listeners.Listen(controls.ResetButton, () =>
             {
                 item.Value = item.OriginalValue;
+                item.CurrentValues = new[] { item.OriginalValue };
                 item.ValueOnReset();
                 rebuild();
                 refresh();
@@ -216,7 +259,9 @@ namespace MaterialEditorAPI
             Action refresh = () =>
             {
                 controls.Toggle.Set(
-                    Mathf.Approximately(item.Value, item.Invert ? 0f : 1f),
+                    MaterialEditorFloatBackedValuePolicy.GetBooleanDisplayValue(
+                        item.Value,
+                        item.Invert),
                     false);
                 ChangedStateBinding.Apply(
                     controls.Label,
@@ -229,8 +274,13 @@ namespace MaterialEditorAPI
             refresh();
             listeners.Listen(controls.Toggle, enabled =>
             {
-                var value = enabled != item.Invert ? 1f : 0f;
-                if (Mathf.Approximately(value, item.Value))
+                var value =
+                    MaterialEditorFloatBackedValuePolicy.GetBooleanStoredValue(
+                        enabled,
+                        item.Invert);
+                if (MaterialEditorFloatBackedValuePolicy.Approximately(
+                        value,
+                        item.Value))
                     return;
 
                 item.Value = value;

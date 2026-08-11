@@ -54,6 +54,7 @@ namespace MaterialEditorAPI
         internal float Value { get; set; }
         internal float OriginalValue { get; set; }
         internal IList<MaterialEditorEnumOption> Options { get; set; }
+        internal IList<float> CurrentValues { get; set; }
         internal Action SelectInterpolable { get; set; }
         internal Action<float> ValueOnChange { get; set; }
         internal Action ValueOnReset { get; set; }

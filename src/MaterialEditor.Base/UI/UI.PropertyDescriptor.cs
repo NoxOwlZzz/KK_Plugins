@@ -374,6 +374,7 @@ namespace MaterialEditorAPI
                 Value = value,
                 OriginalValue = original,
                 Options = descriptor.EnumOptions,
+                CurrentValues = GetFloatValues(descriptor),
                 SelectInterpolable = () =>
                     _actions.SelectInterpolable(
                         gameObject,
@@ -396,6 +397,41 @@ namespace MaterialEditorAPI
                         gameObject),
                 PresentationRefresh = descriptor.PresentationRefresh
             };
+        }
+
+        private static IList<float> GetFloatValues(PropertyDescriptor descriptor)
+        {
+            var values = new List<float>();
+            var materialPropertyName = "_" + descriptor.Name;
+            if (descriptor.Projector != null)
+            {
+                if (descriptor.Material.HasProperty(materialPropertyName))
+                    values.Add(descriptor.Material.GetFloat(materialPropertyName));
+                return values;
+            }
+
+            var visited = new HashSet<Material>();
+            foreach (var renderer in GetRendererList(descriptor.GameObject))
+            {
+                foreach (var material in GetMaterials(descriptor.GameObject, renderer))
+                {
+                    if (!visited.Add(material)
+                        || material.NameFormatted() != descriptor.MaterialName
+                        || !material.HasProperty(materialPropertyName))
+                    {
+                        continue;
+                    }
+
+                    values.Add(material.GetFloat(materialPropertyName));
+                }
+            }
+
+            if (values.Count == 0
+                && descriptor.Material.HasProperty(materialPropertyName))
+            {
+                values.Add(descriptor.Material.GetFloat(materialPropertyName));
+            }
+            return values;
         }
 
         private FloatTogglePropertyRowModel CreateFloatToggleRow(

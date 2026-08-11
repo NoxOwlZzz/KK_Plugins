@@ -27,9 +27,11 @@ Schema 2 adds optional attributes to `<Property>`:
 
 ## Float-backed controls
 
-`Type="Toggle"` is an alias for a Float property using the toggle editor. It
-writes `0` for off and `1` for on. Set `Invert="true"` to reverse the displayed
-toggle while keeping the stored values limited to `0` and `1`.
+`Type="Boolean"` is a Float-backed Boolean control. It writes `0` for off and
+`1` for on. The optional `Invert="true"` attribute reverses the displayed state
+while keeping stored values limited to `0` and `1`; it defaults to `false`.
+`Type="Toggle"` remains accepted as a read-compatible alias, but new manifests
+should use `Boolean`.
 
 `Type="Enum"` is an alias for a Float property using the enum editor. Declare
 choices as alternating labels and numeric values in the `Enums` attribute,

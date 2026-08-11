@@ -204,7 +204,8 @@ namespace MaterialEditorAPI
             }
 
             var value = declaredType.Trim();
-            if (string.Equals(value, "Toggle", StringComparison.OrdinalIgnoreCase))
+            if (string.Equals(value, "Boolean", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(value, "Toggle", StringComparison.OrdinalIgnoreCase))
             {
                 normalizedType = "Float";
                 editorId = ShaderPropertyEditorIds.Toggle;
@@ -324,6 +325,7 @@ namespace MaterialEditorAPI
                 return ShaderPropertyEditorIds.Enum;
             if (EqualsAny(
                     raw,
+                    "Boolean",
                     "Toggle",
                     "ToggleFloat",
                     ShaderPropertyEditorIds.Toggle))
@@ -592,6 +594,126 @@ namespace MaterialEditorAPI
         private static void Warn(Action<string> warning, string message)
         {
             warning?.Invoke(message);
+        }
+    }
+
+    internal enum MaterialEditorEnumValueState
+    {
+        Matched,
+        Unmatched,
+        Mixed
+    }
+
+    internal sealed class MaterialEditorEnumValueSelection
+    {
+        internal MaterialEditorEnumValueSelection(
+            MaterialEditorEnumValueState state,
+            int optionIndex,
+            float currentValue)
+        {
+            State = state;
+            OptionIndex = optionIndex;
+            CurrentValue = currentValue;
+        }
+
+        internal MaterialEditorEnumValueState State { get; }
+        internal int OptionIndex { get; }
+        internal float CurrentValue { get; }
+    }
+
+    internal static class MaterialEditorFloatBackedValuePolicy
+    {
+        internal static MaterialEditorEnumValueSelection ResolveEnumSelection(
+            IList<MaterialEditorEnumOption> options,
+            IEnumerable<float> currentValues)
+        {
+            var hasValue = false;
+            var firstValue = 0f;
+            if (currentValues != null)
+            {
+                foreach (var value in currentValues)
+                {
+                    if (!hasValue)
+                    {
+                        firstValue = value;
+                        hasValue = true;
+                        continue;
+                    }
+
+                    if (!Approximately(firstValue, value))
+                    {
+                        return new MaterialEditorEnumValueSelection(
+                            MaterialEditorEnumValueState.Mixed,
+                            -1,
+                            firstValue);
+                    }
+                }
+            }
+
+            if (hasValue && options != null)
+            {
+                for (var index = 0; index < options.Count; index++)
+                {
+                    if (Approximately(options[index].Value, firstValue))
+                    {
+                        return new MaterialEditorEnumValueSelection(
+                            MaterialEditorEnumValueState.Matched,
+                            index,
+                            firstValue);
+                    }
+                }
+            }
+
+            return new MaterialEditorEnumValueSelection(
+                MaterialEditorEnumValueState.Unmatched,
+                -1,
+                firstValue);
+        }
+
+        internal static bool GetBooleanDisplayValue(float storedValue, bool invert)
+        {
+            var enabled = !Approximately(storedValue, 0f);
+            return invert ? !enabled : enabled;
+        }
+
+        internal static float GetBooleanStoredValue(bool displayValue, bool invert)
+        {
+            return displayValue != invert ? 1f : 0f;
+        }
+
+        internal static bool ShouldRemoveEnumOverride(
+            bool wasMixed,
+            float selectedValue,
+            float originalValue)
+        {
+            return !wasMixed && Approximately(selectedValue, originalValue);
+        }
+
+        internal static void PersistExplicitEnumSelection(
+            Action removeOverride,
+            Action<float> setOverride,
+            float selectedValue)
+        {
+            if (removeOverride == null)
+                throw new ArgumentNullException(nameof(removeOverride));
+            if (setOverride == null)
+                throw new ArgumentNullException(nameof(setOverride));
+
+            // The legacy backends remove an existing float override when its
+            // value matches ValueOriginal. Removing first makes the following
+            // set create a fresh persisted entry even for that value.
+            removeOverride();
+            setOverride(selectedValue);
+        }
+
+        internal static bool Approximately(float left, float right)
+        {
+            if (left == right)
+                return true;
+
+            var difference = Math.Abs(left - right);
+            var largest = Math.Max(Math.Abs(left), Math.Abs(right));
+            return difference <= Math.Max(0.000001f * largest, float.Epsilon * 8f);
         }
     }
 
