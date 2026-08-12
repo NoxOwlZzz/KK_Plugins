@@ -676,7 +676,7 @@ namespace MaterialEditorAPI
                     return true;
 
                 return (editorId != ShaderPropertyEditorIds.Enum
-                        && editorId != ShaderPropertyEditorIds.Toggle)
+                        && editorId != ShaderPropertyEditorIds.Boolean)
                        || propertyType == ShaderPropertyType.Float;
             }
 

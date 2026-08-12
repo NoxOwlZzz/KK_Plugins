@@ -142,7 +142,7 @@ namespace MaterialEditorAPI
                     if (descriptor.EditorId == ShaderPropertyEditorIds.Enum
                         && descriptor.EnumOptions.Count > 0)
                         rows = new[] { CreateEnumRow(descriptor) };
-                    else if (descriptor.EditorId == ShaderPropertyEditorIds.Toggle)
+                    else if (descriptor.EditorId == ShaderPropertyEditorIds.Boolean)
                         rows = new[] { CreateFloatToggleRow(descriptor) };
                     else
                         rows = new[] { CreateFloatRow(descriptor) };

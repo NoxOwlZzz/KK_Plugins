@@ -8,7 +8,7 @@ internal static class ManifestSchemaV2Tests
         SchemaVersionTwoIsAnExplicitCompatibilityGate();
         SchemaTwoMetadataIsParsedWithSafeDefaults();
         FloatBackedAliasesAreLimitedToSchemaTwo();
-        BooleanIsCanonicalAndToggleIsReadCompatible();
+        BooleanIsTheOnlyManifestBooleanSpelling();
         EnumOptionsUseUnityStyleAttributeWithInvariantValues();
         EnumSelectionUsesDeclaredValuesAndPreservesSpecialStates();
         ExplicitMixedEnumSelectionRecreatesThePersistedOverride();
@@ -71,7 +71,7 @@ internal static class ManifestSchemaV2Tests
             MaterialEditorPropertyUiLevel.Advanced,
             metadata.UiLevel,
             "advanced UI level");
-        Equal(ShaderPropertyEditorIds.Toggle, metadata.EditorId, "Boolean uses the Float toggle editor");
+        Equal(ShaderPropertyEditorIds.Boolean, metadata.EditorId, "Boolean uses the Float Boolean editor");
         Equal(true, metadata.Invert, "inverted boolean");
         NotNull(metadata.ShowIf, "parsed ShowIf");
         Equal("Enabled", metadata.ShowIf.PropertyName, "normalized condition source");
@@ -108,14 +108,15 @@ internal static class ManifestSchemaV2Tests
 
     private static void FloatBackedAliasesAreLimitedToSchemaTwo()
     {
-        Alias("Boolean", "Float", ShaderPropertyEditorIds.Toggle);
-        Alias("boolean", "Float", ShaderPropertyEditorIds.Toggle);
-        Alias("Toggle", "Float", ShaderPropertyEditorIds.Toggle);
-        Alias("toggle", "Float", ShaderPropertyEditorIds.Toggle);
+        Alias("Boolean", "Float", ShaderPropertyEditorIds.Boolean);
+        Alias("boolean", "Float", ShaderPropertyEditorIds.Boolean);
         Alias("Enum", "Float", ShaderPropertyEditorIds.Enum);
 
         NoAlias("Float", 2, "ordinary type is not an alias");
         NoAlias("Dropdown", 2, "dropdown is not a data type alias");
+        NoAlias("Toggle", 2, "removed Toggle spelling is not an alias");
+        NoAlias("toggle", 2, "removed lowercase toggle spelling is not an alias");
+        NoAlias(" Toggle ", 2, "removed Toggle spelling stays rejected after trimming");
         NoAlias("Boolean", 1, "boolean is not a legacy schema alias");
         NoAlias("Toggle", 1, "toggle is not a legacy schema alias");
         NoAlias("Enum", 1, "enum is not a legacy alias");
@@ -129,34 +130,39 @@ internal static class ManifestSchemaV2Tests
             "unknown schema fallback remains legacy for aliases");
     }
 
-    private static void BooleanIsCanonicalAndToggleIsReadCompatible()
+    private static void BooleanIsTheOnlyManifestBooleanSpelling()
     {
+        DoesNotContain(
+            ReadSource(
+                FindRepositoryRoot(),
+                "src",
+                "MaterialEditor.Base",
+                "UI",
+                "UI.MaterialPropertyMetadata.cs"),
+            "materialeditor.toggle",
+            "removed Toggle editor ID is absent from production metadata");
+
         var canonical = ShaderPropertyMetadataParser.Parse(
             Element(
                 "<Property Name=\"Enabled\" Type=\"Float\" "
                 + "Editor=\"Boolean\" />"));
         Equal(
-            ShaderPropertyEditorIds.Toggle,
+            ShaderPropertyEditorIds.Boolean,
             canonical.EditorId,
             "Float property with canonical Boolean editor");
 
-        var legacyName = ShaderPropertyMetadataParser.Parse(
+        var canonicalId = ShaderPropertyMetadataParser.Parse(
             Element(
                 "<Property Name=\"Enabled\" Type=\"Float\" "
-                + "Editor=\"Toggle\" />"));
+                + "Editor=\"materialeditor.boolean\" />"));
         Equal(
-            ShaderPropertyEditorIds.Toggle,
-            legacyName.EditorId,
-            "legacy Toggle editor normalizes to Boolean");
+            ShaderPropertyEditorIds.Boolean,
+            canonicalId.EditorId,
+            "Float property with canonical Boolean editor ID");
 
-        var legacyId = ShaderPropertyMetadataParser.Parse(
-            Element(
-                "<Property Name=\"Enabled\" Type=\"Float\" "
-                + "Editor=\"materialeditor.toggle\" />"));
-        Equal(
-            ShaderPropertyEditorIds.Toggle,
-            legacyId.EditorId,
-            "legacy Toggle editor ID normalizes to Boolean");
+        UnknownEditor("Toggle");
+        UnknownEditor("ToggleFloat");
+        UnknownEditor("materialeditor.toggle");
 
         var plainFloat = ShaderPropertyMetadataParser.Parse(
             Element("<Property Name=\"Strength\" Type=\"Float\" />"));
@@ -660,6 +666,19 @@ internal static class ManifestSchemaV2Tests
             name);
         Equal(null, normalizedType, name + " normalized type");
         Equal(null, editorId, name + " editor id");
+    }
+
+    private static void UnknownEditor(string editor)
+    {
+        var warnings = new List<string>();
+        var metadata = ShaderPropertyMetadataParser.Parse(
+            Element(
+                "<Property Name=\"Enabled\" Type=\"Float\" Editor=\""
+                + editor
+                + "\" />"),
+            warnings.Add);
+        Equal(null, metadata.EditorId, editor + " is not a manifest editor");
+        Equal(1, warnings.Count, editor + " warning count");
     }
 
     private static void Option(

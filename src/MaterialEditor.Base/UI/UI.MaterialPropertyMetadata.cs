@@ -102,7 +102,7 @@ namespace MaterialEditorAPI
     internal static class ShaderPropertyEditorIds
     {
         internal const string Enum = "materialeditor.enum";
-        internal const string Toggle = "materialeditor.toggle";
+        internal const string Boolean = "materialeditor.boolean";
     }
 
     internal sealed class ShaderPropertyUiMetadata
@@ -204,11 +204,10 @@ namespace MaterialEditorAPI
             }
 
             var value = declaredType.Trim();
-            if (string.Equals(value, "Boolean", StringComparison.OrdinalIgnoreCase)
-                || string.Equals(value, "Toggle", StringComparison.OrdinalIgnoreCase))
+            if (string.Equals(value, "Boolean", StringComparison.OrdinalIgnoreCase))
             {
                 normalizedType = "Float";
-                editorId = ShaderPropertyEditorIds.Toggle;
+                editorId = ShaderPropertyEditorIds.Boolean;
                 return true;
             }
 
@@ -323,14 +322,9 @@ namespace MaterialEditorAPI
 
             if (EqualsAny(raw, "Enum", ShaderPropertyEditorIds.Enum))
                 return ShaderPropertyEditorIds.Enum;
-            if (EqualsAny(
-                    raw,
-                    "Boolean",
-                    "Toggle",
-                    "ToggleFloat",
-                    ShaderPropertyEditorIds.Toggle))
+            if (EqualsAny(raw, "Boolean", ShaderPropertyEditorIds.Boolean))
             {
-                return ShaderPropertyEditorIds.Toggle;
+                return ShaderPropertyEditorIds.Boolean;
             }
 
             Warn(
