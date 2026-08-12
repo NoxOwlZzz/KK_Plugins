@@ -15,6 +15,8 @@ namespace MaterialEditorAPI
         internal readonly Dictionary<string, bool> CollapsedPropertyCategories = new Dictionary<string, bool>();
         internal readonly Dictionary<string, bool> CollapsedMaterialSections = new Dictionary<string, bool>();
         internal readonly Dictionary<string, bool> CollapsedShaderSections = new Dictionary<string, bool>();
+        internal readonly MaterialEditorShaderUiModeState ShaderUiModes =
+            new MaterialEditorShaderUiModeState();
 
         internal bool ListsVisible;
         internal bool RenameListVisible;

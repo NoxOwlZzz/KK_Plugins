@@ -57,7 +57,9 @@ namespace MaterialEditorAPI
             _registry.Register(
                 floatKeyword,
                 RowModel.RowItemType.FloatProperty,
-                RowModel.RowItemType.KeywordProperty);
+                RowModel.RowItemType.KeywordProperty,
+                RowModel.RowItemType.EnumProperty,
+                RowModel.RowItemType.FloatToggleProperty);
         }
 
         internal void Bind(RowModel item, bool force)
@@ -78,6 +80,7 @@ namespace MaterialEditorAPI
             IRowTypeBinder handler;
             if (_registry.TryGet(item.ItemType, out handler))
                 handler.Bind(item, _listeners);
+            _controls.SetAdvancedPropertyAccent(item.IsAdvanced);
         }
 
         public void SetVisible(bool visible)

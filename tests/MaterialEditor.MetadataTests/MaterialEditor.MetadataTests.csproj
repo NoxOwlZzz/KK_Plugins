@@ -8,6 +8,12 @@
   <ItemGroup>
     <Compile Include="..\..\src\MaterialEditor.Base\UI\UI.ShaderUiMetadata.cs"
              Link="UI.ShaderUiMetadata.cs" />
+    <Compile Include="..\..\src\MaterialEditor.Base\UI\UI.MaterialPropertyMetadata.cs"
+             Link="UI.MaterialPropertyMetadata.cs" />
+    <Compile Include="..\..\src\MaterialEditor.Base\UI\UI.ShaderUiMode.cs"
+             Link="UI.ShaderUiMode.cs" />
+    <Compile Include="..\..\src\MaterialEditor.Base\ShaderPropertyFallbackPolicy.cs"
+             Link="ShaderPropertyFallbackPolicy.cs" />
     <Compile Include="..\..\src\MaterialEditor.Base\UI\UI.TooltipPolicy.cs"
              Link="UI.TooltipPolicy.cs" />
     <Compile Include="..\..\src\MaterialEditor.Core\Core.MaterialEditor.SiruSyncPolicy.cs"

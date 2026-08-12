@@ -32,11 +32,17 @@ namespace MaterialEditorAPI
         public static Image DragPanel;
         private static readonly MaterialEditorSessionState Session = new MaterialEditorSessionState();
         private static MaterialEditorWindowView ActiveView;
+        private static MaterialEditorUI ActiveUi;
 
         private MaterialEditorWindowView _windowView;
         private MaterialEditorSelectionController _selectionController;
         private MaterialEditorPresenter _presenter;
         private MaterialEditorPresentation _presentation;
+        private Coroutine _conditionRefreshCoroutine;
+        private int _conditionRefreshVersion;
+        private GameObject _conditionRefreshGameObject;
+        private object _conditionRefreshData;
+        private string _conditionRefreshFilter;
 
         private static readonly List<Action<MaterialEditorLabelClickEventArgs>> LabelClickHandlers = new List<Action<MaterialEditorLabelClickEventArgs>>();
 
@@ -169,6 +175,7 @@ namespace MaterialEditorAPI
         /// </summary>
         protected void InitUI()
         {
+            ActiveUi = this;
             MaterialEditorExtensionRegistry.SetActiveEditService(EditService);
             _windowView = new MaterialEditorWindowView(
                 transform,
@@ -192,6 +199,7 @@ namespace MaterialEditorAPI
                     Refresh = PopulateList,
                     RefreshDeferred = (go, data, filter) =>
                         StartCoroutine(PopulateListCoroutine(go, data, filter)),
+                    RefreshConditionsDeferred = ScheduleConditionRefresh,
                     RefreshMaterialSelection = PopulateMaterialList,
                     ShowRename = PopulateRenameList,
                     ExportUv = Export.ExportUVMaps,
@@ -245,7 +253,10 @@ namespace MaterialEditorAPI
                 if (MaterialEditorWindow != null)
                     MaterialEditorWindow.gameObject.SetActive(value);
                 if (!value)
+                {
+                    ActiveUi?.CancelConditionRefresh();
                     TexChangeWatcher?.Dispose();
+                }
             }
         }
 
@@ -306,6 +317,7 @@ namespace MaterialEditorAPI
         /// <param name="filter">Comma separated list of text to filter the results</param>
         protected void PopulateList(GameObject go, object data, string filter = null)
         {
+            CancelConditionRefresh();
             _selectionController.CloseRenamePanel();
 
             if (filter == null)
@@ -326,6 +338,76 @@ namespace MaterialEditorAPI
             _presentation = _presenter.BuildRows(go, data, filter, renderers, projectors);
             VirtualList.SetList(_presentation.Rows);
             _windowView.SetPresentation(_presentation);
+        }
+
+        private void ScheduleConditionRefresh(
+            GameObject go,
+            object data,
+            string filter)
+        {
+            if (!IsCurrentConditionRefreshContext(go, data, filter))
+                return;
+
+            _conditionRefreshGameObject = go;
+            _conditionRefreshData = data;
+            _conditionRefreshFilter = filter;
+            _conditionRefreshVersion++;
+
+            if (_conditionRefreshCoroutine != null)
+                return;
+            _conditionRefreshCoroutine =
+                StartCoroutine(ConditionRefreshWorker());
+        }
+
+        private IEnumerator ConditionRefreshWorker()
+        {
+            int scheduledVersion;
+            do
+            {
+                scheduledVersion = _conditionRefreshVersion;
+                yield return null;
+            }
+            while (scheduledVersion != _conditionRefreshVersion);
+
+            var go = _conditionRefreshGameObject;
+            var data = _conditionRefreshData;
+            var filter = _conditionRefreshFilter;
+            _conditionRefreshCoroutine = null;
+            _conditionRefreshGameObject = null;
+            _conditionRefreshData = null;
+            _conditionRefreshFilter = null;
+
+            if (!IsCurrentConditionRefreshContext(go, data, filter))
+                yield break;
+            PopulateList(go, data, filter);
+        }
+
+        private bool IsCurrentConditionRefreshContext(
+            GameObject go,
+            object data,
+            string filter)
+        {
+            return Visible
+                   && go != null
+                   && ReferenceEquals(go, CurrentGameObject)
+                   && ReferenceEquals(data, CurrentData)
+                   && string.Equals(
+                       filter,
+                       CurrentFilter,
+                       StringComparison.Ordinal);
+        }
+
+        private void CancelConditionRefresh()
+        {
+            _conditionRefreshVersion++;
+            _conditionRefreshGameObject = null;
+            _conditionRefreshData = null;
+            _conditionRefreshFilter = null;
+
+            var coroutine = _conditionRefreshCoroutine;
+            _conditionRefreshCoroutine = null;
+            if (coroutine != null)
+                StopCoroutine(coroutine);
         }
 
         private void NavigateToCategory(CategoryNavigationTarget target)

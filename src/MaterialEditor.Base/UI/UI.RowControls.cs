@@ -27,19 +27,22 @@ namespace MaterialEditorAPI
             Text label,
             Toggle toggle,
             Button resetButton,
-            LabelClickTrigger labelClickTrigger = null)
+            LabelClickTrigger labelClickTrigger = null,
+            Button selectInterpolableButton = null)
             : base(panel)
         {
             Label = label;
             Toggle = toggle;
             ResetButton = resetButton;
             LabelClickTrigger = labelClickTrigger;
+            SelectInterpolableButton = selectInterpolableButton;
         }
 
         internal Text Label { get; }
         internal Toggle Toggle { get; }
         internal Button ResetButton { get; }
         internal LabelClickTrigger LabelClickTrigger { get; }
+        internal Button SelectInterpolableButton { get; }
     }
 
     internal sealed class RendererRowControls : RowControls
@@ -117,6 +120,7 @@ namespace MaterialEditorAPI
             Label = owner.GetUIComponent<Text>("ShaderLabel");
             LabelClickTrigger = owner.GetUIComponent<LabelClickTrigger>("ShaderLabel");
             Dropdown = owner.GetUIComponent<Dropdown>("ShaderDropdown");
+            UiModeButton = owner.GetUIComponent<Button>("ShaderUiModeButton");
             SelectInterpolableButton = owner.GetUIComponent<Button>("SelectInterpolableShaderButton");
             ResetButton = owner.GetUIComponent<Button>("ShaderResetButton");
         }
@@ -126,6 +130,7 @@ namespace MaterialEditorAPI
         internal Text Label { get; }
         internal LabelClickTrigger LabelClickTrigger { get; }
         internal Dropdown Dropdown { get; }
+        internal Button UiModeButton { get; }
         internal Button SelectInterpolableButton { get; }
         internal Button ResetButton { get; }
     }
@@ -259,12 +264,37 @@ namespace MaterialEditorAPI
         internal Button ResetButton { get; }
     }
 
+    internal sealed class EnumRowControls : RowControls
+    {
+        internal EnumRowControls(RowBinder owner)
+            : base(owner.GetUIComponent<CanvasGroup>("EnumPanel"))
+        {
+            Label = owner.GetUIComponent<Text>("EnumLabel");
+            LabelClickTrigger = owner.GetUIComponent<LabelClickTrigger>("EnumLabel");
+            SelectInterpolableButton = owner.GetUIComponent<Button>(
+                "SelectInterpolableEnumButton");
+            Dropdown = owner.GetUIComponent<Dropdown>("EnumDropdown");
+            ResetButton = owner.GetUIComponent<Button>("EnumResetButton");
+        }
+
+        internal Text Label { get; }
+        internal LabelClickTrigger LabelClickTrigger { get; }
+        internal Button SelectInterpolableButton { get; }
+        internal Dropdown Dropdown { get; }
+        internal Button ResetButton { get; }
+    }
+
     internal sealed class RowControlSet
     {
         private readonly List<RowControls> _rows;
+        private readonly CanvasGroup _advancedPropertyAccentCanvasGroup;
 
         private RowControlSet(RowBinder owner)
         {
+            AdvancedPropertyAccent =
+                owner.GetUIComponent<Image>("AdvancedPropertyAccent");
+            _advancedPropertyAccentCanvasGroup =
+                AdvancedPropertyAccent.GetComponent<CanvasGroup>();
             Renderer = new RendererRowControls(owner);
             RendererEnabled = CreateToggle(owner, "RendererEnabled");
             RendererShadowCastingMode = new DropdownRowControls(
@@ -289,6 +319,12 @@ namespace MaterialEditorAPI
             Color = new ColorRowControls(owner);
             Float = new FloatRowControls(owner);
             Keyword = CreateToggle(owner, "Keyword", "KeywordLabel");
+            Enum = new EnumRowControls(owner);
+            FloatToggle = CreateToggle(
+                owner,
+                "FloatToggle",
+                "FloatToggleLabel",
+                "SelectInterpolableFloatToggleButton");
 
             _rows = new List<RowControls>
             {
@@ -306,11 +342,14 @@ namespace MaterialEditorAPI
                 OffsetScale,
                 Color,
                 Float,
-                Keyword
+                Keyword,
+                Enum,
+                FloatToggle
             };
         }
 
         internal RendererRowControls Renderer { get; }
+        internal Image AdvancedPropertyAccent { get; }
         internal ToggleRowControls RendererEnabled { get; }
         internal DropdownRowControls RendererShadowCastingMode { get; }
         internal ToggleRowControls RendererReceiveShadows { get; }
@@ -325,6 +364,8 @@ namespace MaterialEditorAPI
         internal ColorRowControls Color { get; }
         internal FloatRowControls Float { get; }
         internal ToggleRowControls Keyword { get; }
+        internal EnumRowControls Enum { get; }
+        internal ToggleRowControls FloatToggle { get; }
 
         internal static RowControlSet Create(RowBinder owner)
         {
@@ -335,12 +376,21 @@ namespace MaterialEditorAPI
         {
             foreach (var row in _rows)
                 row.SetVisible(false);
+            SetAdvancedPropertyAccent(false);
+        }
+
+        internal void SetAdvancedPropertyAccent(bool visible)
+        {
+            _advancedPropertyAccentCanvasGroup.alpha = 1f;
+            if (AdvancedPropertyAccent.gameObject.activeSelf != visible)
+                AdvancedPropertyAccent.gameObject.SetActive(visible);
         }
 
         private static ToggleRowControls CreateToggle(
             RowBinder owner,
             string prefix,
-            string labelClickObjectName = null)
+            string labelClickObjectName = null,
+            string selectInterpolableObjectName = null)
         {
             return new ToggleRowControls(
                 owner.GetUIComponent<CanvasGroup>($"{prefix}Panel"),
@@ -349,7 +399,10 @@ namespace MaterialEditorAPI
                 owner.GetUIComponent<Button>($"{prefix}ResetButton"),
                 labelClickObjectName == null
                     ? null
-                    : owner.GetUIComponent<LabelClickTrigger>(labelClickObjectName));
+                    : owner.GetUIComponent<LabelClickTrigger>(labelClickObjectName),
+                selectInterpolableObjectName == null
+                    ? null
+                    : owner.GetUIComponent<Button>(selectInterpolableObjectName));
         }
     }
 }

@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using UnityEngine;
 
 namespace MaterialEditorAPI
@@ -41,5 +42,36 @@ namespace MaterialEditorAPI
             : base(RowItemType.KeywordProperty, labelText)
         {
         }
+    }
+
+    internal sealed class EnumPropertyRowModel : RowModel
+    {
+        internal EnumPropertyRowModel(string labelText)
+            : base(RowItemType.EnumProperty, labelText)
+        {
+        }
+
+        internal float Value { get; set; }
+        internal float OriginalValue { get; set; }
+        internal IList<MaterialEditorEnumOption> Options { get; set; }
+        internal IList<float> CurrentValues { get; set; }
+        internal Action SelectInterpolable { get; set; }
+        internal Action<float> ValueOnChange { get; set; }
+        internal Action ValueOnReset { get; set; }
+    }
+
+    internal sealed class FloatTogglePropertyRowModel : RowModel
+    {
+        internal FloatTogglePropertyRowModel(string labelText)
+            : base(RowItemType.FloatToggleProperty, labelText)
+        {
+        }
+
+        internal float Value { get; set; }
+        internal float OriginalValue { get; set; }
+        internal bool Invert { get; set; }
+        internal Action SelectInterpolable { get; set; }
+        internal Action<float> ValueOnChange { get; set; }
+        internal Action ValueOnReset { get; set; }
     }
 }

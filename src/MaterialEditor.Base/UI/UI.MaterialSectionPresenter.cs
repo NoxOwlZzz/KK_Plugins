@@ -127,6 +127,8 @@ namespace MaterialEditorAPI
                 context.Material);
             if (originalShaderName.IsNullOrEmpty())
                 originalShaderName = context.ShaderName;
+            var hasAdvancedProperties = HasAdvancedProperties(context);
+            var uiMode = _session.ShaderUiModes.GetMode(context.ShaderName);
             var shaderItem = new ShaderRowModel()
             {
                 GameObject = context.GameObject,
@@ -137,6 +139,8 @@ namespace MaterialEditorAPI
                 OriginalShaderName = originalShaderName,
                 TooltipText = ShaderUiMetadataRegistry.GetShaderTooltip(
                     context.ShaderName),
+                HasAdvancedProperties = hasAdvancedProperties,
+                UiMode = uiMode,
                 Collapsed = collapsed,
                 CollapsedOnChange = value =>
                 {
@@ -172,6 +176,11 @@ namespace MaterialEditorAPI
                         string.Empty,
                         string.Empty)
             };
+            shaderItem.UiModeOnChange = value =>
+            {
+                if (_session.ShaderUiModes.SetMode(shaderItem.ShaderName, value))
+                    _actions.Refresh(context.GameObject, context.Data, context.Filter);
+            };
             context.Rows.Add(shaderItem);
 
             if (collapsed)
@@ -198,22 +207,64 @@ namespace MaterialEditorAPI
             return shaderItem;
         }
 
+        private bool HasAdvancedProperties(MaterialSectionContext context)
+        {
+            var shaderKey = XMLShaderProperties.ContainsKey(context.ShaderName)
+                ? context.ShaderName
+                : "default";
+            return XMLShaderProperties[shaderKey].Values.Any(property =>
+                property.UiLevel == MaterialEditorPropertyUiLevel.Advanced
+                && (property.Type == ShaderPropertyType.Keyword
+                    || context.Material.HasProperty($"_{property.Name}"))
+                && !_actions.IsPropertyBlacklisted(
+                    context.MaterialName,
+                    property.Name));
+        }
+
         private void AddPropertyRows(
             MaterialSectionContext context,
             MaterialSectionPresentation section,
             bool includeRows)
         {
-            var categories = PropertyOrganizer.PropertyOrganization[
-                XMLShaderProperties.ContainsKey(context.ShaderName)
-                    ? context.ShaderName
-                    : "default"];
+            var shaderKey = XMLShaderProperties.ContainsKey(context.ShaderName)
+                ? context.ShaderName
+                : "default";
+            var categories = PropertyOrganizer.PropertyOrganization[shaderKey];
+            // Conditions may intentionally reference a hidden control property,
+            // so source resolution must use the raw manifest rather than the
+            // visible-only organizer output.
+            var manifestDefinitions = XMLShaderProperties[shaderKey]
+                .Values
+                .ToList();
+            var definitionsByName = manifestDefinitions
+                .GroupBy(definition => definition.Name)
+                .ToDictionary(
+                    group => group.Key,
+                    group => group.First(),
+                    StringComparer.Ordinal);
+            var conditionSources = new HashSet<string>(
+                manifestDefinitions
+                    .Where(definition => definition.ShowIf != null)
+                    .Select(definition => definition.ShowIf.PropertyName),
+                StringComparer.Ordinal);
 
             foreach (var category in categories)
             {
-                var definitions = category.Value
+                var definitions = category.Properties
                     .Where(property =>
                         property.Type == ShaderPropertyType.Keyword
                         || context.Material.HasProperty($"_{property.Name}"))
+                    .Where(property =>
+                        property.UiLevel == MaterialEditorPropertyUiLevel.Basic
+                        || _session.ShaderUiModes.GetMode(context.ShaderName)
+                        == MaterialEditorUiMode.Advanced)
+                    .Where(property =>
+                        MaterialEditorConditionPolicy.Evaluate(
+                            property.ShowIf,
+                            sourceName => ResolveConditionValue(
+                                context.Material,
+                                definitionsByName,
+                                sourceName)))
                     .Where(property =>
                         !_actions.IsPropertyBlacklisted(
                             context.MaterialName,
@@ -221,19 +272,22 @@ namespace MaterialEditorAPI
                     .Where(property =>
                         context.PropertyFilter.Count == 0
                         || context.PropertyFilter.Any(word =>
-                            MaterialEditorFilter.Matches(property.Name, word)))
+                            MaterialEditorFilter.Matches(property.Name, word)
+                            || MaterialEditorFilter.Matches(
+                                property.DisplayName,
+                                word)))
                     .ToList();
                 if (definitions.Count == 0)
                     continue;
 
                 var namedCategory =
                     categories.Count > 1
-                    || category.Key != PropertyOrganizer.UncategorizedName;
+                    || category.Name != PropertyOrganizer.UncategorizedName;
                 var categorySection = _categories.Add(
                     context,
                     section,
                     "manifest",
-                    category.Key,
+                    category.Name,
                     namedCategory,
                     includeRows);
                 if (!includeRows || categorySection.RowsCollapsed)
@@ -249,13 +303,44 @@ namespace MaterialEditorAPI
                         context.Projector,
                         context.MaterialName,
                         definition,
-                        category.Key);
+                        category.Name);
+                    if (conditionSources.Contains(definition.Name))
+                    {
+                        descriptor.PresentationRefresh = () =>
+                            _actions.RefreshConditionsDeferred(
+                                context.GameObject,
+                                context.Data,
+                                context.Filter);
+                    }
                     foreach (var row in _propertyRows.Create(descriptor))
                         context.Rows.Add(row);
                 }
             }
 
             AddExtensionPropertyRows(context, section, includeRows);
+        }
+
+        private static float? ResolveConditionValue(
+            Material material,
+            IDictionary<string, ShaderPropertyData> definitionsByName,
+            string propertyName)
+        {
+            ShaderPropertyData definition;
+            if (material == null
+                || definitionsByName == null
+                || string.IsNullOrEmpty(propertyName)
+                || !definitionsByName.TryGetValue(propertyName, out definition))
+                return null;
+
+            if (definition.Type == ShaderPropertyType.Keyword)
+                return material.IsKeywordEnabled($"_{propertyName}") ? 1f : 0f;
+            if (definition.Type != ShaderPropertyType.Float)
+                return null;
+
+            var materialPropertyName = $"_{propertyName}";
+            return material.HasProperty(materialPropertyName)
+                ? material.GetFloat(materialPropertyName)
+                : (float?)null;
         }
 
         private void AddExtensionPropertyRows(

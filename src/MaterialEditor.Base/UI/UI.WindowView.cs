@@ -39,7 +39,8 @@ namespace MaterialEditorAPI
         {
             Build(
                 owner, filter, refresh, close, toggleSidePanels,
-                toggleAllCategories, navigateToCategory, toggleCategory);
+                toggleAllCategories,
+                navigateToCategory, toggleCategory);
         }
 
         internal void PrepareForDisplay(string filter)
@@ -219,7 +220,8 @@ namespace MaterialEditorAPI
                 MaterialEditorLayout.Margin,
                 MaterialEditorLayout.Margin,
                 -MaterialEditorLayout.Margin,
-                -MaterialEditorLayout.HeaderHeight - MaterialEditorLayout.Margin / 2f);
+                -MaterialEditorLayout.HeaderHeight
+                - MaterialEditorLayout.Margin / 2f);
             ScrollableUI.gameObject.AddComponent<Mask>();
             ScrollableUI.content.gameObject.AddComponent<VerticalLayoutGroup>();
             ScrollableUI.content.gameObject.AddComponent<ContentSizeFitter>().verticalFit = ContentSizeFitter.FitMode.PreferredSize;

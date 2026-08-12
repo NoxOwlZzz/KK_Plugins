@@ -24,9 +24,11 @@
     <Compile Include="$(MSBuildThisFileDirectory)Export.UV.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)Extensions.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)PluginBase.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)ShaderPropertyFallbackPolicy.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)UI\UI.PropertyOrganizer.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)UI\UI.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)UI\UI.RepositoryContract.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)UI\UI.ShaderUiMode.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)UI\UI.SessionState.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)UI\UI.SelectionController.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)UI\UI.StyleSystem.cs" />
@@ -36,6 +38,7 @@
     <Compile Include="$(MSBuildThisFileDirectory)UI\UI.WindowView.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)UI\UI.CategoryNavigator.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)UI\UI.MaterialEditorPresenter.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)UI\UI.MaterialPropertyMetadata.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)UI\UI.MaterialSectionContext.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)UI\UI.MaterialSectionPresenter.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)UI\UI.Presentation.cs" />

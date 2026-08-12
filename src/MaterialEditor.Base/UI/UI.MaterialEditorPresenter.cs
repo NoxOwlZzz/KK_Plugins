@@ -45,6 +45,7 @@ namespace MaterialEditorAPI
     {
         internal Action<GameObject, object, string> Refresh { get; set; }
         internal Action<GameObject, object, string> RefreshDeferred { get; set; }
+        internal Action<GameObject, object, string> RefreshConditionsDeferred { get; set; }
         internal Action<GameObject, object, IEnumerable<Renderer>> RefreshMaterialSelection { get; set; }
         internal Action<GameObject, Material, object> ShowRename { get; set; }
         internal Action<Renderer> ExportUv { get; set; }

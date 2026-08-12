@@ -19,12 +19,15 @@ namespace MaterialEditorAPI
         internal const float ResetButtonWidth = SmallButtonWidth * 2f;
         internal const float InterpolableButtonWidth = SmallButtonWidth;
         internal const float ContentWidth = 316f;
+        internal const float AdvancedPropertyAccentWidth = 5f;
+        internal const float AdvancedPropertyAccentVerticalInset = 2f;
 
         internal const float RendererButtonWidth = ButtonWidth;
         internal const float RendererToggleWidth = 20f;
         internal const float RendererDropdownWidth = 94f;
         internal const float MaterialButtonWidth = ButtonWidth * 0.75f;
         internal const float MaterialRenameButtonWidth = SmallButtonWidth;
+        internal const float ShaderModeButtonWidth = 70f;
         internal const float ShaderDropdownWidth = ContentWidth;
         internal const float RenderQueueInputWidth = 94f;
         internal const float OffsetScaleLabelXWidth = 48f;
@@ -36,6 +39,9 @@ namespace MaterialEditorAPI
         internal const float FloatSliderWidth = ContentWidth - 94f;
         internal const float FloatInputWidth = 94f;
         internal const float KeywordToggleWidth = ContentWidth;
+        internal const int DropdownFontSize = 16;
+        internal const int DropdownMinimumFontSize = 12;
+        internal const float DropdownTextVerticalInset = 1f;
 
         internal static readonly RectOffset RowPadding = new RectOffset(1, 1, 1, 1);
     }
@@ -79,6 +85,8 @@ namespace MaterialEditorAPI
         internal static readonly Color ScrollbarColor = new Color(1f, 1f, 1f, 0.6f);
         internal static readonly Color ShaderHintUnderlineColor =
             new Color(0.05f, 0.45f, 1f, 1f);
+        internal static readonly Color AdvancedPropertyAccentColor =
+            new Color32(0x4A, 0xA3, 0xFF, 0xFF);
 
         internal static void ApplyPanel(Image panel, MaterialEditorPanelRole role)
         {
@@ -201,10 +209,33 @@ namespace MaterialEditorAPI
             if (dropdown == null)
                 return;
 
-            ApplyText(dropdown.captionText, MaterialEditorTextRole.Input);
-            if (dropdown.itemText != null)
-                ApplyText(dropdown.itemText, MaterialEditorTextRole.Input);
+            ApplyDropdownText(dropdown.captionText);
+            ApplyDropdownText(dropdown.itemText);
             ApplyTypography(dropdown.gameObject);
+        }
+
+        private static void ApplyDropdownText(Text text)
+        {
+            if (text == null)
+                return;
+
+            ApplyText(text, MaterialEditorTextRole.Input);
+            text.fontSize = MaterialEditorLayout.DropdownFontSize;
+            text.resizeTextForBestFit = true;
+            text.resizeTextMinSize =
+                MaterialEditorLayout.DropdownMinimumFontSize;
+            text.resizeTextMaxSize = MaterialEditorLayout.DropdownFontSize;
+            text.horizontalOverflow = HorizontalWrapMode.Wrap;
+            text.verticalOverflow = VerticalWrapMode.Truncate;
+
+            var rect = text.rectTransform;
+            rect.offsetMin = new Vector2(
+                rect.offsetMin.x,
+                MaterialEditorLayout.DropdownTextVerticalInset);
+            rect.offsetMax = new Vector2(
+                rect.offsetMax.x,
+                -MaterialEditorLayout.DropdownTextVerticalInset);
+            text.SetVerticesDirty();
         }
 
         internal static void ApplyScrollView(ScrollRect scrollRect)
