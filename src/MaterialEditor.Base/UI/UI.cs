@@ -480,14 +480,41 @@ namespace MaterialEditorAPI
             string propertyName)
         {
 #if !API
-            string fileFilter = KK_Plugins.ImageHelper.FileFilter;
+            string fileFilter = textureItem.IsCubemap
+                ? "PNG images (*.png)|*.png|All files|*.*"
+                : KK_Plugins.ImageHelper.FileFilter;
 #else
-            string fileFilter = "Images (*.png;.jpg)|*.png;*.jpg|All files|*.*";
+            string fileFilter = textureItem.IsCubemap
+                ? "PNG images (*.png)|*.png|All files|*.*"
+                : "Images (*.png;.jpg)|*.png;*.jpg|All files|*.*";
 #endif
-            KKAPI.Utilities.OpenFileDialog.Show(OnFileAccept, "Open image", ExportPath, fileFilter, ".png");
+            KKAPI.Utilities.OpenFileDialog.Show(
+                OnFileAccept,
+                textureItem.IsCubemap ? "Open Cubemap source" : "Open image",
+                ExportPath,
+                fileFilter,
+                ".png");
 
             void OnFileAccept(string[] files)
             {
+                // OpenFileDialog invokes its callback on a worker thread.
+                // Marshal all Unity and Material Editor access back to main.
+                ThreadingHelper.Instance.StartSyncInvoke(() =>
+                {
+                    if (this != null)
+                        StartCoroutine(ApplyFileSelectionOnMainThread(files));
+                });
+            }
+
+            IEnumerator ApplyFileSelectionOnMainThread(string[] files)
+            {
+                // StartSyncInvoke is drained during BepInEx.Update. Yield once
+                // so file IO and Cubemap conversion do not run in that drain.
+                yield return null;
+
+                if (material == null || gameObject == null)
+                    yield break;
+
                 if (files == null || files.Length == 0 || files[0].IsNullOrEmpty())
                 {
                     textureItem.Changed =
@@ -496,31 +523,75 @@ namespace MaterialEditorAPI
                             material,
                             propertyName,
                             gameObject);
-                    textureItem.Exists = material.GetTexture($"_{propertyName}") != null;
-                    return;
+                    var currentTexture = material.GetTexture("_" + propertyName);
+                    textureItem.Exists = textureItem.IsCubemap
+                        ? currentTexture is Cubemap
+                        : currentTexture != null;
+                    textureItem.RefreshState?.Invoke();
+                    yield break;
                 }
 
                 string filePath = files[0];
                 EditService.SetMaterialTexture(data, material, propertyName, filePath, gameObject);
+                if (textureItem.IsCubemap)
+                {
+                    textureItem.Changed =
+                        !EditService.GetMaterialTextureValueOriginal(
+                            data,
+                            material,
+                            propertyName,
+                            gameObject);
+                    textureItem.Exists =
+                        material.GetTexture("_" + propertyName) is Cubemap;
+                }
+                else
+                {
+                    // Existing 2D imports are applied by the controller on its
+                    // next update after the file dialog.
+                    textureItem.Changed = true;
+                    textureItem.Exists = true;
+                }
+                textureItem.RefreshState?.Invoke();
 
                 TexChangeWatcher?.Dispose();
-                if (!WatchTexChanges.Value)
-                    return;
+                if (textureItem.IsCubemap || !WatchTexChanges.Value)
+                    yield break;
 
                 var directory = Path.GetDirectoryName(filePath);
                 if (directory == null)
-                    return;
+                    yield break;
 
                 TexChangeWatcher = new FileSystemWatcher(directory, Path.GetFileName(filePath));
                 TexChangeWatcher.Changed += (sender, args) =>
                 {
                     if (WatchTexChanges.Value && File.Exists(filePath))
-                        EditService.SetMaterialTexture(data, material, propertyName, filePath, gameObject);
+                        ScheduleTextureWatcherImport(data, material, propertyName, filePath, gameObject);
                 };
                 TexChangeWatcher.Deleted += (sender, args) => TexChangeWatcher?.Dispose();
                 TexChangeWatcher.Error += (sender, args) => TexChangeWatcher?.Dispose();
                 TexChangeWatcher.EnableRaisingEvents = true;
             }
+        }
+
+        private void ScheduleTextureWatcherImport(
+            object data,
+            Material material,
+            string propertyName,
+            string filePath,
+            GameObject gameObject)
+        {
+            // FileSystemWatcher raises Changed on a ThreadPool thread. The
+            // repository inspects the Material to choose Texture/Cubemap, so
+            // marshal that work before it touches Unity objects.
+            ThreadingHelper.Instance.StartSyncInvoke(() =>
+            {
+                if (this != null
+                    && material != null
+                    && gameObject != null
+                    && WatchTexChanges.Value
+                    && File.Exists(filePath))
+                    EditService.SetMaterialTexture(data, material, propertyName, filePath, gameObject);
+            });
         }
 
         internal virtual void ExportTexture(Material mat, string property)
@@ -530,6 +601,25 @@ namespace MaterialEditorAPI
             var matName = mat.NameFormatted();
             matName = string.Concat(matName.Split(Path.GetInvalidFileNameChars())).Trim();
             string filename = Path.Combine(ExportPath, $"_Export_{DateTime.Now:yyyy-MM-dd-HH-mm-ss}_{matName}_{property}.png");
+            var cubemap = tex as Cubemap;
+            if (cubemap != null)
+            {
+                byte[] pngData;
+                string error;
+                if (!MaterialEditorCubemapConversion.TryExport(
+                        cubemap,
+                        out pngData,
+                        out error))
+                {
+                    MaterialEditorPluginBase.Logger.LogError(error);
+                    MaterialEditorPluginBase.Logger.LogMessage(error);
+                    return;
+                }
+                File.WriteAllBytes(filename, pngData);
+                MaterialEditorPluginBase.Logger.LogInfo($"Exported {filename}");
+                Utilities.OpenFileInExplorer(filename);
+                return;
+            }
             Instance.ConvertNormalMap(ref tex, property, ConvertNormalmapsOnExport.Value);
             SaveTex(tex, filename);
             MaterialEditorPluginBase.Logger.LogInfo($"Exported {filename}");

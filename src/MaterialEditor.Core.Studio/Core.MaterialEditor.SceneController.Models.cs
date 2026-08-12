@@ -1,6 +1,7 @@
 using MaterialEditorAPI;
 using MessagePack;
 using System;
+using System.Collections.Generic;
 using UnityEngine;
 using static MaterialEditorAPI.MaterialAPI;
 using KKAPI.Studio.SaveLoad;
@@ -306,6 +307,11 @@ namespace KK_Plugins.MaterialEditor
             [Key("TexID")]
             public int? TexID;
             /// <summary>
+            /// Whether the stored image is used as a regular 2D texture or a native Cubemap.
+            /// </summary>
+            [Key("TextureKind")]
+            public ShaderPropertyType TextureKind;
+            /// <summary>
             /// Texture offset value
             /// </summary>
             [Key("Offset")]
@@ -332,6 +338,18 @@ namespace KK_Plugins.MaterialEditor
             public MEAnimationDefine TexAnimationDef;
 
             /// <summary>
+            /// Runtime-only snapshot used to restore the exact shader asset (including null).
+            /// </summary>
+            [IgnoreMember]
+            internal Dictionary<Material, Texture> TextureOriginalMaterials;
+
+            [IgnoreMember]
+            internal List<Texture> TextureOriginalValues;
+
+            [IgnoreMember]
+            internal bool TextureOriginalValuesNeedRemap;
+
+            /// <summary>
             /// Data storage class for texture properties
             /// </summary>
             /// <param name="id">ID of the item</param>
@@ -343,16 +361,96 @@ namespace KK_Plugins.MaterialEditor
             /// <param name="scale">Texture scale value</param>
             /// <param name="scaleOriginal">Texture scale original value</param>
             public MaterialTextureProperty(int id, string materialName, string property, int? texID = null, Vector2? offset = null, Vector2? offsetOriginal = null, Vector2? scale = null, Vector2? scaleOriginal = null, MEAnimationDefine texAnimationDef = null)
+                : this(id, materialName, property, texID, offset, offsetOriginal, scale, scaleOriginal, texAnimationDef, ShaderPropertyType.Texture)
+            {
+            }
+
+            internal MaterialTextureProperty(int id, string materialName, string property, int? texID, Vector2? offset, Vector2? offsetOriginal, Vector2? scale, Vector2? scaleOriginal, MEAnimationDefine texAnimationDef, ShaderPropertyType textureKind)
             {
                 ID = id;
                 MaterialName = materialName.FormatShadingObjectName();
                 Property = property;
                 TexID = texID;
-                Offset = offset;
-                OffsetOriginal = offsetOriginal;
-                Scale = scale;
-                ScaleOriginal = scaleOriginal;
-                TexAnimationDef = texAnimationDef;
+                TextureKind = textureKind;
+                Offset = textureKind == ShaderPropertyType.Cubemap ? null : offset;
+                OffsetOriginal = textureKind == ShaderPropertyType.Cubemap ? null : offsetOriginal;
+                Scale = textureKind == ShaderPropertyType.Cubemap ? null : scale;
+                ScaleOriginal = textureKind == ShaderPropertyType.Cubemap ? null : scaleOriginal;
+                TexAnimationDef = textureKind == ShaderPropertyType.Cubemap ? null : texAnimationDef;
+            }
+
+            internal void InheritTextureOriginalSnapshot(MaterialTextureProperty source, GameObject sourceGameObject)
+            {
+                ClearTextureOriginalSnapshot();
+                if (source == null || source.TextureKind != ShaderPropertyType.Cubemap)
+                    return;
+
+                if (sourceGameObject != null)
+                    source.SynchronizeTextureOriginalSnapshot(sourceGameObject);
+                if (source.TextureOriginalValues != null)
+                    TextureOriginalValues = new List<Texture>(source.TextureOriginalValues);
+                TextureOriginalValuesNeedRemap = TextureOriginalValues != null
+                    && TextureOriginalValues.Count > 0;
+            }
+
+            internal void InheritTextureOriginalSnapshotSameMaterials(
+                MaterialTextureProperty source,
+                GameObject sourceGameObject)
+            {
+                ClearTextureOriginalSnapshot();
+                if (source == null || source.TextureKind != ShaderPropertyType.Cubemap)
+                    return;
+
+                if (sourceGameObject != null)
+                    source.SynchronizeTextureOriginalSnapshot(sourceGameObject);
+                TextureOriginalMaterials = MaterialTextureOriginalSnapshot.CloneByMaterialReference(
+                    source.TextureOriginalMaterials);
+                if (source.TextureOriginalValues != null)
+                    TextureOriginalValues = new List<Texture>(source.TextureOriginalValues);
+            }
+
+            internal void SynchronizeTextureOriginalSnapshot(GameObject gameObject)
+            {
+                if (gameObject == null)
+                    return;
+
+                if (TextureOriginalValuesNeedRemap)
+                {
+                    Dictionary<Material, Texture> remapped;
+                    if (MaterialTextureOriginalSnapshot.TryRemapToCurrentMaterials(
+                        gameObject,
+                        MaterialName,
+                        Property,
+                        TextureOriginalValues,
+                        out remapped))
+                        TextureOriginalMaterials = remapped;
+                    else
+                    {
+                        TextureOriginalMaterials = null;
+                        MaterialEditorPluginBase.Logger.LogWarning(
+                            "Could not map the inherited Cubemap original snapshot for " + MaterialName
+                            + "/" + Property + "; capturing the destination materials instead.");
+                    }
+                    TextureOriginalValuesNeedRemap = false;
+                }
+
+                TextureOriginalMaterials = MaterialTextureOriginalSnapshot.SynchronizeByMaterialReference(
+                    gameObject,
+                    MaterialName,
+                    Property,
+                    TextureOriginalMaterials);
+                TextureOriginalValues = MaterialTextureOriginalSnapshot.GetOrderedValues(
+                    gameObject,
+                    MaterialName,
+                    Property,
+                    TextureOriginalMaterials);
+            }
+
+            internal void ClearTextureOriginalSnapshot()
+            {
+                TextureOriginalMaterials = null;
+                TextureOriginalValues = null;
+                TextureOriginalValuesNeedRemap = false;
             }
 
             /// <summary>

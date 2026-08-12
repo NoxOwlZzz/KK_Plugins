@@ -35,9 +35,9 @@ namespace KK_Plugins.MaterialEditor
             foreach (var materialTextureProperty in MaterialTexturePropertyList.Where(x => x.ObjectType == objectType && x.CoordinateIndex == GetCoordinateIndex(objectType) && x.Slot == slot && x.MaterialName == material.NameFormatted()))
             {
                 if (materialTextureProperty.TexID != null)
-                    CopyData.MaterialTexturePropertyList.Add(new CopyContainer.MaterialTextureProperty(materialTextureProperty.Property, TextureDictionary[(int)materialTextureProperty.TexID].Data, materialTextureProperty.Offset, materialTextureProperty.Scale));
+                    CopyData.MaterialTexturePropertyList.Add(new CopyContainer.MaterialTextureProperty(materialTextureProperty.Property, TextureDictionary[(int)materialTextureProperty.TexID].Data, materialTextureProperty.Offset, materialTextureProperty.Scale, materialTextureProperty.TextureKind));
                 else
-                    CopyData.MaterialTexturePropertyList.Add(new CopyContainer.MaterialTextureProperty(materialTextureProperty.Property, null, materialTextureProperty.Offset, materialTextureProperty.Scale));
+                    CopyData.MaterialTexturePropertyList.Add(new CopyContainer.MaterialTextureProperty(materialTextureProperty.Property, null, materialTextureProperty.Offset, materialTextureProperty.Scale, materialTextureProperty.TextureKind));
             }
             if (GetProjectorList(objectType, go).FirstOrDefault(x => x.material == material) != null)
                 foreach (var projectorProperty in ProjectorPropertyList.Where(x => x.ObjectType == objectType && x.CoordinateIndex == GetCoordinateIndex(objectType) && x.Slot == slot && x.ProjectorName == material.NameFormatted()))
@@ -82,10 +82,10 @@ namespace KK_Plugins.MaterialEditor
             {
                 var materialTextureProperty = CopyData.MaterialTexturePropertyList[i];
                 if (material.HasProperty($"_{materialTextureProperty.Property}"))
-                    SetMaterialTexture(slot, objectType, material, materialTextureProperty.Property, materialTextureProperty.Data, go);
-                if (materialTextureProperty.Offset != null)
+                    SetMaterialTexture(slot, objectType, material, materialTextureProperty.Property, materialTextureProperty.Data, go, materialTextureProperty.TextureKind);
+                if (materialTextureProperty.TextureKind != ShaderPropertyType.Cubemap && materialTextureProperty.Offset != null)
                     SetMaterialTextureOffset(slot, objectType, material, materialTextureProperty.Property, (Vector2)materialTextureProperty.Offset, go, setProperty);
-                if (materialTextureProperty.Scale != null)
+                if (materialTextureProperty.TextureKind != ShaderPropertyType.Cubemap && materialTextureProperty.Scale != null)
                     SetMaterialTextureScale(slot, objectType, material, materialTextureProperty.Property, (Vector2)materialTextureProperty.Scale, go, setProperty);
             }
 
@@ -140,7 +140,11 @@ namespace KK_Plugins.MaterialEditor
                 foreach (var property in MaterialColorPropertyList.Where(x => x.ObjectType == objectType && x.CoordinateIndex == CurrentCoordinateIndex && x.Slot == slot && x.MaterialName == matName))
                     newAccessoryMaterialColorPropertyList.Add(new MaterialColorProperty(property.ObjectType, property.CoordinateIndex, slot, newMatName, property.Property, property.Value, property.ValueOriginal));
                 foreach (var property in MaterialTexturePropertyList.Where(x => x.ObjectType == objectType && x.CoordinateIndex == CurrentCoordinateIndex && x.Slot == slot && x.MaterialName == matName))
-                    newAccessoryMaterialTexturePropertyList.Add(new MaterialTextureProperty(property.ObjectType, property.CoordinateIndex, slot, newMatName, property.Property, property.TexID, property.Offset, property.OffsetOriginal, property.Scale, property.ScaleOriginal, property.TexAnimationDef));
+                {
+                    var copiedProperty = new MaterialTextureProperty(property.ObjectType, property.CoordinateIndex, slot, newMatName, property.Property, property.TexID, property.Offset, property.OffsetOriginal, property.Scale, property.ScaleOriginal, property.TexAnimationDef, property.TextureKind);
+                    copiedProperty.InheritTextureOriginalSnapshot(property, go);
+                    newAccessoryMaterialTexturePropertyList.Add(copiedProperty);
+                }
 
                 MaterialShaderList.AddRange(newAccessoryMaterialShaderList);
                 MaterialFloatPropertyList.AddRange(newAccessoryMaterialFloatPropertyList);

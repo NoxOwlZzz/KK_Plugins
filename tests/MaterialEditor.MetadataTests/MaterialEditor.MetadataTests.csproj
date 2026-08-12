@@ -16,6 +16,8 @@
              Link="ShaderPropertyFallbackPolicy.cs" />
     <Compile Include="..\..\src\MaterialEditor.Base\UI\UI.TooltipPolicy.cs"
              Link="UI.TooltipPolicy.cs" />
+    <Compile Include="..\..\src\MaterialEditor.Base\CubemapProjection.cs"
+             Link="CubemapProjection.cs" />
     <Compile Include="..\..\src\MaterialEditor.Core\Core.MaterialEditor.SiruSyncPolicy.cs"
              Link="Core.MaterialEditor.SiruSyncPolicy.cs" />
   </ItemGroup>

@@ -3,6 +3,173 @@ using UnityEngine;
 
 namespace MaterialEditorAPI
 {
+    internal static class MaterialTextureOriginalSnapshot
+    {
+        private sealed class MaterialReferenceComparer : IEqualityComparer<Material>
+        {
+            internal static readonly MaterialReferenceComparer Instance = new MaterialReferenceComparer();
+
+            public bool Equals(Material left, Material right)
+            {
+                return object.ReferenceEquals(left, right);
+            }
+
+            public int GetHashCode(Material material)
+            {
+                return object.ReferenceEquals(material, null)
+                    ? 0
+                    : System.Runtime.CompilerServices.RuntimeHelpers.GetHashCode(material);
+            }
+        }
+
+        internal static Dictionary<Material, Texture> SynchronizeByMaterialReference(
+            GameObject gameObject,
+            string materialName,
+            string propertyName,
+            IDictionary<Material, Texture> originals)
+        {
+            var synchronized = NewReferenceDictionary();
+            var materials = GetMatchingMaterials(gameObject, materialName, propertyName);
+            var fullPropertyName = "_" + propertyName;
+            for (var index = 0; index < materials.Count; index++)
+            {
+                var material = materials[index];
+                Texture original;
+                synchronized.Add(
+                    material,
+                    TryGetByReference(originals, material, out original)
+                        ? original
+                        : material.GetTexture(fullPropertyName));
+            }
+            return synchronized;
+        }
+
+        internal static List<Texture> GetOrderedValues(
+            GameObject gameObject,
+            string materialName,
+            string propertyName,
+            IDictionary<Material, Texture> originals)
+        {
+            if (originals == null)
+                return null;
+
+            var values = new List<Texture>();
+            var materials = GetMatchingMaterials(gameObject, materialName, propertyName);
+            for (var index = 0; index < materials.Count; index++)
+            {
+                Texture original;
+                if (!TryGetByReference(originals, materials[index], out original))
+                    return null;
+                values.Add(original);
+            }
+            return values;
+        }
+
+        internal static bool TryRemapToCurrentMaterials(
+            GameObject gameObject,
+            string materialName,
+            string propertyName,
+            IList<Texture> orderedValues,
+            out Dictionary<Material, Texture> remapped)
+        {
+            remapped = NewReferenceDictionary();
+            if (orderedValues == null || orderedValues.Count == 0)
+                return false;
+
+            var materials = GetMatchingMaterials(gameObject, materialName, propertyName);
+            if (materials.Count != orderedValues.Count)
+                return false;
+
+            for (var index = 0; index < materials.Count; index++)
+                remapped.Add(materials[index], orderedValues[index]);
+            return true;
+        }
+
+        internal static void RestoreByMaterialReference(
+            GameObject gameObject,
+            string materialName,
+            string propertyName,
+            IDictionary<Material, Texture> originals)
+        {
+            if (originals == null)
+                return;
+
+            var materials = GetMatchingMaterials(gameObject, materialName, propertyName);
+            var fullPropertyName = "_" + propertyName;
+            for (var index = 0; index < materials.Count; index++)
+            {
+                Texture original;
+                if (TryGetByReference(originals, materials[index], out original))
+                    materials[index].SetTexture(fullPropertyName, original);
+            }
+        }
+
+        internal static Dictionary<Material, Texture> CloneByMaterialReference(
+            IDictionary<Material, Texture> originals)
+        {
+            var clone = NewReferenceDictionary();
+            if (originals != null)
+                foreach (var original in originals)
+                    clone.Add(original.Key, original.Value);
+            return clone;
+        }
+
+        private static Dictionary<Material, Texture> NewReferenceDictionary()
+        {
+            return new Dictionary<Material, Texture>(MaterialReferenceComparer.Instance);
+        }
+
+        private static bool TryGetByReference(
+            IDictionary<Material, Texture> originals,
+            Material material,
+            out Texture original)
+        {
+            if (originals != null)
+                foreach (var entry in originals)
+                    if (object.ReferenceEquals(entry.Key, material))
+                    {
+                        original = entry.Value;
+                        return true;
+                    }
+
+            original = null;
+            return false;
+        }
+
+        private static List<Material> GetMatchingMaterials(
+            GameObject gameObject,
+            string materialName,
+            string propertyName)
+        {
+            var matches = new List<Material>();
+            if (gameObject == null)
+                return matches;
+
+            var materials = MaterialAPI.GetObjectMaterials(gameObject, materialName);
+            var fullPropertyName = "_" + propertyName;
+            for (var index = 0; index < materials.Count; index++)
+            {
+                var material = materials[index];
+                if (material == null
+                    || material.NameFormatted() != materialName
+                    || !material.HasProperty(fullPropertyName)
+                    || ContainsReference(matches, material))
+                    continue;
+
+                matches.Add(material);
+            }
+            return matches;
+        }
+
+        private static bool ContainsReference(IList<Material> materials, Material candidate)
+        {
+            for (var index = 0; index < materials.Count; index++)
+                if (object.ReferenceEquals(materials[index], candidate))
+                    return true;
+            return false;
+        }
+    }
+
     /// <summary>
     /// Class containing material data, used to for copy and paste of material edits
     /// </summary>
@@ -151,6 +318,10 @@ namespace MaterialEditorAPI
             /// </summary>
             public byte[] Data;
             /// <summary>
+            /// Kind of texture represented by Data.
+            /// </summary>
+            internal MaterialAPI.ShaderPropertyType TextureKind;
+            /// <summary>
             /// Texture offset value
             /// </summary>
             public Vector2? Offset;
@@ -167,11 +338,17 @@ namespace MaterialEditorAPI
             /// <param name="offset">Texture offset value</param>
             /// <param name="scale">Texture scale value</param>
             public MaterialTextureProperty(string property, byte[] data = null, Vector2? offset = null, Vector2? scale = null)
+                : this(property, data, offset, scale, MaterialAPI.ShaderPropertyType.Texture)
+            {
+            }
+
+            internal MaterialTextureProperty(string property, byte[] data, Vector2? offset, Vector2? scale, MaterialAPI.ShaderPropertyType textureKind)
             {
                 Property = property;
                 Data = data;
-                Offset = offset;
-                Scale = scale;
+                TextureKind = textureKind;
+                Offset = textureKind == MaterialAPI.ShaderPropertyType.Cubemap ? null : offset;
+                Scale = textureKind == MaterialAPI.ShaderPropertyType.Cubemap ? null : scale;
             }
         }
 

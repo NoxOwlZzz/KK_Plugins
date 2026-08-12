@@ -9,6 +9,7 @@ internal static class ManifestSchemaV2Tests
         SchemaTwoMetadataIsParsedWithSafeDefaults();
         FloatBackedAliasesAreLimitedToSchemaTwo();
         BooleanIsTheOnlyManifestBooleanSpelling();
+        CubemapIsARealPropertyTypeRatherThanAnAlias();
         EnumOptionsUseUnityStyleAttributeWithInvariantValues();
         EnumSelectionUsesDeclaredValuesAndPreservesSpecialStates();
         ExplicitMixedEnumSelectionRecreatesThePersistedOverride();
@@ -167,6 +168,12 @@ internal static class ManifestSchemaV2Tests
         var plainFloat = ShaderPropertyMetadataParser.Parse(
             Element("<Property Name=\"Strength\" Type=\"Float\" />"));
         Equal(null, plainFloat.EditorId, "ordinary Float editor remains unchanged");
+    }
+
+    private static void CubemapIsARealPropertyTypeRatherThanAnAlias()
+    {
+        NoAlias("Cubemap", 1, "Cubemap is available through the real property-type parser in schema 1");
+        NoAlias("cubemap", 2, "Cubemap is case-insensitive without becoming a schema 2 alias");
     }
 
     private static void EnumOptionsUseUnityStyleAttributeWithInvariantValues()

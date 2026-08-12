@@ -102,6 +102,8 @@ namespace MaterialEditorAPI
             {
                 case ShaderPropertyType.Texture:
                     return MaterialEditorPropertyEditorIds.Texture;
+                case ShaderPropertyType.Cubemap:
+                    return MaterialEditorPropertyEditorIds.Texture;
                 case ShaderPropertyType.Color:
                     return MaterialEditorPropertyEditorIds.Color;
                 case ShaderPropertyType.Float:
@@ -133,7 +135,10 @@ namespace MaterialEditorAPI
             switch (descriptor.Type)
             {
                 case ShaderPropertyType.Texture:
-                    rows = CreateTextureRows(descriptor);
+                    rows = CreateTextureRows(descriptor, true);
+                    break;
+                case ShaderPropertyType.Cubemap:
+                    rows = CreateTextureRows(descriptor, false);
                     break;
                 case ShaderPropertyType.Color:
                     rows = new[] { CreateColorRow(descriptor) };
@@ -215,7 +220,9 @@ namespace MaterialEditorAPI
             }
         }
 
-        private IEnumerable<RowModel> CreateTextureRows(PropertyDescriptor descriptor)
+        private IEnumerable<RowModel> CreateTextureRows(
+            PropertyDescriptor descriptor,
+            bool includeOffsetAndScale)
         {
             var gameObject = descriptor.GameObject;
             var data = descriptor.Data;
@@ -231,21 +238,43 @@ namespace MaterialEditorAPI
                 Projector = projector,
                 PropertyName = propertyName,
                 PublicDescriptor = descriptor.PublicDescriptor,
+                IsCubemap = descriptor.Type == ShaderPropertyType.Cubemap,
                 Changed = !_editService.GetMaterialTextureValueOriginal(data, material, propertyName, gameObject),
-                Exists = material.GetTexture($"_{propertyName}") != null,
+                Exists = descriptor.Type == ShaderPropertyType.Cubemap
+                    ? material.GetTexture("_" + propertyName) is Cubemap
+                    : material.GetTexture("_" + propertyName) != null,
                 Export = () => _actions.ExportTexture(material, propertyName),
-                SelectInterpolable = () =>
+                SelectInterpolable = includeOffsetAndScale ? (System.Action)(() =>
                     _actions.SelectInterpolable(
                         gameObject,
                         RowModel.RowItemType.TextureProperty,
                         descriptor.MaterialName,
                         propertyName,
-                        string.Empty)
+                        string.Empty)) : null
             };
             textureItem.Import = () =>
                 _actions.ImportTexture(textureItem, gameObject, data, material, propertyName);
             textureItem.Reset = () =>
-                _editService.RemoveMaterialTexture(data, material, propertyName, gameObject);
+            {
+                _editService.RemoveMaterialTexture(
+                    data,
+                    material,
+                    propertyName,
+                    gameObject);
+                textureItem.Changed =
+                    !_editService.GetMaterialTextureValueOriginal(
+                        data,
+                        material,
+                        propertyName,
+                        gameObject);
+                var currentTexture = material.GetTexture("_" + propertyName);
+                textureItem.Exists = textureItem.IsCubemap
+                    ? currentTexture is Cubemap
+                    : currentTexture != null;
+            };
+
+            if (!includeOffsetAndScale)
+                return new RowModel[] { textureItem };
 
             var textureOffset = material.GetTextureOffset($"_{propertyName}");
             var textureOffsetOriginal =

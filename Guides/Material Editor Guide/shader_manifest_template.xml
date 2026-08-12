@@ -87,6 +87,13 @@
       <Property Name="{{PropertyName}}" Type="Texture" Category="{{category_name}}"/>
       <!-- Example: <Property Name="PropertyName" Type="Texture" Category="Category Name"/> -->
 
+      <!-- Native shader Cube property -->
+      <!-- Import prefers an equirectangular 2:1 PNG. Other PNG proportions are accepted and stretched automatically. -->
+      <!-- Import is capped at 8,388,608 decoded pixels, 8192 per dimension, and a 64 MiB source file. -->
+      <!-- Export produces an equirectangular 2:1 PNG. Cubemap rows do not expose 2D offset/scale controls. -->
+      <Property Name="{{PropertyName}}" Type="Cubemap"/>
+      <!-- Example: <Property Name="EnvironmentCube" Type="Cubemap" Category="Environment"/> -->
+
       <!-- Keyword -->
       <Property Name="{{KEYWORD_NAME}}" Type="Keyword"/>
       <!-- -->

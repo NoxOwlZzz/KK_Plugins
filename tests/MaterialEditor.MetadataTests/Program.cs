@@ -10,6 +10,8 @@ internal static class Program
             ReferencesAndWhitespaceAreResolved();
             InvalidCatalogsAreRejected();
             ShaderHintDisplayPolicyIsIndependentOfStandardTooltips();
+            CubemapProjectionTests.Run();
+            CubemapPersistenceContractTests.Run();
             ManifestSchemaV2Tests.Run();
             ShaderUiModeTests.Run();
             UiLevelPerShaderContractTests.Run();

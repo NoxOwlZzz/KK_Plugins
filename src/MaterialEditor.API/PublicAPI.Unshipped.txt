@@ -2,6 +2,7 @@ const MaterialEditorAPI.MaterialEditorPropertyEditorIds.Boolean = "materialedito
 const MaterialEditorAPI.MaterialEditorPropertyEditorIds.Color = "materialeditor.color" -> string
 const MaterialEditorAPI.MaterialEditorPropertyEditorIds.Float = "materialeditor.float" -> string
 const MaterialEditorAPI.MaterialEditorPropertyEditorIds.Texture = "materialeditor.texture" -> string
+MaterialEditorAPI.MaterialAPI.ShaderPropertyType.Cubemap = 4 -> MaterialEditorAPI.MaterialAPI.ShaderPropertyType
 MaterialEditorAPI.MaterialEditorApiCapability
 MaterialEditorAPI.MaterialEditorApiCapability.EditServiceFacade = 16 -> MaterialEditorAPI.MaterialEditorApiCapability
 MaterialEditorAPI.MaterialEditorApiCapability.LabelClickEvents = 1 -> MaterialEditorAPI.MaterialEditorApiCapability

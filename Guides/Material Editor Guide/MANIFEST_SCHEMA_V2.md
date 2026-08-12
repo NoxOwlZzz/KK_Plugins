@@ -49,6 +49,26 @@ with a warning.
 The aliases are case-insensitive, but only recognized when
 `SchemaVersion="2"` is active.
 
+## Cubemap
+
+`Type="Cubemap"` targets a native shader `Cube` property and is backed by an
+actual `UnityEngine.Cubemap`, not by a `Texture2D`. Material Editor exposes
+Import, Export, and Reset for this type. Cubemap is a real property type rather
+than a schema 2 alias, so it is also available to legacy schema 1 manifests.
+
+Import prefers an equirectangular 2:1 PNG (for example, 2048x1024). Other PNG
+proportions are also accepted and are deterministically stretched across a 2:1
+panorama, with a warning in the plugin log. Input is limited to 8,388,608
+decoded pixels, 8192 pixels per dimension, and a 64 MiB PNG file. The original
+file bytes remain the persisted and cached source. Export writes the assigned
+Cubemap as an equirectangular 2:1 PNG; face sizes above 1024 are rejected to
+keep runtime readback memory bounded. Reset removes only the Material Editor
+override and restores the original Cubemap, including an original `null` value.
+
+Cubemap rows do not expose texture offset/scale or Timeline interpolation.
+Those operations apply to 2D textures and are not valid for a native `Cube`
+property.
+
 ## Conditional visibility
 
 `ShowIf` accepts these forms:

@@ -76,7 +76,7 @@ namespace MaterialEditorAPI
         public static void SetMaterials(GameObject gameObject, Renderer renderer, Material[] materials) => renderer.materials = materials;
 #pragma warning restore IDE0060 // Remove unused parameter
 
-        private static List<Material> GetObjectMaterials(GameObject gameObject, string materialName)
+        internal static List<Material> GetObjectMaterials(GameObject gameObject, string materialName)
         {
             if (gameObject == null)
                 return new List<Material>();
@@ -721,6 +721,33 @@ namespace MaterialEditorAPI
         }
 
         /// <summary>
+        /// Set a native Cubemap property without mutating sampler state on the
+        /// shared Cubemap instance.
+        /// </summary>
+        internal static bool SetCubemap(
+            GameObject gameObject,
+            string materialName,
+            string propertyName,
+            Cubemap value)
+        {
+            if (value == null)
+                return false;
+
+            var didSet = false;
+            var materials = GetObjectMaterials(gameObject, materialName);
+            for (var index = 0; index < materials.Count; index++)
+            {
+                var material = materials[index];
+                var fullPropertyName = "_" + propertyName;
+                if (!material.HasProperty(fullPropertyName))
+                    continue;
+                material.SetTexture(fullPropertyName, value);
+                didSet = true;
+            }
+            return didSet;
+        }
+
+        /// <summary>
         /// Set the texture offset property of a material
         /// </summary>
         /// <param name="gameObject">GameObject to search for the renderer</param>
@@ -796,6 +823,8 @@ namespace MaterialEditorAPI
                 shaderPropertyDataList = new Dictionary<string, MaterialEditorPluginBase.ShaderPropertyData>();
 
             var materials = GetObjectMaterials(gameObject, materialName);
+            var defaultCubemaps = new Dictionary<string, Cubemap>(System.StringComparer.Ordinal);
+            var failedDefaultCubemaps = new HashSet<string>(System.StringComparer.Ordinal);
             for (var i = 0; i < materials.Count; i++)
             {
                 var material = materials[i];
@@ -829,6 +858,34 @@ namespace MaterialEditorAPI
                                 {
                                     MaterialEditorPluginBase.Logger.LogWarning($"Could not load default texture:{shaderPropertyData.DefaultValueAssetBundle}:{shaderPropertyData.DefaultValue}");
                                 }
+                                break;
+                            case ShaderPropertyType.Cubemap:
+                                if (shaderPropertyData.DefaultValue.IsNullOrEmpty()) continue;
+                                var cubemapKey =
+                                    (shaderPropertyData.DefaultValueAssetBundle ?? string.Empty)
+                                    + "\0"
+                                    + shaderPropertyData.DefaultValue;
+                                Cubemap cubemap;
+                                if (!defaultCubemaps.TryGetValue(cubemapKey, out cubemap)
+                                    && !failedDefaultCubemaps.Contains(cubemapKey))
+                                {
+                                    try
+                                    {
+                                        cubemap = LoadShaderDefaultCubemap(
+                                            shaderPropertyData.DefaultValueAssetBundle,
+                                            shaderPropertyData.DefaultValue);
+                                        defaultCubemaps[cubemapKey] = cubemap;
+                                    }
+                                    catch
+                                    {
+                                        failedDefaultCubemaps.Add(cubemapKey);
+                                        MaterialEditorPluginBase.Logger.LogWarning(
+                                            $"Could not load default cubemap:{shaderPropertyData.DefaultValueAssetBundle}:{shaderPropertyData.DefaultValue}");
+                                    }
+                                }
+                                if (cubemap != null
+                                    && material.HasProperty("_" + shaderPropertyData.Name))
+                                    material.SetTexture("_" + shaderPropertyData.Name, cubemap);
                                 break;
                             case ShaderPropertyType.Keyword:
                                 SetKeyword(gameObject, materialName, shaderPropertyData.Name, bool.Parse(shaderPropertyData.DefaultValue));
@@ -871,6 +928,28 @@ namespace MaterialEditorAPI
             return tex;
         }
 
+        private static Cubemap LoadShaderDefaultCubemap(
+            string assetBundlePath,
+            string assetPath)
+        {
+            AssetBundle bundle = null;
+            try
+            {
+                bundle = AssetBundle.LoadFromFile(assetBundlePath);
+                if (bundle == null)
+                    throw new System.InvalidOperationException("Could not load the AssetBundle.");
+                var cubemap = bundle.LoadAsset<Cubemap>(assetPath);
+                if (cubemap == null)
+                    throw new System.InvalidOperationException("The Cubemap asset was not found.");
+                return cubemap;
+            }
+            finally
+            {
+                if (bundle != null)
+                    bundle.Unload(false);
+            }
+        }
+
         /// <summary>
         /// Type of the shader property
         /// </summary>
@@ -891,7 +970,11 @@ namespace MaterialEditorAPI
             /// <summary>
             /// Bool
             /// </summary>
-            Keyword
+            Keyword,
+            /// <summary>
+            /// Native shader Cube property backed by UnityEngine.Cubemap
+            /// </summary>
+            Cubemap = 4
         }
 
         /// <summary>

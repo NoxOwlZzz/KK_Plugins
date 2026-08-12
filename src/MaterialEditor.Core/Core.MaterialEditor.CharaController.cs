@@ -53,6 +53,8 @@ namespace KK_Plugins.MaterialEditor
 
         internal readonly Dictionary<int, TextureContainer> TextureDictionary = new Dictionary<int, TextureContainer>();
 
+        private readonly Dictionary<int, MaterialEditorCubemapLease> CubemapLeases = new Dictionary<int, MaterialEditorCubemapLease>();
+
         private readonly Dictionary<MaterialTextureProperty, MEAnimationController> AnimationControllerMap = new Dictionary<MaterialTextureProperty, MEAnimationController>();
 
         static MaterialEditorCharaController()
@@ -86,6 +88,8 @@ namespace KK_Plugins.MaterialEditor
         /// <summary></summary>
         protected override void OnDestroy()
         {
+            ReleaseAllCubemapLeases();
+            DisposeTextureDictionary();
             charaControllers.Remove(this);
             base.OnDestroy();
         }
@@ -470,6 +474,7 @@ namespace KK_Plugins.MaterialEditor
         /// </summary>
         protected int PurgeUnusedTextures()
         {
+            PurgeUnusedCubemapLeases();
             if (TextureDictionary.Count <= 0)
                 return 0;
 
@@ -493,10 +498,87 @@ namespace KK_Plugins.MaterialEditor
 
             foreach (var texID in unuseds)
             {
+                ReleaseCubemapLease(texID);
                 TextureDictionary[texID].Dispose();
                 TextureDictionary.Remove(texID);
             }
             return unuseds.Count;
+        }
+
+        private bool TryGetCubemap(int texID, out Cubemap cubemap, out string error)
+        {
+            cubemap = null;
+            error = null;
+
+            MaterialEditorCubemapLease lease;
+            if (CubemapLeases.TryGetValue(texID, out lease) && lease.Cubemap != null)
+            {
+                cubemap = lease.Cubemap;
+                return true;
+            }
+
+            TextureContainer container;
+            if (!TextureDictionary.TryGetValue(texID, out container))
+            {
+                error = "The Cubemap texture data is missing.";
+                return false;
+            }
+
+            if (!MaterialEditorCubemapCache.TryAcquire(container.Data, out lease, out error))
+                return false;
+
+            CubemapLeases[texID] = lease;
+            cubemap = lease.Cubemap;
+            return true;
+        }
+
+        private void CacheCubemapLease(int texID, MaterialEditorCubemapLease lease)
+        {
+            MaterialEditorCubemapLease existing;
+            if (CubemapLeases.TryGetValue(texID, out existing))
+            {
+                lease.Dispose();
+                return;
+            }
+            CubemapLeases[texID] = lease;
+        }
+
+        private void ReleaseCubemapLease(int texID)
+        {
+            MaterialEditorCubemapLease lease;
+            if (!CubemapLeases.TryGetValue(texID, out lease))
+                return;
+            CubemapLeases.Remove(texID);
+            lease.Dispose();
+        }
+
+        private void PurgeUnusedCubemapLeases()
+        {
+            if (CubemapLeases.Count == 0)
+                return;
+
+            var used = new HashSet<int>(MaterialTexturePropertyList
+                .Where(x => x.TextureKind == ShaderPropertyType.Cubemap && x.TexID.HasValue)
+                .Select(x => x.TexID.Value));
+            var unused = CubemapLeases.Keys.Where(x => !used.Contains(x)).ToArray();
+            for (var index = 0; index < unused.Length; index++)
+                ReleaseCubemapLease(unused[index]);
+        }
+
+        private void ReleaseAllCubemapLeases()
+        {
+            var leases = CubemapLeases.Values.ToArray();
+            CubemapLeases.Clear();
+            for (var index = 0; index < leases.Length; index++)
+                leases[index].Dispose();
+        }
+
+        private void DisposeTextureDictionary()
+        {
+            var containers = TextureDictionary.Values.ToArray();
+            TextureDictionary.Clear();
+            for (var index = 0; index < containers.Length; index++)
+                containers[index].Dispose();
         }
 
 #if KK || KKS
@@ -634,6 +716,7 @@ namespace KK_Plugins.MaterialEditor
         /// </summary>
         private void PurgeUnusedAnimation()
         {
+            PurgeUnusedCubemapLeases();
             MEAnimationUtil.PurgeUnusedAnimation(AnimationControllerMap, MaterialTexturePropertyList);
         }
 
@@ -651,6 +734,9 @@ namespace KK_Plugins.MaterialEditor
         /// </summary>
         private static int? GetTexIDWithAnimation(MaterialTextureProperty property)
         {
+            // This delegate is also used to collect texture IDs for card and
+            // coordinate persistence. Cubemaps are not animated, but their
+            // source bytes still have to be included in the saved payload.
             return property.TexID;
         }
 
@@ -659,6 +745,8 @@ namespace KK_Plugins.MaterialEditor
         /// </summary>
         private static void SetTextureForAnimation(MaterialEditorCharaController controller, GameObject go, MaterialTextureProperty property, int texID)
         {
+            if (property.TextureKind == ShaderPropertyType.Cubemap)
+                return;
             if (!controller.TextureDictionary.TryGetValue(texID, out var tex))
                 return;
 

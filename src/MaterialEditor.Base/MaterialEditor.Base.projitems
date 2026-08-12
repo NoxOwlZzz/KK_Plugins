@@ -20,6 +20,8 @@
     <Compile Include="$(MSBuildThisFileDirectory)MaterialEditorExtension.Registry.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)ConfigurationManagerAttributes.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)CopyContainer.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)CubemapProjection.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)CubemapConversion.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)Export.Obj.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)Export.UV.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)Extensions.cs" />

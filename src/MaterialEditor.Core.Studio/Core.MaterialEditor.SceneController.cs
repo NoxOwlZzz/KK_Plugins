@@ -40,6 +40,8 @@ namespace KK_Plugins.MaterialEditor
 
         internal static Dictionary<int, TextureContainer> TextureDictionary = new Dictionary<int, TextureContainer>();
 
+        private static readonly Dictionary<int, MaterialEditorCubemapLease> CubemapLeases = new Dictionary<int, MaterialEditorCubemapLease>();
+
         private static string FileToSet;
         private static string PropertyToSet;
         private static Material MatToSet;
@@ -125,6 +127,7 @@ namespace KK_Plugins.MaterialEditor
         /// </summary>
         protected void PurgeUnusedTextures()
         {
+            PurgeUnusedCubemapLeases();
             if (TextureDictionary.Count <= 0)
                 return;
 
@@ -151,9 +154,86 @@ namespace KK_Plugins.MaterialEditor
 
             foreach (var texID in unuseds)
             {
+                ReleaseCubemapLease(texID);
                 TextureDictionary[texID].Dispose();
                 TextureDictionary.Remove(texID);
             }
+        }
+
+        private static bool TryGetCubemap(int texID, out Cubemap cubemap, out string error)
+        {
+            cubemap = null;
+            error = null;
+
+            MaterialEditorCubemapLease lease;
+            if (CubemapLeases.TryGetValue(texID, out lease) && lease.Cubemap != null)
+            {
+                cubemap = lease.Cubemap;
+                return true;
+            }
+
+            TextureContainer container;
+            if (!TextureDictionary.TryGetValue(texID, out container))
+            {
+                error = "The Cubemap texture data is missing.";
+                return false;
+            }
+
+            if (!MaterialEditorCubemapCache.TryAcquire(container.Data, out lease, out error))
+                return false;
+
+            CubemapLeases[texID] = lease;
+            cubemap = lease.Cubemap;
+            return true;
+        }
+
+        private static void CacheCubemapLease(int texID, MaterialEditorCubemapLease lease)
+        {
+            MaterialEditorCubemapLease existing;
+            if (CubemapLeases.TryGetValue(texID, out existing))
+            {
+                lease.Dispose();
+                return;
+            }
+            CubemapLeases[texID] = lease;
+        }
+
+        private static void ReleaseCubemapLease(int texID)
+        {
+            MaterialEditorCubemapLease lease;
+            if (!CubemapLeases.TryGetValue(texID, out lease))
+                return;
+            CubemapLeases.Remove(texID);
+            lease.Dispose();
+        }
+
+        private void PurgeUnusedCubemapLeases()
+        {
+            if (CubemapLeases.Count == 0)
+                return;
+
+            var used = new HashSet<int>(MaterialTexturePropertyList
+                .Where(x => x.TextureKind == ShaderPropertyType.Cubemap && x.TexID.HasValue)
+                .Select(x => x.TexID.Value));
+            var unused = CubemapLeases.Keys.Where(x => !used.Contains(x)).ToArray();
+            for (var index = 0; index < unused.Length; index++)
+                ReleaseCubemapLease(unused[index]);
+        }
+
+        private static void ReleaseAllCubemapLeases()
+        {
+            var leases = CubemapLeases.Values.ToArray();
+            CubemapLeases.Clear();
+            for (var index = 0; index < leases.Length; index++)
+                leases[index].Dispose();
+        }
+
+        private static void DisposeTextureDictionary()
+        {
+            var containers = TextureDictionary.Values.ToArray();
+            TextureDictionary.Clear();
+            for (var index = 0; index < containers.Length; index++)
+                containers[index].Dispose();
         }
 
         /// <summary>
@@ -192,7 +272,8 @@ namespace KK_Plugins.MaterialEditor
                 MaterialColorPropertyList.Clear();
                 MaterialTexturePropertyList.Clear();
                 MaterialShaderList.Clear();
-                TextureDictionary.Clear();
+                ReleaseAllCubemapLeases();
+                DisposeTextureDictionary();
                 MaterialCopyList.Clear();
                 AnimationControllerMap.Clear();
             }
@@ -210,8 +291,16 @@ namespace KK_Plugins.MaterialEditor
             if (operation == SceneOperationKind.Import)
             {
                 var importDictionaryTemp = TextureSaveHandler.Instance.Load<Dictionary<int, TextureContainer>>(data, TexDicSaveKey, false);
-                foreach (var kvp in importDictionaryTemp)
-                    importDictionary[kvp.Key] = SetAndGetTextureID(kvp.Value.Data);
+                try
+                {
+                    foreach (var kvp in importDictionaryTemp)
+                        importDictionary[kvp.Key] = SetAndGetTextureID(kvp.Value.Data);
+                }
+                finally
+                {
+                    foreach (var container in importDictionaryTemp.Values)
+                        container.Dispose();
+                }
             }
 
             if (data.data.TryGetValue(nameof(MaterialCopyList), out var materialCopyData) && materialCopyData != null)
@@ -347,19 +436,22 @@ namespace KK_Plugins.MaterialEditor
                         {
                             if (loadedProperty.TexID != null)
                                 texID = importDictionary[(int)loadedProperty.TexID];
-                            MEAnimationUtil.RemapTexID(loadedProperty.TexAnimationDef, importDictionary);
+                            if (loadedProperty.TextureKind != ShaderPropertyType.Cubemap)
+                                MEAnimationUtil.RemapTexID(loadedProperty.TexAnimationDef, importDictionary);
                         }
                         else
                             texID = loadedProperty.TexID;
 
-                        MaterialTextureProperty newTextureProperty = new MaterialTextureProperty(objID, loadedProperty.MaterialName, loadedProperty.Property, texID, loadedProperty.Offset, loadedProperty.OffsetOriginal, loadedProperty.Scale, loadedProperty.ScaleOriginal, loadedProperty.TexAnimationDef);
+                        MaterialTextureProperty newTextureProperty = new MaterialTextureProperty(objID, loadedProperty.MaterialName, loadedProperty.Property, texID, loadedProperty.Offset, loadedProperty.OffsetOriginal, loadedProperty.Scale, loadedProperty.ScaleOriginal, loadedProperty.TexAnimationDef, loadedProperty.TextureKind);
 
                         bool setTex = false;
                         if (newTextureProperty.TexID != null)
                             setTex = SetTextureWithProperty(go, newTextureProperty);
 
-                        bool setOffset = SetTextureOffset(go, newTextureProperty.MaterialName, newTextureProperty.Property, newTextureProperty.Offset);
-                        bool setScale = SetTextureScale(go, newTextureProperty.MaterialName, newTextureProperty.Property, newTextureProperty.Scale);
+                        bool setOffset = newTextureProperty.TextureKind != ShaderPropertyType.Cubemap
+                            && SetTextureOffset(go, newTextureProperty.MaterialName, newTextureProperty.Property, newTextureProperty.Offset);
+                        bool setScale = newTextureProperty.TextureKind != ShaderPropertyType.Cubemap
+                            && SetTextureScale(go, newTextureProperty.MaterialName, newTextureProperty.Property, newTextureProperty.Scale);
 
                         if (setTex || setOffset || setScale)
                             MaterialTexturePropertyList.Add(newTextureProperty);
@@ -409,6 +501,7 @@ namespace KK_Plugins.MaterialEditor
             {
                 if (copiedItem.Value is OCIItem ociItem)
                 {
+                    var sourceGameObject = GetObjectByID(copiedItem.Key);
                     for (var i = 0; i < MaterialCopyList.Count; i++)
                     {
                         var loadedProperty = MaterialCopyList[i];
@@ -486,14 +579,17 @@ namespace KK_Plugins.MaterialEditor
                         var loadedProperty = MaterialTexturePropertyList[i];
                         if (loadedProperty.ID == copiedItem.Key)
                         {
-                            MaterialTextureProperty newTextureProperty = new MaterialTextureProperty(copiedItem.Value.GetSceneId(), loadedProperty.MaterialName, loadedProperty.Property, loadedProperty.TexID, loadedProperty.Offset, loadedProperty.OffsetOriginal, loadedProperty.Scale, loadedProperty.ScaleOriginal, loadedProperty.TexAnimationDef);
+                            MaterialTextureProperty newTextureProperty = new MaterialTextureProperty(copiedItem.Value.GetSceneId(), loadedProperty.MaterialName, loadedProperty.Property, loadedProperty.TexID, loadedProperty.Offset, loadedProperty.OffsetOriginal, loadedProperty.Scale, loadedProperty.ScaleOriginal, loadedProperty.TexAnimationDef, loadedProperty.TextureKind);
+                            newTextureProperty.InheritTextureOriginalSnapshot(loadedProperty, sourceGameObject);
 
                             bool setTex = false;
                             if (loadedProperty.TexID != null)
                                 setTex = SetTextureWithProperty(ociItem.objectItem, newTextureProperty);
 
-                            bool setOffset = SetTextureOffset(ociItem.objectItem, newTextureProperty.MaterialName, newTextureProperty.Property, newTextureProperty.Offset);
-                            bool setScale = SetTextureScale(ociItem.objectItem, newTextureProperty.MaterialName, newTextureProperty.Property, newTextureProperty.Scale);
+                            bool setOffset = newTextureProperty.TextureKind != ShaderPropertyType.Cubemap
+                                && SetTextureOffset(ociItem.objectItem, newTextureProperty.MaterialName, newTextureProperty.Property, newTextureProperty.Offset);
+                            bool setScale = newTextureProperty.TextureKind != ShaderPropertyType.Cubemap
+                                && SetTextureScale(ociItem.objectItem, newTextureProperty.MaterialName, newTextureProperty.Property, newTextureProperty.Scale);
 
                             if (setTex || setOffset || setScale) materialTexturePropertyListNew.Add(newTextureProperty);
                         }
@@ -748,7 +844,12 @@ namespace KK_Plugins.MaterialEditor
                 var floats = MaterialFloatPropertyList.Where(x => x.ID == id && x.MaterialName == material.NameFormatted()).ToList();
                 var keywords = MaterialKeywordPropertyList.Where(x => x.ID == id && x.MaterialName == material.NameFormatted()).ToList();
                 if (shader.Count == 1) MaterialShaderList.Add(new MaterialShader(id, value, shader[0].ShaderName, shader[0].ShaderNameOriginal, shader[0].RenderQueue, shader[0].RenderQueueOriginal));
-                foreach (var tex in textures) MaterialTexturePropertyList.Add(new MaterialTextureProperty(id, value, tex.Property, tex.TexID, tex.Offset, tex.OffsetOriginal, tex.Scale, tex.ScaleOriginal, tex.TexAnimationDef));
+                foreach (var tex in textures)
+                {
+                    var renamedProperty = new MaterialTextureProperty(id, value, tex.Property, tex.TexID, tex.Offset, tex.OffsetOriginal, tex.Scale, tex.ScaleOriginal, tex.TexAnimationDef, tex.TextureKind);
+                    renamedProperty.InheritTextureOriginalSnapshotSameMaterials(tex, go);
+                    MaterialTexturePropertyList.Add(renamedProperty);
+                }
                 foreach (var col in colors) MaterialColorPropertyList.Add(new MaterialColorProperty(id, value, col.Property, col.Value, col.ValueOriginal));
                 foreach (var _float in floats) MaterialFloatPropertyList.Add(new MaterialFloatProperty(id, value, _float.Property, _float.Value, _float.ValueOriginal));
                 foreach (var kw in keywords) MaterialKeywordPropertyList.Add(new MaterialKeywordProperty(id, value, kw.Property, kw.Value, kw.ValueOriginal));
@@ -818,6 +919,7 @@ namespace KK_Plugins.MaterialEditor
         /// </summary>
         private void PurgeUnusedAnimation()
         {
+            PurgeUnusedCubemapLeases();
             MEAnimationUtil.PurgeUnusedAnimation(AnimationControllerMap, MaterialTexturePropertyList);
         }
 
@@ -835,6 +937,8 @@ namespace KK_Plugins.MaterialEditor
         /// </summary>
         static int? GetTexIDWithAnimation(MaterialTextureProperty property)
         {
+            // This delegate also supplies the used-texture set for scene
+            // persistence. Animation remains disabled by SetTextureForAnimation.
             return property.TexID;
         }
 
@@ -843,6 +947,8 @@ namespace KK_Plugins.MaterialEditor
         /// </summary>
         static void SetTextureForAnimation(SceneController controller, GameObject go, MaterialTextureProperty property, int texID)
         {
+            if (property.TextureKind == ShaderPropertyType.Cubemap)
+                return;
             if (!TextureDictionary.TryGetValue(texID, out var tex))
                 return;
 

@@ -25,10 +25,19 @@ namespace KK_Plugins.MaterialEditor
         /// <param name="setTexInUpdate">Whether to wait for the next Update</param>
         public void SetMaterialTextureFromFile(int id, Material material, string propertyName, string filePath, bool setTexInUpdate = false)
         {
-            GameObject go = GetObjectByID(id);
             if (!File.Exists(filePath)) return;
 
-            if (setTexInUpdate)
+            var textureKind = GetTextureKind(material, propertyName);
+            string fileError;
+            if (textureKind == ShaderPropertyType.Cubemap
+                && !MaterialEditorCubemapProjection.TryValidateSourceFileLength(
+                    new FileInfo(filePath).Length,
+                    out fileError))
+            {
+                MaterialEditorPlugin.Logger.LogMessage(fileError);
+                return;
+            }
+            if (setTexInUpdate && textureKind != ShaderPropertyType.Cubemap)
             {
                 FileToSet = filePath;
                 PropertyToSet = propertyName;
@@ -38,21 +47,37 @@ namespace KK_Plugins.MaterialEditor
             else
             {
                 var texBytes = File.ReadAllBytes(filePath);
-                var texID = SetAndGetTextureID(texBytes);
-
-                var textureProperty = MaterialTexturePropertyList.FirstOrDefault(x => x.ID == id && x.Property == propertyName && x.MaterialName == material.NameFormatted());
-                if (textureProperty == null)
-                {
-                    textureProperty = new MaterialTextureProperty(id, material.NameFormatted(), propertyName, texID);
-                    MaterialTexturePropertyList.Add(textureProperty);
-                }
-                else
-                    textureProperty.TexID = texID;
-
-                textureProperty.TexAnimationDef = MEAnimationUtil.LoadAnimationDefFromBytes(texID, texBytes, SetAndGetTextureID);
-                SetTextureWithProperty(go, textureProperty);
+                SetMaterialTexture(
+                    id,
+                    material,
+                    propertyName,
+                    texBytes,
+                    textureKind,
+                    true);
             }
         }
+
+        private static ShaderPropertyType GetTextureKind(Material material, string propertyName)
+        {
+            if (material == null || material.shader == null)
+                return ShaderPropertyType.Texture;
+
+            Dictionary<string, ShaderPropertyData> shaderProperties;
+            if (!XMLShaderProperties.TryGetValue(material.shader.NameFormatted(), out shaderProperties)
+                && !XMLShaderProperties.TryGetValue("default", out shaderProperties))
+                return ShaderPropertyType.Texture;
+
+            var normalizedName = propertyName != null && propertyName.StartsWith("_")
+                ? propertyName.Substring(1)
+                : propertyName;
+            return shaderProperties.Values.Any(x =>
+                    x != null
+                    && x.Name == normalizedName
+                    && x.Type == ShaderPropertyType.Cubemap)
+                ? ShaderPropertyType.Cubemap
+                : ShaderPropertyType.Texture;
+        }
+
         /// <summary>
         /// Sets the texture indicated by TexID to texture of Material indicated by TextureProperty
         /// </summary>
@@ -67,6 +92,26 @@ namespace KK_Plugins.MaterialEditor
             int texID = textureProperty.TexID.Value;
             if (!TextureDictionary.TryGetValue(texID, out var container))
                 return false;
+
+            if (textureProperty.TextureKind == ShaderPropertyType.Cubemap)
+            {
+                Cubemap cubemap;
+                string error;
+                if (!TryGetCubemap(texID, out cubemap, out error))
+                {
+                    MaterialEditorPluginBase.Logger.LogWarning(error);
+                    return false;
+                }
+
+                AnimationControllerMap.Remove(textureProperty);
+                textureProperty.TexAnimationDef = null;
+                textureProperty.Offset = null;
+                textureProperty.OffsetOriginal = null;
+                textureProperty.Scale = null;
+                textureProperty.ScaleOriginal = null;
+                textureProperty.SynchronizeTextureOriginalSnapshot(go);
+                return SetCubemap(go, textureProperty.MaterialName, textureProperty.Property, cubemap);
+            }
 
             if (textureProperty.TexAnimationDef == null)
             {
@@ -105,8 +150,25 @@ namespace KK_Plugins.MaterialEditor
         /// <param name="data">Byte array containing the texture data</param>
         public void SetMaterialTexture(int id, Material material, string propertyName, byte[] data)
         {
+            SetMaterialTexture(id, material, propertyName, data, GetTextureKind(material, propertyName));
+        }
+
+        private void SetMaterialTexture(int id, Material material, string propertyName, byte[] data, ShaderPropertyType textureKind, bool logCubemapNormalizationWarning = false)
+        {
             GameObject go = GetObjectByID(id);
             if (data == null) return;
+
+            if (textureKind == ShaderPropertyType.Cubemap)
+            {
+                SetMaterialCubemap(
+                    id,
+                    material,
+                    propertyName,
+                    data,
+                    go,
+                    logCubemapNormalizationWarning);
+                return;
+            }
 
             var texID = SetAndGetTextureID(data);
 
@@ -119,8 +181,62 @@ namespace KK_Plugins.MaterialEditor
             else
                 textureProperty.TexID = texID;
 
+            textureProperty.TextureKind = ShaderPropertyType.Texture;
+            textureProperty.ClearTextureOriginalSnapshot();
             textureProperty.TexAnimationDef = MEAnimationUtil.LoadAnimationDefFromBytes(texID, data, SetAndGetTextureID);
             SetTextureWithProperty(go, textureProperty);
+            PurgeUnusedCubemapLeases();
+        }
+
+        private void SetMaterialCubemap(int id, Material material, string propertyName, byte[] data, GameObject go, bool logNormalizationWarning)
+        {
+            MaterialEditorCubemapLease lease;
+            string warning;
+            string error;
+            if (!MaterialEditorCubemapCache.TryAcquire(
+                    data,
+                    out lease,
+                    out warning,
+                    out error))
+            {
+                MaterialEditorPlugin.Logger.LogMessage(error);
+                return;
+            }
+            if (logNormalizationWarning && !string.IsNullOrEmpty(warning))
+                MaterialEditorPlugin.Logger.LogWarning(warning);
+
+            var texID = SetAndGetTextureID(data);
+            CacheCubemapLease(texID, lease);
+
+            var textureProperty = MaterialTexturePropertyList.FirstOrDefault(x => x.ID == id && x.Property == propertyName && x.MaterialName == material.NameFormatted());
+            if (textureProperty == null)
+            {
+                textureProperty = new MaterialTextureProperty(
+                    id,
+                    material.NameFormatted(),
+                    propertyName,
+                    texID,
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    ShaderPropertyType.Cubemap);
+                MaterialTexturePropertyList.Add(textureProperty);
+            }
+            else
+            {
+                textureProperty.TexID = texID;
+                textureProperty.TextureKind = ShaderPropertyType.Cubemap;
+                textureProperty.Offset = null;
+                textureProperty.OffsetOriginal = null;
+                textureProperty.Scale = null;
+                textureProperty.ScaleOriginal = null;
+                textureProperty.TexAnimationDef = null;
+            }
+
+            SetTextureWithProperty(go, textureProperty);
+            PurgeUnusedCubemapLeases();
         }
         /// <summary>
         /// Get the saved material property value or null if none is saved
@@ -133,7 +249,17 @@ namespace KK_Plugins.MaterialEditor
         {
             var textureProperty = MaterialTexturePropertyList.FirstOrDefault(x => x.ID == id && x.MaterialName == material.NameFormatted() && x.Property == propertyName);
             if (textureProperty?.TexID != null)
+            {
+                if (textureProperty.TextureKind == ShaderPropertyType.Cubemap)
+                {
+                    Cubemap cubemap;
+                    string error;
+                    if (TryGetCubemap(textureProperty.TexID.Value, out cubemap, out error))
+                        return cubemap;
+                    return null;
+                }
                 return TextureDictionary[(int)textureProperty.TexID].Texture;
+            }
             return null;
         }
 
@@ -158,10 +284,22 @@ namespace KK_Plugins.MaterialEditor
             var textureProperty = MaterialTexturePropertyList.FirstOrDefault(x => x.ID == id && x.MaterialName == material.NameFormatted() && x.Property == propertyName);
             if (textureProperty != null)
             {
-                if (displayMessage)
+                if (textureProperty.TextureKind == ShaderPropertyType.Cubemap)
+                {
+                    var gameObject = GetObjectByID(id);
+                    textureProperty.SynchronizeTextureOriginalSnapshot(gameObject);
+                    MaterialTextureOriginalSnapshot.RestoreByMaterialReference(
+                        gameObject,
+                        textureProperty.MaterialName,
+                        textureProperty.Property,
+                        textureProperty.TextureOriginalMaterials);
+                    textureProperty.ClearTextureOriginalSnapshot();
+                }
+                else if (displayMessage)
                     MaterialEditorPlugin.Logger.LogMessage("Save and reload scene to refresh textures.");
                 textureProperty.TexID = null;
                 RemoveTexturePropertyIfNull(textureProperty);
+                PurgeUnusedCubemapLeases();
             }
         }
 
@@ -190,6 +328,9 @@ namespace KK_Plugins.MaterialEditor
         {
             GameObject gameObject = GetObjectByID(id);
             var textureProperty = MaterialTexturePropertyList.FirstOrDefault(x => x.ID == id && x.MaterialName == material.NameFormatted() && x.Property == propertyName);
+            if ((textureProperty != null && textureProperty.TextureKind == ShaderPropertyType.Cubemap)
+                || (textureProperty == null && GetTextureKind(material, propertyName) == ShaderPropertyType.Cubemap))
+                return;
             if (textureProperty == null)
             {
                 Vector2 valueOriginal = material.GetTextureOffset($"_{propertyName}");
@@ -266,6 +407,9 @@ namespace KK_Plugins.MaterialEditor
         {
             GameObject gameObject = GetObjectByID(id);
             var textureProperty = MaterialTexturePropertyList.FirstOrDefault(x => x.ID == id && x.MaterialName == material.NameFormatted() && x.Property == propertyName);
+            if ((textureProperty != null && textureProperty.TextureKind == ShaderPropertyType.Cubemap)
+                || (textureProperty == null && GetTextureKind(material, propertyName) == ShaderPropertyType.Cubemap))
+                return;
             if (textureProperty == null)
             {
                 Vector2 valueOriginal = material.GetTextureScale($"_{propertyName}");

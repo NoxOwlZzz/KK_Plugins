@@ -242,6 +242,7 @@ namespace KK_Plugins.MaterialEditor
             if (data != null)
             {
                 var importDictionary = new Dictionary<int, int>();
+                MaterialEditorCharaController duplicateSourceController = null;
 
 #if !EC
                 if (DuplicatingFrom.HasValue)
@@ -251,7 +252,8 @@ namespace KK_Plugins.MaterialEditor
                         .human
 #endif
                         ;
-                    foreach (var kvp in MaterialEditorPlugin.GetCharaController(chaCtrl).TextureDictionary)
+                    duplicateSourceController = MaterialEditorPlugin.GetCharaController(chaCtrl);
+                    foreach (var kvp in duplicateSourceController.TextureDictionary)
                         importDictionary[kvp.Key] = SetAndGetTextureID(kvp.Value.Data);
                     DuplicatingFrom = null;
                 }
@@ -259,8 +261,16 @@ namespace KK_Plugins.MaterialEditor
 #endif
                 {
                     var importDictionaryTemp = TextureSaveHandler.Instance.Load<Dictionary<int, TextureContainer>>(data, TexDicSaveKey, true);
-                    foreach (var kvp in importDictionaryTemp)
-                        importDictionary[kvp.Key] = SetAndGetTextureID(kvp.Value.Data);
+                    try
+                    {
+                        foreach (var kvp in importDictionaryTemp)
+                            importDictionary[kvp.Key] = SetAndGetTextureID(kvp.Value.Data);
+                    }
+                    finally
+                    {
+                        foreach (var container in importDictionaryTemp.Values)
+                            container.Dispose();
+                    }
                 }
 
                 //Debug for dumping all textures
@@ -368,9 +378,28 @@ namespace KK_Plugins.MaterialEditor
                             int? texID = null;
                             if (loadedProperty.TexID != null && importDictionary.TryGetValue((int)loadedProperty.TexID, out var importTextID))
                                 texID = importTextID;
-                            MEAnimationUtil.RemapTexID(loadedProperty.TexAnimationDef, importDictionary);
+                            if (loadedProperty.TextureKind != ShaderPropertyType.Cubemap)
+                                MEAnimationUtil.RemapTexID(loadedProperty.TexAnimationDef, importDictionary);
                             int coordinateIndex = loadedProperty.ObjectType == ObjectType.Character ? 0 : loadedProperty.CoordinateIndex;
-                            MaterialTextureProperty newTextureProperty = new MaterialTextureProperty(loadedProperty.ObjectType, coordinateIndex, loadedProperty.Slot, loadedProperty.MaterialName, loadedProperty.Property, texID, loadedProperty.Offset, loadedProperty.OffsetOriginal, loadedProperty.Scale, loadedProperty.ScaleOriginal, loadedProperty.TexAnimationDef);
+                            MaterialTextureProperty newTextureProperty = new MaterialTextureProperty(loadedProperty.ObjectType, coordinateIndex, loadedProperty.Slot, loadedProperty.MaterialName, loadedProperty.Property, texID, loadedProperty.Offset, loadedProperty.OffsetOriginal, loadedProperty.Scale, loadedProperty.ScaleOriginal, loadedProperty.TexAnimationDef, loadedProperty.TextureKind);
+                            if (duplicateSourceController != null)
+                            {
+                                var sourceProperty = duplicateSourceController.MaterialTexturePropertyList.FirstOrDefault(x =>
+                                    x.ObjectType == loadedProperty.ObjectType
+                                    && x.CoordinateIndex == coordinateIndex
+                                    && x.Slot == loadedProperty.Slot
+                                    && x.MaterialName == loadedProperty.MaterialName
+                                    && x.Property == loadedProperty.Property);
+                                GameObject sourceGameObject = null;
+                                if (sourceProperty != null
+                                    && (sourceProperty.ObjectType == ObjectType.Character
+                                        || sourceProperty.ObjectType == ObjectType.Hair
+                                        || sourceProperty.CoordinateIndex == duplicateSourceController.CurrentCoordinateIndex))
+                                    sourceGameObject = duplicateSourceController.FindGameObject(
+                                        sourceProperty.ObjectType,
+                                        sourceProperty.Slot);
+                                newTextureProperty.InheritTextureOriginalSnapshot(sourceProperty, sourceGameObject);
+                            }
                             MaterialTexturePropertyList.Add(newTextureProperty);
                         }
                     }
@@ -530,8 +559,9 @@ namespace KK_Plugins.MaterialEditor
                             int? texID = null;
                             if (loadedProperty.TexID != null)
                                 texID = importDictionary[(int)loadedProperty.TexID];
-                            MEAnimationUtil.RemapTexID(loadedProperty.TexAnimationDef, importDictionary);
-                            MaterialTextureProperty newTextureProperty = new MaterialTextureProperty(loadedProperty.ObjectType, CurrentCoordinateIndex, loadedProperty.Slot, loadedProperty.MaterialName, loadedProperty.Property, texID, loadedProperty.Offset, loadedProperty.OffsetOriginal, loadedProperty.Scale, loadedProperty.ScaleOriginal, loadedProperty.TexAnimationDef);
+                            if (loadedProperty.TextureKind != ShaderPropertyType.Cubemap)
+                                MEAnimationUtil.RemapTexID(loadedProperty.TexAnimationDef, importDictionary);
+                            MaterialTextureProperty newTextureProperty = new MaterialTextureProperty(loadedProperty.ObjectType, CurrentCoordinateIndex, loadedProperty.Slot, loadedProperty.MaterialName, loadedProperty.Property, texID, loadedProperty.Offset, loadedProperty.OffsetOriginal, loadedProperty.Scale, loadedProperty.ScaleOriginal, loadedProperty.TexAnimationDef, loadedProperty.TextureKind);
                             MaterialTexturePropertyList.Add(newTextureProperty);
                         }
                     }
@@ -690,8 +720,11 @@ namespace KK_Plugins.MaterialEditor
                 if (Instance.CheckBlacklist(property.MaterialName, property.Property)) continue;
 
                 SetTextureWithProperty(go, property);
-                SetTextureOffset(go, property.MaterialName, property.Property, property.Offset);
-                SetTextureScale(go, property.MaterialName, property.Property, property.Scale);
+                if (property.TextureKind != ShaderPropertyType.Cubemap)
+                {
+                    SetTextureOffset(go, property.MaterialName, property.Property, property.Offset);
+                    SetTextureScale(go, property.MaterialName, property.Property, property.Scale);
+                }
             }
             for (var i = 0; i < ProjectorPropertyList.Count; i++)
             {
@@ -746,6 +779,12 @@ namespace KK_Plugins.MaterialEditor
                         SetFloat(ChaControl.gameObject, materialName, property.Key, tongueMat.GetFloat("_" + property.Key));
                     else if (property.Value.Type == ShaderPropertyType.Texture)
                         SetTexture(ChaControl.gameObject, materialName, property.Key, tongueMat.GetTexture("_" + property.Key));
+                    else if (property.Value.Type == ShaderPropertyType.Cubemap)
+                    {
+                        var cubemap = tongueMat.GetTexture("_" + property.Key) as Cubemap;
+                        if (cubemap != null)
+                            SetCubemap(ChaControl.gameObject, materialName, property.Key, cubemap);
+                    }
                     else if (property.Value.Type == ShaderPropertyType.Keyword)
                         SetKeyword(ChaControl.gameObject, materialName, property.Key, tongueMat.IsKeywordEnabled("_" + property.Key));
                 }

@@ -55,9 +55,9 @@ namespace KK_Plugins.MaterialEditor
                 if (materialTextureProperty.ID == id && materialTextureProperty.MaterialName == material.NameFormatted())
                 {
                     if (materialTextureProperty.TexID != null)
-                        CopyData.MaterialTexturePropertyList.Add(new CopyContainer.MaterialTextureProperty(materialTextureProperty.Property, TextureDictionary[(int)materialTextureProperty.TexID].Data, materialTextureProperty.Offset, materialTextureProperty.Scale));
+                        CopyData.MaterialTexturePropertyList.Add(new CopyContainer.MaterialTextureProperty(materialTextureProperty.Property, TextureDictionary[(int)materialTextureProperty.TexID].Data, materialTextureProperty.Offset, materialTextureProperty.Scale, materialTextureProperty.TextureKind));
                     else
-                        CopyData.MaterialTexturePropertyList.Add(new CopyContainer.MaterialTextureProperty(materialTextureProperty.Property, null, materialTextureProperty.Offset, materialTextureProperty.Scale));
+                        CopyData.MaterialTexturePropertyList.Add(new CopyContainer.MaterialTextureProperty(materialTextureProperty.Property, null, materialTextureProperty.Offset, materialTextureProperty.Scale, materialTextureProperty.TextureKind));
                 }
             }
 
@@ -107,10 +107,10 @@ namespace KK_Plugins.MaterialEditor
             {
                 var materialTextureProperty = CopyData.MaterialTexturePropertyList[i];
                 if (material.HasProperty($"_{materialTextureProperty.Property}"))
-                    SetMaterialTexture(id, material, materialTextureProperty.Property, materialTextureProperty.Data);
-                if (materialTextureProperty.Offset != null)
+                    SetMaterialTexture(id, material, materialTextureProperty.Property, materialTextureProperty.Data, materialTextureProperty.TextureKind);
+                if (materialTextureProperty.TextureKind != ShaderPropertyType.Cubemap && materialTextureProperty.Offset != null)
                     SetMaterialTextureOffset(id, material, materialTextureProperty.Property, (Vector2)materialTextureProperty.Offset, setProperty);
-                if (materialTextureProperty.Scale != null)
+                if (materialTextureProperty.TextureKind != ShaderPropertyType.Cubemap && materialTextureProperty.Scale != null)
                     SetMaterialTextureScale(id, material, materialTextureProperty.Property, (Vector2)materialTextureProperty.Scale, setProperty);
             }
 
@@ -157,7 +157,11 @@ namespace KK_Plugins.MaterialEditor
                 foreach (var property in MaterialColorPropertyList.Where(x => x.ID == id && x.MaterialName == matName))
                     newAccessoryMaterialColorPropertyList.Add(new MaterialColorProperty(id, newMatName, property.Property, property.Value, property.ValueOriginal));
                 foreach (var property in MaterialTexturePropertyList.Where(x => x.ID == id && x.MaterialName == matName))
-                    newAccessoryMaterialTexturePropertyList.Add(new MaterialTextureProperty(id, newMatName, property.Property, property.TexID, property.Offset, property.OffsetOriginal, property.Scale, property.ScaleOriginal, property.TexAnimationDef));
+                {
+                    var copiedProperty = new MaterialTextureProperty(id, newMatName, property.Property, property.TexID, property.Offset, property.OffsetOriginal, property.Scale, property.ScaleOriginal, property.TexAnimationDef, property.TextureKind);
+                    copiedProperty.InheritTextureOriginalSnapshot(property, go);
+                    newAccessoryMaterialTexturePropertyList.Add(copiedProperty);
+                }
 
                 MaterialShaderList.AddRange(newAccessoryMaterialShaderList);
                 MaterialFloatPropertyList.AddRange(newAccessoryMaterialFloatPropertyList);

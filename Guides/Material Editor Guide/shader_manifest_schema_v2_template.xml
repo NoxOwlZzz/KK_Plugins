@@ -70,6 +70,20 @@
                 UiLevel="Advanced"
                 ShowIf="_DetailEnabled == true"/>
 
+      <!--
+        Native shader Cube property. Import prefers an equirectangular 2:1 PNG;
+        other PNG proportions are automatically stretched with a log warning.
+        Import is capped at 8,388,608 decoded pixels, 8192 per dimension, and
+        a 64 MiB source file. Export rejects face sizes above 1024 to bound
+        readback memory. Cubemap rows expose Import, Export, and Reset without
+        2D offset/scale controls.
+      -->
+      <Property Name="EnvironmentCube"
+                Type="Cubemap"
+                DisplayName="Environment"
+                Category="Environment"
+                UiLevel="Advanced"/>
+
       <!-- Legacy property attributes such as Hidden and the legacy types
            Color, Texture and Keyword continue to work in schema 2. -->
     </Shader>
