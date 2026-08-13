@@ -19,6 +19,12 @@ internal static class CubemapPersistenceContractTests
             "MaterialEditor.Base",
             "UI",
             "UI.cs");
+        var textureBinder = Read(
+            root,
+            "src",
+            "MaterialEditor.Base",
+            "UI",
+            "UI.RowBinder.Texture.cs");
         var charaModel = Read(
             root,
             "src",
@@ -172,6 +178,15 @@ internal static class CubemapPersistenceContractTests
             "texture watcher has an explicit main-thread handoff seam");
         Contains(ui, "ThreadingHelper.Instance.StartSyncInvoke(() =>",
             "file dialog and texture watcher marshal work to Unity's main thread");
+        var resetHandler = Slice(
+            textureBinder,
+            "listeners.Listen(controls.ResetButton",
+            "if (!item.IsCubemap && item.SelectInterpolable != null)");
+        OccursBefore(
+            resetHandler,
+            "item.Changed = false;",
+            "item.Reset();",
+            "Reset recomputes the final Changed state after the legacy fallback");
     }
 
     private static string FindRepositoryRoot()
@@ -229,6 +244,15 @@ internal static class CubemapPersistenceContractTests
     {
         if (source.Contains(value, StringComparison.Ordinal))
             throw new InvalidOperationException(name + ": unexpected '" + value + "'.");
+    }
+
+    private static void OccursBefore(string source, string first, string second, string name)
+    {
+        var firstIndex = source.IndexOf(first, StringComparison.Ordinal);
+        var secondIndex = source.IndexOf(second, StringComparison.Ordinal);
+        if (firstIndex < 0 || secondIndex < 0 || firstIndex >= secondIndex)
+            throw new InvalidOperationException(
+                name + ": expected '" + first + "' before '" + second + "'.");
     }
 
     private static void AtLeast(int minimum, int actual, string name)

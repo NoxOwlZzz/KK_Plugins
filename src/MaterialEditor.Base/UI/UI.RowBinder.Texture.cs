@@ -111,8 +111,8 @@ namespace MaterialEditorAPI
             });
             listeners.Listen(controls.ResetButton, () =>
             {
-                item.Reset();
                 item.Changed = false;
+                item.Reset();
                 if (item.IsCubemap)
                     refreshExport();
                 refreshState();
