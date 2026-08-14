@@ -23,7 +23,6 @@ namespace MaterialEditorAPI
 
         internal bool Changed { get; set; }
         internal bool Exists { get; set; }
-        internal bool IsCubemap { get; set; }
         internal Action SelectInterpolable { get; set; }
         internal Action Export { get; set; }
         internal Action Import { get; set; }

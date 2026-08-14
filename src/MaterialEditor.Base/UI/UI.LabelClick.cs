@@ -26,7 +26,9 @@ namespace MaterialEditorAPI
         /// <summary>Float property name.</summary>
         FloatProperty,
         /// <summary>Keyword property name.</summary>
-        KeywordProperty
+        KeywordProperty,
+        /// <summary>Cubemap property name.</summary>
+        CubemapProperty
     }
 
     /// <summary>

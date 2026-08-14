@@ -426,7 +426,8 @@ namespace MaterialEditorAPI
             return editorId == MaterialEditorPropertyEditorIds.Float
                    || editorId == MaterialEditorPropertyEditorIds.Color
                    || editorId == MaterialEditorPropertyEditorIds.Boolean
-                   || editorId == MaterialEditorPropertyEditorIds.Texture;
+                   || editorId == MaterialEditorPropertyEditorIds.Texture
+                   || editorId == MaterialEditorPropertyEditorIds.Cubemap;
         }
 
         internal static bool HasPropertyEditor(string editorId)

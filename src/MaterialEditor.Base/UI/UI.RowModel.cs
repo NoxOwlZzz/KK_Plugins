@@ -43,7 +43,8 @@ namespace MaterialEditorAPI
             FloatProperty,
             KeywordProperty,
             EnumProperty,
-            FloatToggleProperty
+            FloatToggleProperty,
+            CubemapProperty
         }
     }
 

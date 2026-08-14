@@ -48,6 +48,7 @@ namespace KK_Plugins.MaterialEditor
         private readonly List<MaterialColorProperty> MaterialColorPropertyList = new List<MaterialColorProperty>();
         private readonly List<MaterialKeywordProperty> MaterialKeywordPropertyList = new List<MaterialKeywordProperty>();
         internal readonly List<MaterialTextureProperty> MaterialTexturePropertyList = new List<MaterialTextureProperty>();
+        internal readonly List<MaterialCubemapProperty> MaterialCubemapPropertyList = new List<MaterialCubemapProperty>();
         private readonly List<MaterialShader> MaterialShaderList = new List<MaterialShader>();
         private readonly List<MaterialCopy> MaterialCopyList = new List<MaterialCopy>();
 
@@ -106,7 +107,7 @@ namespace KK_Plugins.MaterialEditor
 #endif
             PurgeUnusedTextures();
 
-            if (RendererPropertyList.Count == 0 && MaterialFloatPropertyList.Count == 0 && MaterialKeywordPropertyList.Count == 0 && MaterialColorPropertyList.Count == 0 && MaterialTexturePropertyList.Count == 0 && MaterialShaderList.Count == 0 && MaterialCopyList.Count == 0)
+            if (RendererPropertyList.Count == 0 && MaterialFloatPropertyList.Count == 0 && MaterialKeywordPropertyList.Count == 0 && MaterialColorPropertyList.Count == 0 && MaterialTexturePropertyList.Count == 0 && MaterialCubemapPropertyList.Count == 0 && MaterialShaderList.Count == 0 && MaterialCopyList.Count == 0)
             {
                 SetExtendedData(null);
             }
@@ -153,6 +154,11 @@ namespace KK_Plugins.MaterialEditor
                     data.data.Add(nameof(MaterialTexturePropertyList), MessagePackSerializer.Serialize(MaterialTexturePropertyList));
                 else
                     data.data.Add(nameof(MaterialTexturePropertyList), null);
+
+                if (MaterialCubemapPropertyList.Count > 0)
+                    data.data.Add(nameof(MaterialCubemapPropertyList), MessagePackSerializer.Serialize(MaterialCubemapPropertyList));
+                else
+                    data.data.Add(nameof(MaterialCubemapPropertyList), null);
 
                 if (MaterialShaderList.Count > 0)
                     data.data.Add(nameof(MaterialShaderList), MessagePackSerializer.Serialize(MaterialShaderList));
@@ -496,6 +502,13 @@ namespace KK_Plugins.MaterialEditor
                 }
             }
 
+            for (var i = 0; i < MaterialCubemapPropertyList.Count; i++)
+            {
+                var texID = MaterialCubemapPropertyList[i].TexID;
+                if (texID.HasValue)
+                    unuseds.Remove(texID.Value);
+            }
+
             foreach (var texID in unuseds)
             {
                 ReleaseCubemapLease(texID);
@@ -557,8 +570,8 @@ namespace KK_Plugins.MaterialEditor
             if (CubemapLeases.Count == 0)
                 return;
 
-            var used = new HashSet<int>(MaterialTexturePropertyList
-                .Where(x => x.TextureKind == ShaderPropertyType.Cubemap && x.TexID.HasValue)
+            var used = new HashSet<int>(MaterialCubemapPropertyList
+                .Where(x => x.TexID.HasValue)
                 .Select(x => x.TexID.Value));
             var unused = CubemapLeases.Keys.Where(x => !used.Contains(x)).ToArray();
             for (var index = 0; index < unused.Length; index++)
@@ -595,6 +608,7 @@ namespace KK_Plugins.MaterialEditor
             MaterialColorPropertyList.RemoveAll(x => ChaControl.chaFile.coordinate.ElementAtOrDefault(x.CoordinateIndex) == null);
             MaterialKeywordPropertyList.RemoveAll(x => ChaControl.chaFile.coordinate.ElementAtOrDefault(x.CoordinateIndex) == null);
             MaterialTexturePropertyList.RemoveAll(x => ChaControl.chaFile.coordinate.ElementAtOrDefault(x.CoordinateIndex) == null);
+            MaterialCubemapPropertyList.RemoveAll(x => ChaControl.chaFile.coordinate.ElementAtOrDefault(x.CoordinateIndex) == null);
             MaterialShaderList.RemoveAll(x => ChaControl.chaFile.coordinate.ElementAtOrDefault(x.CoordinateIndex) == null);
             MaterialCopyList.RemoveAll(x => ChaControl.chaFile.coordinate.ElementAtOrDefault(x.CoordinateIndex) == null);
         }
@@ -691,6 +705,16 @@ namespace KK_Plugins.MaterialEditor
                         || !materialPropertiesDict[x.MaterialName].Contains(x.Property)
                     )
                 );
+                removedCount += MaterialCubemapPropertyList.RemoveAll(
+                    x => x.CoordinateIndex == CurrentCoordinateIndex
+                    && x.Slot == slot
+                    && x.ObjectType == objectType
+                    && (
+                        !materialNames.Contains(x.MaterialName)
+                        || !materialPropertiesDict.ContainsKey(x.MaterialName)
+                        || !materialPropertiesDict[x.MaterialName].Contains(x.Property)
+                    )
+                );
                 removedCount += MaterialShaderList.RemoveAll(
                     x => x.CoordinateIndex == CurrentCoordinateIndex
                     && x.Slot == slot
@@ -734,9 +758,6 @@ namespace KK_Plugins.MaterialEditor
         /// </summary>
         private static int? GetTexIDWithAnimation(MaterialTextureProperty property)
         {
-            // This delegate is also used to collect texture IDs for card and
-            // coordinate persistence. Cubemaps are not animated, but their
-            // source bytes still have to be included in the saved payload.
             return property.TexID;
         }
 
@@ -745,8 +766,6 @@ namespace KK_Plugins.MaterialEditor
         /// </summary>
         private static void SetTextureForAnimation(MaterialEditorCharaController controller, GameObject go, MaterialTextureProperty property, int texID)
         {
-            if (property.TextureKind == ShaderPropertyType.Cubemap)
-                return;
             if (!controller.TextureDictionary.TryGetValue(texID, out var tex))
                 return;
 

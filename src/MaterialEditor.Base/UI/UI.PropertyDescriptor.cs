@@ -103,7 +103,7 @@ namespace MaterialEditorAPI
                 case ShaderPropertyType.Texture:
                     return MaterialEditorPropertyEditorIds.Texture;
                 case ShaderPropertyType.Cubemap:
-                    return MaterialEditorPropertyEditorIds.Texture;
+                    return MaterialEditorPropertyEditorIds.Cubemap;
                 case ShaderPropertyType.Color:
                     return MaterialEditorPropertyEditorIds.Color;
                 case ShaderPropertyType.Float:
@@ -135,10 +135,10 @@ namespace MaterialEditorAPI
             switch (descriptor.Type)
             {
                 case ShaderPropertyType.Texture:
-                    rows = CreateTextureRows(descriptor, true);
+                    rows = CreateTextureRows(descriptor);
                     break;
                 case ShaderPropertyType.Cubemap:
-                    rows = CreateTextureRows(descriptor, false);
+                    rows = new[] { CreateCubemapRow(descriptor) };
                     break;
                 case ShaderPropertyType.Color:
                     rows = new[] { CreateColorRow(descriptor) };
@@ -221,8 +221,7 @@ namespace MaterialEditorAPI
         }
 
         private IEnumerable<RowModel> CreateTextureRows(
-            PropertyDescriptor descriptor,
-            bool includeOffsetAndScale)
+            PropertyDescriptor descriptor)
         {
             var gameObject = descriptor.GameObject;
             var data = descriptor.Data;
@@ -238,19 +237,16 @@ namespace MaterialEditorAPI
                 Projector = projector,
                 PropertyName = propertyName,
                 PublicDescriptor = descriptor.PublicDescriptor,
-                IsCubemap = descriptor.Type == ShaderPropertyType.Cubemap,
                 Changed = !_editService.GetMaterialTextureValueOriginal(data, material, propertyName, gameObject),
-                Exists = descriptor.Type == ShaderPropertyType.Cubemap
-                    ? material.GetTexture("_" + propertyName) is Cubemap
-                    : material.GetTexture("_" + propertyName) != null,
+                Exists = material.GetTexture("_" + propertyName) != null,
                 Export = () => _actions.ExportTexture(material, propertyName),
-                SelectInterpolable = includeOffsetAndScale ? (System.Action)(() =>
+                SelectInterpolable = () =>
                     _actions.SelectInterpolable(
                         gameObject,
                         RowModel.RowItemType.TextureProperty,
                         descriptor.MaterialName,
                         propertyName,
-                        string.Empty)) : null
+                        string.Empty)
             };
             textureItem.Import = () =>
                 _actions.ImportTexture(textureItem, gameObject, data, material, propertyName);
@@ -267,14 +263,9 @@ namespace MaterialEditorAPI
                         material,
                         propertyName,
                         gameObject);
-                var currentTexture = material.GetTexture("_" + propertyName);
-                textureItem.Exists = textureItem.IsCubemap
-                    ? currentTexture is Cubemap
-                    : currentTexture != null;
+                textureItem.Exists =
+                    material.GetTexture("_" + propertyName) != null;
             };
-
-            if (!includeOffsetAndScale)
-                return new RowModel[] { textureItem };
 
             var textureOffset = material.GetTextureOffset($"_{propertyName}");
             var textureOffsetOriginal =
@@ -308,6 +299,54 @@ namespace MaterialEditorAPI
             };
 
             return new RowModel[] { textureItem, textureOffsetScaleItem };
+        }
+
+        private CubemapPropertyRowModel CreateCubemapRow(PropertyDescriptor descriptor)
+        {
+            var gameObject = descriptor.GameObject;
+            var data = descriptor.Data;
+            var material = descriptor.Material;
+            var propertyName = descriptor.Name;
+            var cubemapItem = new CubemapPropertyRowModel(descriptor.DisplayName)
+            {
+                GameObject = gameObject,
+                Data = data,
+                Material = material,
+                Projector = descriptor.Projector,
+                PropertyName = propertyName,
+                PublicDescriptor = descriptor.PublicDescriptor,
+                Changed = !_editService.GetMaterialCubemapValueOriginal(
+                    data,
+                    material,
+                    propertyName,
+                    gameObject),
+                Exists = material.GetTexture("_" + propertyName) is Cubemap,
+                Export = () => _actions.ExportCubemap(material, propertyName)
+            };
+            cubemapItem.Import = () =>
+                _actions.ImportCubemap(
+                    cubemapItem,
+                    gameObject,
+                    data,
+                    material,
+                    propertyName);
+            cubemapItem.Reset = () =>
+            {
+                _editService.RemoveMaterialCubemap(
+                    data,
+                    material,
+                    propertyName,
+                    gameObject);
+                cubemapItem.Changed =
+                    !_editService.GetMaterialCubemapValueOriginal(
+                        data,
+                        material,
+                        propertyName,
+                        gameObject);
+                cubemapItem.Exists =
+                    material.GetTexture("_" + propertyName) is Cubemap;
+            };
+            return cubemapItem;
         }
 
         private ColorPropertyRowModel CreateColorRow(PropertyDescriptor descriptor)

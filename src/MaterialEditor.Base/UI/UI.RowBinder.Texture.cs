@@ -64,25 +64,18 @@ namespace MaterialEditorAPI
             {
                 var text = controls.ExportButton.GetComponentInChildren<Text>();
                 controls.ExportButton.enabled = item.Exists;
-                text.text = item.Exists
-                    ? (item.IsCubemap ? "Export Cubemap" : "Export Texture")
-                    : (item.IsCubemap ? "No Cubemap" : "No Texture");
+                text.text = item.Exists ? "Export Texture" : "No Texture";
                 text.color = item.Exists ? Color.black : Color.gray;
             };
 
-            controls.ImportButton.GetComponentInChildren<Text>().text =
-                item.IsCubemap ? "Import Cubemap" : "Import Texture";
-            controls.SelectInterpolableButton.gameObject.SetActive(!item.IsCubemap);
+            controls.ImportButton.GetComponentInChildren<Text>().text = "Import Texture";
+            controls.SelectInterpolableButton.gameObject.SetActive(true);
             TooltipBinding.Bind(
                 controls.ImportButton.gameObject,
-                item.IsCubemap
-                    ? "Import a PNG as a Cubemap. Non-2:1 images are stretched automatically."
-                    : "Import a texture image.");
+                "Import a texture image.");
             TooltipBinding.Bind(
                 controls.ExportButton.gameObject,
-                item.IsCubemap
-                    ? "Export the assigned Cubemap as an equirectangular 2:1 PNG."
-                    : "Export the assigned texture.");
+                "Export the assigned texture.");
 
             refreshState();
             refreshExport();
@@ -100,11 +93,8 @@ namespace MaterialEditorAPI
             listeners.Listen(controls.ExportButton, () => item.Export());
             listeners.Listen(controls.ImportButton, () =>
             {
-                if (!item.IsCubemap)
-                {
-                    item.Changed = true;
-                    item.Exists = true;
-                }
+                item.Changed = true;
+                item.Exists = true;
                 item.Import();
                 refreshExport();
                 refreshState();
@@ -113,11 +103,9 @@ namespace MaterialEditorAPI
             {
                 item.Changed = false;
                 item.Reset();
-                if (item.IsCubemap)
-                    refreshExport();
                 refreshState();
             });
-            if (!item.IsCubemap && item.SelectInterpolable != null)
+            if (item.SelectInterpolable != null)
             {
                 listeners.Listen(
                     controls.SelectInterpolableButton,

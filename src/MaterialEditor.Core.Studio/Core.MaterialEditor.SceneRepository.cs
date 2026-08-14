@@ -97,6 +97,15 @@ namespace KK_Plugins.MaterialEditor
         public void RemoveMaterialTexture(object data, Material material, string propertyName, GameObject gameObject) =>
             GetController().RemoveMaterialTexture(GetObjectId(data), material, propertyName);
 
+        public bool GetMaterialCubemapValueOriginal(object data, Material material, string propertyName, GameObject gameObject) =>
+            GetController().GetMaterialCubemapOriginal(GetObjectId(data), material, propertyName);
+
+        public void SetMaterialCubemap(object data, Material material, string propertyName, string filePath, GameObject gameObject) =>
+            GetController().SetMaterialCubemapFromFile(GetObjectId(data), material, propertyName, filePath);
+
+        public void RemoveMaterialCubemap(object data, Material material, string propertyName, GameObject gameObject) =>
+            GetController().RemoveMaterialCubemap(GetObjectId(data), material, propertyName);
+
         public Vector2? GetMaterialTextureOffsetOriginal(object data, Material material, string propertyName, GameObject gameObject) =>
             GetController().GetMaterialTextureOffsetOriginal(GetObjectId(data), material, propertyName);
 

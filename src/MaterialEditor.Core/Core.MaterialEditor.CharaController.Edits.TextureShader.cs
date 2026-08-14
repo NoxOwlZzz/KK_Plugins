@@ -1,7 +1,6 @@
 using KKAPI.Chara;
 using MaterialEditorAPI;
 using System;
-using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
 using System.Linq;
@@ -27,17 +26,7 @@ namespace KK_Plugins.MaterialEditor
         {
             if (!File.Exists(filePath)) return;
 
-            var textureKind = GetTextureKind(material, propertyName);
-            string fileError;
-            if (textureKind == ShaderPropertyType.Cubemap
-                && !MaterialEditorCubemapProjection.TryValidateSourceFileLength(
-                    new FileInfo(filePath).Length,
-                    out fileError))
-            {
-                MaterialEditorPlugin.Logger.LogMessage(fileError);
-                return;
-            }
-            if (setTexInUpdate && textureKind != ShaderPropertyType.Cubemap)
+            if (setTexInUpdate)
             {
                 FileToSet = filePath;
                 PropertyToSet = propertyName;
@@ -49,37 +38,8 @@ namespace KK_Plugins.MaterialEditor
             else
             {
                 var texBytes = File.ReadAllBytes(filePath);
-                SetMaterialTexture(
-                    slot,
-                    objectType,
-                    material,
-                    propertyName,
-                    texBytes,
-                    go,
-                    textureKind,
-                    true);
+                SetMaterialTexture(slot, objectType, material, propertyName, texBytes, go);
             }
-        }
-
-        private static ShaderPropertyType GetTextureKind(Material material, string propertyName)
-        {
-            if (material == null || material.shader == null)
-                return ShaderPropertyType.Texture;
-
-            Dictionary<string, ShaderPropertyData> shaderProperties;
-            if (!XMLShaderProperties.TryGetValue(material.shader.NameFormatted(), out shaderProperties)
-                && !XMLShaderProperties.TryGetValue("default", out shaderProperties))
-                return ShaderPropertyType.Texture;
-
-            var normalizedName = propertyName != null && propertyName.StartsWith("_")
-                ? propertyName.Substring(1)
-                : propertyName;
-            return shaderProperties.Values.Any(x =>
-                    x != null
-                    && x.Name == normalizedName
-                    && x.Type == ShaderPropertyType.Cubemap)
-                ? ShaderPropertyType.Cubemap
-                : ShaderPropertyType.Texture;
         }
 
         /// <summary>
@@ -92,32 +52,7 @@ namespace KK_Plugins.MaterialEditor
         /// <param name="go">GameObject the material belongs to</param>
         public void SetMaterialTexture(int slot, ObjectType objectType, Material material, string propertyName, byte[] data, GameObject go)
         {
-            SetMaterialTexture(
-                slot,
-                objectType,
-                material,
-                propertyName,
-                data,
-                go,
-                GetTextureKind(material, propertyName));
-        }
-
-        private void SetMaterialTexture(int slot, ObjectType objectType, Material material, string propertyName, byte[] data, GameObject go, ShaderPropertyType textureKind, bool logCubemapNormalizationWarning = false)
-        {
             if (data == null) return;
-
-            if (textureKind == ShaderPropertyType.Cubemap)
-            {
-                SetMaterialCubemap(
-                    slot,
-                    objectType,
-                    material,
-                    propertyName,
-                    data,
-                    go,
-                    logCubemapNormalizationWarning);
-                return;
-            }
 
             var texID = SetAndGetTextureID(data);
             var textureProperty = MaterialTexturePropertyList.FirstOrDefault(x => x.ObjectType == objectType && x.CoordinateIndex == GetCoordinateIndex(objectType) && x.Slot == slot && x.Property == propertyName && x.MaterialName == material.NameFormatted());
@@ -126,67 +61,8 @@ namespace KK_Plugins.MaterialEditor
             else
                 textureProperty.TexID = texID;
 
-            textureProperty.TextureKind = ShaderPropertyType.Texture;
-            textureProperty.ClearTextureOriginalSnapshot();
             textureProperty.TexAnimationDef = MEAnimationUtil.LoadAnimationDefFromBytes(texID, data, SetAndGetTextureID);
             SetTextureWithProperty(go, textureProperty);
-            PurgeUnusedCubemapLeases();
-        }
-
-        private void SetMaterialCubemap(int slot, ObjectType objectType, Material material, string propertyName, byte[] data, GameObject go, bool logNormalizationWarning)
-        {
-            if (data == null)
-                return;
-
-            MaterialEditorCubemapLease lease;
-            string warning;
-            string error;
-            if (!MaterialEditorCubemapCache.TryAcquire(
-                    data,
-                    out lease,
-                    out warning,
-                    out error))
-            {
-                MaterialEditorPlugin.Logger.LogMessage(error);
-                return;
-            }
-            if (logNormalizationWarning && !string.IsNullOrEmpty(warning))
-                MaterialEditorPlugin.Logger.LogWarning(warning);
-
-            var texID = SetAndGetTextureID(data);
-            CacheCubemapLease(texID, lease);
-
-            var textureProperty = MaterialTexturePropertyList.FirstOrDefault(x => x.ObjectType == objectType && x.CoordinateIndex == GetCoordinateIndex(objectType) && x.Slot == slot && x.Property == propertyName && x.MaterialName == material.NameFormatted());
-            if (textureProperty == null)
-            {
-                textureProperty = new MaterialTextureProperty(
-                    objectType,
-                    GetCoordinateIndex(objectType),
-                    slot,
-                    material.NameFormatted(),
-                    propertyName,
-                    texID,
-                    null,
-                    null,
-                    null,
-                    null,
-                    null,
-                    ShaderPropertyType.Cubemap);
-                MaterialTexturePropertyList.Add(textureProperty);
-            }
-            else
-            {
-                textureProperty.TexID = texID;
-                textureProperty.TextureKind = ShaderPropertyType.Cubemap;
-                textureProperty.Offset = null;
-                textureProperty.OffsetOriginal = null;
-                textureProperty.Scale = null;
-                textureProperty.ScaleOriginal = null;
-                textureProperty.TexAnimationDef = null;
-            }
-
-            SetTextureWithProperty(go, textureProperty);
-            PurgeUnusedCubemapLeases();
         }
         /// <summary>
         /// Get the saved material property value or null if none is saved
@@ -200,17 +76,7 @@ namespace KK_Plugins.MaterialEditor
         {
             var textureProperty = MaterialTexturePropertyList.FirstOrDefault(x => x.ObjectType == objectType && x.CoordinateIndex == GetCoordinateIndex(objectType) && x.Slot == slot && x.Property == propertyName && x.MaterialName == material.NameFormatted());
             if (textureProperty?.TexID != null)
-            {
-                if (textureProperty.TextureKind == ShaderPropertyType.Cubemap)
-                {
-                    Cubemap cubemap;
-                    string error;
-                    if (TryGetCubemap(textureProperty.TexID.Value, out cubemap, out error))
-                        return cubemap;
-                    return null;
-                }
                 return TextureDictionary[(int)textureProperty.TexID].Texture;
-            }
             return null;
         }
         /// <summary>
@@ -238,21 +104,10 @@ namespace KK_Plugins.MaterialEditor
             var textureProperty = MaterialTexturePropertyList.FirstOrDefault(x => x.ObjectType == objectType && x.CoordinateIndex == GetCoordinateIndex(objectType) && x.Slot == slot && x.Property == propertyName && x.MaterialName == material.NameFormatted());
             if (textureProperty != null)
             {
-                if (textureProperty.TextureKind == ShaderPropertyType.Cubemap)
-                {
-                    textureProperty.SynchronizeTextureOriginalSnapshot(go);
-                    MaterialTextureOriginalSnapshot.RestoreByMaterialReference(
-                        go,
-                        textureProperty.MaterialName,
-                        textureProperty.Property,
-                        textureProperty.TextureOriginalMaterials);
-                    textureProperty.ClearTextureOriginalSnapshot();
-                }
-                else if (displayMessage)
+                if (displayMessage)
                     MaterialEditorPlugin.Logger.LogMessage("Save and reload character or change outfits to refresh textures.");
                 textureProperty.TexID = null;
                 RemoveTexturePropertyIfNull(textureProperty);
-                PurgeUnusedCubemapLeases();
             }
         }
         /// <summary>
@@ -279,9 +134,6 @@ namespace KK_Plugins.MaterialEditor
         public void SetMaterialTextureOffset(int slot, ObjectType objectType, Material material, string propertyName, Vector2 value, GameObject go, bool setProperty = true)
         {
             var textureProperty = MaterialTexturePropertyList.FirstOrDefault(x => x.ObjectType == objectType && x.CoordinateIndex == GetCoordinateIndex(objectType) && x.Slot == slot && x.Property == propertyName && x.MaterialName == material.NameFormatted());
-            if ((textureProperty != null && textureProperty.TextureKind == ShaderPropertyType.Cubemap)
-                || (textureProperty == null && GetTextureKind(material, propertyName) == ShaderPropertyType.Cubemap))
-                return;
             if (textureProperty == null)
             {
                 Vector2 valueOriginal = material.GetTextureOffset($"_{propertyName}");
@@ -363,9 +215,6 @@ namespace KK_Plugins.MaterialEditor
         public void SetMaterialTextureScale(int slot, ObjectType objectType, Material material, string propertyName, Vector2 value, GameObject go, bool setProperty = true)
         {
             var textureProperty = MaterialTexturePropertyList.FirstOrDefault(x => x.ObjectType == objectType && x.CoordinateIndex == GetCoordinateIndex(objectType) && x.Slot == slot && x.Property == propertyName && x.MaterialName == material.NameFormatted());
-            if ((textureProperty != null && textureProperty.TextureKind == ShaderPropertyType.Cubemap)
-                || (textureProperty == null && GetTextureKind(material, propertyName) == ShaderPropertyType.Cubemap))
-                return;
             if (textureProperty == null)
             {
                 Vector2 valueOriginal = material.GetTextureScale($"_{propertyName}");

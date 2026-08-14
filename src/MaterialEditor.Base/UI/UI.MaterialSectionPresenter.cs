@@ -436,6 +436,11 @@ namespace MaterialEditorAPI
                 type = ShaderPropertyType.Texture;
                 return true;
             }
+            if (editorId == MaterialEditorPropertyEditorIds.Cubemap)
+            {
+                type = ShaderPropertyType.Cubemap;
+                return true;
+            }
             if (editorId == MaterialEditorPropertyEditorIds.Color)
             {
                 type = ShaderPropertyType.Color;

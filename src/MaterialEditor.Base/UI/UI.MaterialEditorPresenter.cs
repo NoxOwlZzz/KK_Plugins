@@ -15,6 +15,13 @@ namespace MaterialEditorAPI
         Material material,
         string propertyName);
 
+    internal delegate void ImportCubemapAction(
+        CubemapPropertyRowModel row,
+        GameObject gameObject,
+        object data,
+        Material material,
+        string propertyName);
+
     internal delegate void SelectInterpolableAction(
         GameObject gameObject,
         RowModel.RowItemType itemType,
@@ -52,6 +59,8 @@ namespace MaterialEditorAPI
         internal Action<Renderer> RequestObjExport { get; set; }
         internal Action<Material, string> ExportTexture { get; set; }
         internal ImportTextureAction ImportTexture { get; set; }
+        internal Action<Material, string> ExportCubemap { get; set; }
+        internal ImportCubemapAction ImportCubemap { get; set; }
         internal SelectInterpolableAction SelectInterpolable { get; set; }
         internal Action<GameObject, ProjectorProperties, string> SelectProjectorInterpolable { get; set; }
         internal EditColorAction EditColor { get; set; }

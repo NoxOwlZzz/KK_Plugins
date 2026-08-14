@@ -211,6 +211,60 @@ namespace MaterialEditorAPI
         public abstract void RemoveMaterialTexture(object data, Material material, string propertyName, GameObject gameObject);
 
         /// <summary>
+        /// Gets whether a Cubemap property is still in its original state.
+        /// </summary>
+        /// <param name="data">The data object associated with the material.</param>
+        /// <param name="material">The material containing the Cubemap property.</param>
+        /// <param name="propertyName">The name of the Cubemap property.</param>
+        /// <param name="gameObject">The game object associated with the material.</param>
+        /// <returns>True if the Cubemap has not been modified; otherwise, false.</returns>
+        public virtual bool GetMaterialCubemapValueOriginal(
+            object data,
+            Material material,
+            string propertyName,
+            GameObject gameObject)
+        {
+            throw new System.NotSupportedException(
+                "Cubemap editing is not supported by this Material Editor implementation.");
+        }
+
+        /// <summary>
+        /// Imports and persists a Cubemap property from a file.
+        /// </summary>
+        /// <param name="data">The data object associated with the material.</param>
+        /// <param name="material">The material containing the Cubemap property.</param>
+        /// <param name="propertyName">The name of the Cubemap property.</param>
+        /// <param name="filePath">The source image path.</param>
+        /// <param name="gameObject">The game object associated with the material.</param>
+        public virtual void SetMaterialCubemap(
+            object data,
+            Material material,
+            string propertyName,
+            string filePath,
+            GameObject gameObject)
+        {
+            throw new System.NotSupportedException(
+                "Cubemap editing is not supported by this Material Editor implementation.");
+        }
+
+        /// <summary>
+        /// Removes a persisted Cubemap override.
+        /// </summary>
+        /// <param name="data">The data object associated with the material.</param>
+        /// <param name="material">The material containing the Cubemap property.</param>
+        /// <param name="propertyName">The name of the Cubemap property.</param>
+        /// <param name="gameObject">The game object associated with the material.</param>
+        public virtual void RemoveMaterialCubemap(
+            object data,
+            Material material,
+            string propertyName,
+            GameObject gameObject)
+        {
+            throw new System.NotSupportedException(
+                "Cubemap editing is not supported by this Material Editor implementation.");
+        }
+
+        /// <summary>
         /// Gets the original texture offset value of a material property.
         /// </summary>
         /// <param name="data">The data object associated with the material.</param>

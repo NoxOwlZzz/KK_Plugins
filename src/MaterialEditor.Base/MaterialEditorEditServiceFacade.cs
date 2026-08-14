@@ -124,6 +124,18 @@ namespace MaterialEditorAPI
         public void ResetTexture(Material material, string propertyName) =>
             _service.RemoveMaterialTexture(Data, material, propertyName, GameObject);
 
+        /// <summary>Check whether a material Cubemap is in its original state.</summary>
+        public bool IsCubemapOriginal(Material material, string propertyName) =>
+            _service.GetMaterialCubemapValueOriginal(Data, material, propertyName, GameObject);
+
+        /// <summary>Import and persist a material Cubemap from a file.</summary>
+        public void SetCubemapFromFile(Material material, string propertyName, string filePath) =>
+            _service.SetMaterialCubemap(Data, material, propertyName, filePath, GameObject);
+
+        /// <summary>Remove the persisted material Cubemap override.</summary>
+        public void ResetCubemap(Material material, string propertyName) =>
+            _service.RemoveMaterialCubemap(Data, material, propertyName, GameObject);
+
         /// <summary>Get the original material texture offset.</summary>
         public Vector2? GetOriginalTextureOffset(Material material, string propertyName) =>
             _service.GetMaterialTextureOffsetOriginal(Data, material, propertyName, GameObject);

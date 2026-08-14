@@ -50,6 +50,10 @@ namespace MaterialEditorAPI
                 RowModel.RowItemType.TextureOffsetScale);
 
             _registry.Register(
+                new CubemapRowTypeBinder(_controls),
+                RowModel.RowItemType.CubemapProperty);
+
+            _registry.Register(
                 new ColorRowTypeBinder(_controls),
                 RowModel.RowItemType.ColorProperty);
 

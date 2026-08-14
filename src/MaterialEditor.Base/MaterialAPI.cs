@@ -724,7 +724,7 @@ namespace MaterialEditorAPI
         /// Set a native Cubemap property without mutating sampler state on the
         /// shared Cubemap instance.
         /// </summary>
-        internal static bool SetCubemap(
+        public static bool SetCubemap(
             GameObject gameObject,
             string materialName,
             string propertyName,

@@ -1,8 +1,14 @@
 const MaterialEditorAPI.MaterialEditorPropertyEditorIds.Boolean = "materialeditor.boolean" -> string
 const MaterialEditorAPI.MaterialEditorPropertyEditorIds.Color = "materialeditor.color" -> string
+const MaterialEditorAPI.MaterialEditorPropertyEditorIds.Cubemap = "materialeditor.cubemap" -> string
 const MaterialEditorAPI.MaterialEditorPropertyEditorIds.Float = "materialeditor.float" -> string
 const MaterialEditorAPI.MaterialEditorPropertyEditorIds.Texture = "materialeditor.texture" -> string
 MaterialEditorAPI.MaterialAPI.ShaderPropertyType.Cubemap = 4 -> MaterialEditorAPI.MaterialAPI.ShaderPropertyType
+MaterialEditorAPI.CopyContainer.MaterialCubemapProperty
+MaterialEditorAPI.CopyContainer.MaterialCubemapProperty.Data -> byte[]
+MaterialEditorAPI.CopyContainer.MaterialCubemapProperty.MaterialCubemapProperty(string property, byte[] data = null) -> void
+MaterialEditorAPI.CopyContainer.MaterialCubemapProperty.Property -> string
+MaterialEditorAPI.CopyContainer.MaterialCubemapPropertyList -> System.Collections.Generic.List<MaterialEditorAPI.CopyContainer.MaterialCubemapProperty>
 MaterialEditorAPI.MaterialEditorApiCapability
 MaterialEditorAPI.MaterialEditorApiCapability.EditServiceFacade = 16 -> MaterialEditorAPI.MaterialEditorApiCapability
 MaterialEditorAPI.MaterialEditorApiCapability.LabelClickEvents = 1 -> MaterialEditorAPI.MaterialEditorApiCapability
@@ -43,10 +49,12 @@ MaterialEditorAPI.MaterialEditorEditService.GetOriginalTextureScale(UnityEngine.
 MaterialEditorAPI.MaterialEditorEditService.GetProjectorProperty(UnityEngine.Projector projector, MaterialEditorAPI.MaterialAPI.ProjectorProperties property) -> float?
 MaterialEditorAPI.MaterialEditorEditService.GetProjectors() -> System.Collections.Generic.IEnumerable<UnityEngine.Projector>
 MaterialEditorAPI.MaterialEditorEditService.GetRendererProperty(UnityEngine.Renderer renderer, MaterialEditorAPI.MaterialAPI.RendererProperties property) -> string
+MaterialEditorAPI.MaterialEditorEditService.IsCubemapOriginal(UnityEngine.Material material, string propertyName) -> bool
 MaterialEditorAPI.MaterialEditorEditService.IsTextureOriginal(UnityEngine.Material material, string propertyName) -> bool
 MaterialEditorAPI.MaterialEditorEditService.PasteMaterialEdits(UnityEngine.Material material) -> void
 MaterialEditorAPI.MaterialEditorEditService.ResetBoolean(UnityEngine.Material material, string propertyName) -> void
 MaterialEditorAPI.MaterialEditorEditService.ResetColor(UnityEngine.Material material, string propertyName) -> void
+MaterialEditorAPI.MaterialEditorEditService.ResetCubemap(UnityEngine.Material material, string propertyName) -> void
 MaterialEditorAPI.MaterialEditorEditService.ResetFloat(UnityEngine.Material material, string propertyName) -> void
 MaterialEditorAPI.MaterialEditorEditService.ResetMaterialName(UnityEngine.Renderer renderer, UnityEngine.Material material) -> void
 MaterialEditorAPI.MaterialEditorEditService.ResetProjectorProperty(UnityEngine.Projector projector, MaterialEditorAPI.MaterialAPI.ProjectorProperties property) -> void
@@ -58,6 +66,7 @@ MaterialEditorAPI.MaterialEditorEditService.ResetTextureOffset(UnityEngine.Mater
 MaterialEditorAPI.MaterialEditorEditService.ResetTextureScale(UnityEngine.Material material, string propertyName) -> void
 MaterialEditorAPI.MaterialEditorEditService.SetBoolean(UnityEngine.Material material, string propertyName, bool value) -> void
 MaterialEditorAPI.MaterialEditorEditService.SetColor(UnityEngine.Material material, string propertyName, UnityEngine.Color value) -> void
+MaterialEditorAPI.MaterialEditorEditService.SetCubemapFromFile(UnityEngine.Material material, string propertyName, string filePath) -> void
 MaterialEditorAPI.MaterialEditorEditService.SetFloat(UnityEngine.Material material, string propertyName, float value) -> void
 MaterialEditorAPI.MaterialEditorEditService.SetMaterialName(UnityEngine.Renderer renderer, UnityEngine.Material material, string value) -> void
 MaterialEditorAPI.MaterialEditorEditService.SetProjectorProperty(UnityEngine.Projector projector, MaterialEditorAPI.MaterialAPI.ProjectorProperties property, float value) -> void
@@ -94,6 +103,7 @@ MaterialEditorAPI.MaterialEditorLabelClickEventArgs.Renderer.get -> UnityEngine.
 MaterialEditorAPI.MaterialEditorLabelClickEventArgs.ShiftPressed.get -> bool
 MaterialEditorAPI.MaterialEditorLabelType
 MaterialEditorAPI.MaterialEditorLabelType.ColorProperty = 6 -> MaterialEditorAPI.MaterialEditorLabelType
+MaterialEditorAPI.MaterialEditorLabelType.CubemapProperty = 9 -> MaterialEditorAPI.MaterialEditorLabelType
 MaterialEditorAPI.MaterialEditorLabelType.FloatProperty = 7 -> MaterialEditorAPI.MaterialEditorLabelType
 MaterialEditorAPI.MaterialEditorLabelType.KeywordProperty = 8 -> MaterialEditorAPI.MaterialEditorLabelType
 MaterialEditorAPI.MaterialEditorLabelType.Material = 1 -> MaterialEditorAPI.MaterialEditorLabelType
@@ -191,5 +201,9 @@ static MaterialEditorAPI.MaterialEditorExtensionApi.RegisterPropertyEditor(strin
 static MaterialEditorAPI.MaterialEditorExtensionApi.RegisterSelectionHandler(System.Action<MaterialEditorAPI.MaterialEditorSelectionEventArgs> handler) -> System.IDisposable
 static MaterialEditorAPI.MaterialEditorExtensionApi.Supports(MaterialEditorAPI.MaterialEditorApiCapability capabilities) -> bool
 static MaterialEditorAPI.MaterialEditorExtensionApi.UnregisterSelectionHandler(System.Action<MaterialEditorAPI.MaterialEditorSelectionEventArgs> handler) -> void
+static MaterialEditorAPI.MaterialAPI.SetCubemap(UnityEngine.GameObject gameObject, string materialName, string propertyName, UnityEngine.Cubemap value) -> bool
 static MaterialEditorAPI.MaterialEditorUI.RegisterLabelClickHandler(System.Action<MaterialEditorAPI.MaterialEditorLabelClickEventArgs> handler) -> void
 static MaterialEditorAPI.MaterialEditorUI.UnregisterLabelClickHandler(System.Action<MaterialEditorAPI.MaterialEditorLabelClickEventArgs> handler) -> void
+virtual MaterialEditorAPI.MaterialEditorUI.GetMaterialCubemapValueOriginal(object data, UnityEngine.Material material, string propertyName, UnityEngine.GameObject gameObject) -> bool
+virtual MaterialEditorAPI.MaterialEditorUI.RemoveMaterialCubemap(object data, UnityEngine.Material material, string propertyName, UnityEngine.GameObject gameObject) -> void
+virtual MaterialEditorAPI.MaterialEditorUI.SetMaterialCubemap(object data, UnityEngine.Material material, string propertyName, string filePath, UnityEngine.GameObject gameObject) -> void

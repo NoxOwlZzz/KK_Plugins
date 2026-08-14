@@ -110,6 +110,22 @@ namespace KK_Plugins.MaterialEditor
                     else
                         data.data["MaterialTexturePropertyList"] = null;
                 }
+                if (data.data.TryGetValue("MaterialCubemapPropertyList", out var cubemapProperties) && cubemapProperties != null)
+                {
+                    var properties = MessagePackSerializer.Deserialize<List<MaterialEditorCharaController.MaterialCubemapProperty>>((byte[])cubemapProperties);
+                    properties.RemoveAll(x => x.CoordinateIndex != 0);
+                    properties.RemoveAll(x => x.ObjectType == MaterialEditorCharaController.ObjectType.Clothing && x.Slot == 7);
+                    for (int i = 0; i < properties.Count; i++)
+                    {
+                        var property = properties[i];
+                        if (property.Slot == 8)
+                            property.Slot = 7;
+                    }
+
+                    data.data["MaterialCubemapPropertyList"] = properties.Count > 0
+                        ? MessagePackSerializer.Serialize(properties)
+                        : null;
+                }
                 if (data.data.TryGetValue("MaterialShaderList", out var shaderProperties) && shaderProperties != null)
                 {
                     var properties = MessagePackSerializer.Deserialize<List<MaterialEditorCharaController.MaterialShader>>((byte[])shaderProperties);
@@ -258,6 +274,31 @@ namespace KK_Plugins.MaterialEditor
                     else
                         data.data["MaterialTexturePropertyList"] = null;
                 }
+                if (data.data.TryGetValue("MaterialCubemapPropertyList", out var cubemapProperties) && cubemapProperties != null)
+                {
+                    var properties = MessagePackSerializer.Deserialize<List<MaterialEditorCharaController.MaterialCubemapProperty>>((byte[])cubemapProperties);
+                    var propertiesNew = new List<MaterialEditorCharaController.MaterialCubemapProperty>();
+
+                    foreach (var property in properties)
+                    {
+                        if (property.ObjectType == MaterialEditorCharaController.ObjectType.Accessory || property.ObjectType == MaterialEditorCharaController.ObjectType.Clothing)
+                        {
+                            if (coordinateMapping.TryGetValue(property.CoordinateIndex, out int? newIndex) && newIndex != null)
+                            {
+                                property.CoordinateIndex = (int)newIndex;
+                                propertiesNew.Add(property);
+                            }
+                        }
+                        else
+                        {
+                            propertiesNew.Add(property);
+                        }
+                    }
+
+                    data.data["MaterialCubemapPropertyList"] = propertiesNew.Count > 0
+                        ? MessagePackSerializer.Serialize(propertiesNew)
+                        : null;
+                }
                 if (data.data.TryGetValue("MaterialShaderList", out var shaderProperties) && shaderProperties != null)
                 {
                     List<MaterialEditorCharaController.MaterialShader> properties = MessagePackSerializer.Deserialize<List<MaterialEditorCharaController.MaterialShader>>((byte[])shaderProperties);
@@ -383,6 +424,21 @@ namespace KK_Plugins.MaterialEditor
                         data.data["MaterialTexturePropertyList"] = MessagePackSerializer.Serialize(properties);
                     else
                         data.data["MaterialTexturePropertyList"] = null;
+                }
+                if (data.data.TryGetValue("MaterialCubemapPropertyList", out var cubemapProperties) && cubemapProperties != null)
+                {
+                    var properties = MessagePackSerializer.Deserialize<List<MaterialEditorCharaController.MaterialCubemapProperty>>((byte[])cubemapProperties);
+                    properties.RemoveAll(x => x.ObjectType == MaterialEditorCharaController.ObjectType.Clothing && x.Slot == 7);
+                    for (int i = 0; i < properties.Count; i++)
+                    {
+                        var property = properties[i];
+                        if (property.Slot == 8)
+                            property.Slot = 7;
+                    }
+
+                    data.data["MaterialCubemapPropertyList"] = properties.Count > 0
+                        ? MessagePackSerializer.Serialize(properties)
+                        : null;
                 }
                 if (data.data.TryGetValue("MaterialShaderList", out var shaderProperties) && shaderProperties != null)
                 {

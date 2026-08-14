@@ -383,6 +383,16 @@ namespace KK_Plugins.MaterialEditor
         public override void RemoveMaterialTexture(object data, Material material, string propertyName, GameObject go) =>
             EditService.RemoveMaterialTexture(data, material, propertyName, go);
 
+        /// <inheritdoc/>
+        public override bool GetMaterialCubemapValueOriginal(object data, Material material, string propertyName, GameObject go) =>
+            EditService.GetMaterialCubemapValueOriginal(data, material, propertyName, go);
+        /// <inheritdoc/>
+        public override void SetMaterialCubemap(object data, Material material, string propertyName, string filePath, GameObject go) =>
+            EditService.SetMaterialCubemap(data, material, propertyName, filePath, go);
+        /// <inheritdoc/>
+        public override void RemoveMaterialCubemap(object data, Material material, string propertyName, GameObject go) =>
+            EditService.RemoveMaterialCubemap(data, material, propertyName, go);
+
         public override Vector2? GetMaterialTextureOffsetOriginal(object data, Material material, string propertyName, GameObject go) =>
             EditService.GetMaterialTextureOffsetOriginal(data, material, propertyName, go);
         public override void SetMaterialTextureOffset(object data, Material material, string propertyName, Vector2 value, GameObject go) =>

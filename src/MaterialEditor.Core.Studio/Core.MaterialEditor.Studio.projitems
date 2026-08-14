@@ -11,6 +11,7 @@
   <ItemGroup>
     <Compile Include="$(MSBuildThisFileDirectory)Core.MaterialEditor.SceneController.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)Core.MaterialEditor.SceneController.Edits.Core.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)Core.MaterialEditor.SceneController.Edits.Cubemap.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)Core.MaterialEditor.SceneController.Edits.Properties.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)Core.MaterialEditor.SceneController.Edits.TextureShader.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)Core.MaterialEditor.SceneController.Models.cs" />

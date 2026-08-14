@@ -55,10 +55,25 @@ namespace KK_Plugins.MaterialEditor
                 if (materialTextureProperty.ID == id && materialTextureProperty.MaterialName == material.NameFormatted())
                 {
                     if (materialTextureProperty.TexID != null)
-                        CopyData.MaterialTexturePropertyList.Add(new CopyContainer.MaterialTextureProperty(materialTextureProperty.Property, TextureDictionary[(int)materialTextureProperty.TexID].Data, materialTextureProperty.Offset, materialTextureProperty.Scale, materialTextureProperty.TextureKind));
+                        CopyData.MaterialTexturePropertyList.Add(new CopyContainer.MaterialTextureProperty(materialTextureProperty.Property, TextureDictionary[(int)materialTextureProperty.TexID].Data, materialTextureProperty.Offset, materialTextureProperty.Scale));
                     else
-                        CopyData.MaterialTexturePropertyList.Add(new CopyContainer.MaterialTextureProperty(materialTextureProperty.Property, null, materialTextureProperty.Offset, materialTextureProperty.Scale, materialTextureProperty.TextureKind));
+                        CopyData.MaterialTexturePropertyList.Add(new CopyContainer.MaterialTextureProperty(materialTextureProperty.Property, null, materialTextureProperty.Offset, materialTextureProperty.Scale));
                 }
+            }
+            for (var i = 0; i < MaterialCubemapPropertyList.Count; i++)
+            {
+                var materialCubemapProperty = MaterialCubemapPropertyList[i];
+                if (materialCubemapProperty.ID != id
+                    || materialCubemapProperty.MaterialName != material.NameFormatted())
+                    continue;
+
+                var data = materialCubemapProperty.TexID.HasValue
+                    ? TextureDictionary[materialCubemapProperty.TexID.Value].Data
+                    : null;
+                CopyData.MaterialCubemapPropertyList.Add(
+                    new CopyContainer.MaterialCubemapProperty(
+                        materialCubemapProperty.Property,
+                        data));
             }
 
             if (GetProjectorList(GetObjectByID(id)).FirstOrDefault(x => x.material == material) != null)
@@ -107,11 +122,21 @@ namespace KK_Plugins.MaterialEditor
             {
                 var materialTextureProperty = CopyData.MaterialTexturePropertyList[i];
                 if (material.HasProperty($"_{materialTextureProperty.Property}"))
-                    SetMaterialTexture(id, material, materialTextureProperty.Property, materialTextureProperty.Data, materialTextureProperty.TextureKind);
-                if (materialTextureProperty.TextureKind != ShaderPropertyType.Cubemap && materialTextureProperty.Offset != null)
+                    SetMaterialTexture(id, material, materialTextureProperty.Property, materialTextureProperty.Data);
+                if (materialTextureProperty.Offset != null)
                     SetMaterialTextureOffset(id, material, materialTextureProperty.Property, (Vector2)materialTextureProperty.Offset, setProperty);
-                if (materialTextureProperty.TextureKind != ShaderPropertyType.Cubemap && materialTextureProperty.Scale != null)
+                if (materialTextureProperty.Scale != null)
                     SetMaterialTextureScale(id, material, materialTextureProperty.Property, (Vector2)materialTextureProperty.Scale, setProperty);
+            }
+            for (var i = 0; i < CopyData.MaterialCubemapPropertyList.Count; i++)
+            {
+                var materialCubemapProperty = CopyData.MaterialCubemapPropertyList[i];
+                if (material.HasProperty($"_{materialCubemapProperty.Property}"))
+                    SetMaterialCubemap(
+                        id,
+                        material,
+                        materialCubemapProperty.Property,
+                        materialCubemapProperty.Data);
             }
 
             var projector = GetProjectorList(GetObjectByID(id)).FirstOrDefault(x => x.material == material);
@@ -135,6 +160,7 @@ namespace KK_Plugins.MaterialEditor
                 MaterialKeywordPropertyList.RemoveAll(x => x.ID == id && x.MaterialName == matName);
                 MaterialColorPropertyList.RemoveAll(x => x.ID == id && x.MaterialName == matName);
                 MaterialTexturePropertyList.RemoveAll(x => x.ID == id && x.MaterialName == matName);
+                MaterialCubemapPropertyList.RemoveAll(x => x.ID == id && x.MaterialName == matName);
                 MaterialCopyList.RemoveAll(x => x.ID == id && x.MaterialCopyName == matName);
             }
             else if (GetMaterialNamePropertyValue(id, GetRendererList(go).FirstOrDefault(x => x.materials.Contains(material)), material) == string.Empty)
@@ -147,6 +173,7 @@ namespace KK_Plugins.MaterialEditor
                 List<MaterialKeywordProperty> newAccessoryMaterialKeywordPropertyList = new List<MaterialKeywordProperty>();
                 List<MaterialColorProperty> newAccessoryMaterialColorPropertyList = new List<MaterialColorProperty>();
                 List<MaterialTextureProperty> newAccessoryMaterialTexturePropertyList = new List<MaterialTextureProperty>();
+                List<MaterialCubemapProperty> newAccessoryMaterialCubemapPropertyList = new List<MaterialCubemapProperty>();
 
                 foreach (var property in MaterialShaderList.Where(x => x.ID == id && x.MaterialName == matName))
                     newAccessoryMaterialShaderList.Add(new MaterialShader(id, newMatName, property.ShaderName, property.ShaderNameOriginal, property.RenderQueue, property.RenderQueueOriginal));
@@ -157,10 +184,16 @@ namespace KK_Plugins.MaterialEditor
                 foreach (var property in MaterialColorPropertyList.Where(x => x.ID == id && x.MaterialName == matName))
                     newAccessoryMaterialColorPropertyList.Add(new MaterialColorProperty(id, newMatName, property.Property, property.Value, property.ValueOriginal));
                 foreach (var property in MaterialTexturePropertyList.Where(x => x.ID == id && x.MaterialName == matName))
+                    newAccessoryMaterialTexturePropertyList.Add(new MaterialTextureProperty(id, newMatName, property.Property, property.TexID, property.Offset, property.OffsetOriginal, property.Scale, property.ScaleOriginal, property.TexAnimationDef));
+                foreach (var property in MaterialCubemapPropertyList.Where(x => x.ID == id && x.MaterialName == matName))
                 {
-                    var copiedProperty = new MaterialTextureProperty(id, newMatName, property.Property, property.TexID, property.Offset, property.OffsetOriginal, property.Scale, property.ScaleOriginal, property.TexAnimationDef, property.TextureKind);
-                    copiedProperty.InheritTextureOriginalSnapshot(property, go);
-                    newAccessoryMaterialTexturePropertyList.Add(copiedProperty);
+                    var copiedProperty = new MaterialCubemapProperty(
+                        id,
+                        newMatName,
+                        property.Property,
+                        property.TexID);
+                    copiedProperty.InheritCubemapOriginalSnapshot(property, go);
+                    newAccessoryMaterialCubemapPropertyList.Add(copiedProperty);
                 }
 
                 MaterialShaderList.AddRange(newAccessoryMaterialShaderList);
@@ -168,6 +201,7 @@ namespace KK_Plugins.MaterialEditor
                 MaterialKeywordPropertyList.AddRange(newAccessoryMaterialKeywordPropertyList);
                 MaterialColorPropertyList.AddRange(newAccessoryMaterialColorPropertyList);
                 MaterialTexturePropertyList.AddRange(newAccessoryMaterialTexturePropertyList);
+                MaterialCubemapPropertyList.AddRange(newAccessoryMaterialCubemapPropertyList);
             }
             else
             {

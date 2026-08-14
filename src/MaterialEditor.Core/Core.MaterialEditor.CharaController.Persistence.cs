@@ -44,11 +44,15 @@ namespace KK_Plugins.MaterialEditor
             var coordinateMaterialKeywordPropertyList = MaterialKeywordPropertyList.Where(x => x.CoordinateIndex == CurrentCoordinateIndex && x.ObjectType != ObjectType.Hair && x.ObjectType != ObjectType.Character).ToList();
             var coordinateMaterialColorPropertyList = MaterialColorPropertyList.Where(x => x.CoordinateIndex == CurrentCoordinateIndex && x.ObjectType != ObjectType.Hair && x.ObjectType != ObjectType.Character).ToList();
             var coordinateMaterialTexturePropertyList = MaterialTexturePropertyList.Where(x => x.CoordinateIndex == CurrentCoordinateIndex && x.ObjectType != ObjectType.Hair && x.ObjectType != ObjectType.Character).ToList();
+            var coordinateMaterialCubemapPropertyList = MaterialCubemapPropertyList.Where(x => x.CoordinateIndex == CurrentCoordinateIndex && x.ObjectType != ObjectType.Hair && x.ObjectType != ObjectType.Character).ToList();
             var coordinateMaterialShaderList = MaterialShaderList.Where(x => x.CoordinateIndex == CurrentCoordinateIndex && x.ObjectType != ObjectType.Hair && x.ObjectType != ObjectType.Character).ToList();
             var coordinateMaterialCopyList = MaterialCopyList.Where(x => x.CoordinateIndex == CurrentCoordinateIndex && x.ObjectType != ObjectType.Hair && x.ObjectType != ObjectType.Character).ToList();
             var coordinateTextureDictionary = new Dictionary<int, byte[]>();
 
             var usedTexIDMap = MEAnimationController.GetUsedTexIDSet(AnimationControllerMap, coordinateMaterialTexturePropertyList);
+            foreach (var cubemapProperty in coordinateMaterialCubemapPropertyList)
+                if (cubemapProperty.TexID.HasValue)
+                    usedTexIDMap.Add(cubemapProperty.TexID.Value);
 
             foreach (var tex in TextureDictionary)
             {
@@ -56,7 +60,7 @@ namespace KK_Plugins.MaterialEditor
                     coordinateTextureDictionary.Add(tex.Key, tex.Value.Data);
             }
 
-            if (coordinateRendererPropertyList.Count == 0 && coordinateMaterialNamePropertyList.Count == 0 && coordinateMaterialFloatPropertyList.Count == 0 && coordinateMaterialKeywordPropertyList.Count == 0 && coordinateMaterialColorPropertyList.Count == 0 && coordinateMaterialTexturePropertyList.Count == 0 && coordinateMaterialShaderList.Count == 0 && coordinateMaterialCopyList.Count == 0)
+            if (coordinateRendererPropertyList.Count == 0 && coordinateMaterialNamePropertyList.Count == 0 && coordinateMaterialFloatPropertyList.Count == 0 && coordinateMaterialKeywordPropertyList.Count == 0 && coordinateMaterialColorPropertyList.Count == 0 && coordinateMaterialTexturePropertyList.Count == 0 && coordinateMaterialCubemapPropertyList.Count == 0 && coordinateMaterialShaderList.Count == 0 && coordinateMaterialCopyList.Count == 0)
             {
                 SetCoordinateExtendedData(coordinate, null);
             }
@@ -102,6 +106,11 @@ namespace KK_Plugins.MaterialEditor
                     data.data.Add(nameof(MaterialTexturePropertyList), MessagePackSerializer.Serialize(coordinateMaterialTexturePropertyList));
                 else
                     data.data.Add(nameof(MaterialTexturePropertyList), null);
+
+                if (coordinateMaterialCubemapPropertyList.Count > 0)
+                    data.data.Add(nameof(MaterialCubemapPropertyList), MessagePackSerializer.Serialize(coordinateMaterialCubemapPropertyList));
+                else
+                    data.data.Add(nameof(MaterialCubemapPropertyList), null);
 
                 if (coordinateMaterialShaderList.Count > 0)
                     data.data.Add(nameof(MaterialShaderList), MessagePackSerializer.Serialize(coordinateMaterialShaderList));
@@ -153,6 +162,7 @@ namespace KK_Plugins.MaterialEditor
                 MaterialKeywordPropertyList.Clear();
                 MaterialColorPropertyList.Clear();
                 MaterialTexturePropertyList.Clear();
+                MaterialCubemapPropertyList.Clear();
                 MaterialShaderList.Clear();
                 MaterialCopyList.Clear();
                 AnimationControllerMap.Clear();
@@ -175,6 +185,7 @@ namespace KK_Plugins.MaterialEditor
                     MaterialKeywordPropertyList.RemoveAll(x => x.ObjectType == ObjectType.Character);
                     MaterialColorPropertyList.RemoveAll(x => x.ObjectType == ObjectType.Character);
                     MaterialTexturePropertyList.RemoveAll(x => x.ObjectType == ObjectType.Character);
+                    MaterialCubemapPropertyList.RemoveAll(x => x.ObjectType == ObjectType.Character);
                     MaterialShaderList.RemoveAll(x => x.ObjectType == ObjectType.Character);
                     MaterialCopyList.RemoveAll(x => x.ObjectType == ObjectType.Character);
 
@@ -191,6 +202,7 @@ namespace KK_Plugins.MaterialEditor
                     MaterialKeywordPropertyList.RemoveAll(x => x.ObjectType == ObjectType.Clothing);
                     MaterialColorPropertyList.RemoveAll(x => x.ObjectType == ObjectType.Clothing);
                     MaterialTexturePropertyList.RemoveAll(x => x.ObjectType == ObjectType.Clothing);
+                    MaterialCubemapPropertyList.RemoveAll(x => x.ObjectType == ObjectType.Clothing);
                     MaterialShaderList.RemoveAll(x => x.ObjectType == ObjectType.Clothing);
                     MaterialCopyList.RemoveAll(x => x.ObjectType == ObjectType.Clothing);
                     objectTypesToLoad.Add(ObjectType.Clothing);
@@ -202,6 +214,7 @@ namespace KK_Plugins.MaterialEditor
                     MaterialKeywordPropertyList.RemoveAll(x => x.ObjectType == ObjectType.Accessory);
                     MaterialColorPropertyList.RemoveAll(x => x.ObjectType == ObjectType.Accessory);
                     MaterialTexturePropertyList.RemoveAll(x => x.ObjectType == ObjectType.Accessory);
+                    MaterialCubemapPropertyList.RemoveAll(x => x.ObjectType == ObjectType.Accessory);
                     MaterialShaderList.RemoveAll(x => x.ObjectType == ObjectType.Accessory);
                     MaterialCopyList.RemoveAll(x => x.ObjectType == ObjectType.Accessory);
                     objectTypesToLoad.Add(ObjectType.Accessory);
@@ -217,6 +230,7 @@ namespace KK_Plugins.MaterialEditor
                     MaterialKeywordPropertyList.RemoveAll(x => x.ObjectType == ObjectType.Hair);
                     MaterialColorPropertyList.RemoveAll(x => x.ObjectType == ObjectType.Hair);
                     MaterialTexturePropertyList.RemoveAll(x => x.ObjectType == ObjectType.Hair);
+                    MaterialCubemapPropertyList.RemoveAll(x => x.ObjectType == ObjectType.Hair);
                     MaterialShaderList.RemoveAll(x => x.ObjectType == ObjectType.Hair);
                     MaterialCopyList.RemoveAll(x => x.ObjectType == ObjectType.Hair);
                     objectTypesToLoad.Add(ObjectType.Hair);
@@ -378,30 +392,58 @@ namespace KK_Plugins.MaterialEditor
                             int? texID = null;
                             if (loadedProperty.TexID != null && importDictionary.TryGetValue((int)loadedProperty.TexID, out var importTextID))
                                 texID = importTextID;
-                            if (loadedProperty.TextureKind != ShaderPropertyType.Cubemap)
-                                MEAnimationUtil.RemapTexID(loadedProperty.TexAnimationDef, importDictionary);
+                            MEAnimationUtil.RemapTexID(loadedProperty.TexAnimationDef, importDictionary);
                             int coordinateIndex = loadedProperty.ObjectType == ObjectType.Character ? 0 : loadedProperty.CoordinateIndex;
-                            MaterialTextureProperty newTextureProperty = new MaterialTextureProperty(loadedProperty.ObjectType, coordinateIndex, loadedProperty.Slot, loadedProperty.MaterialName, loadedProperty.Property, texID, loadedProperty.Offset, loadedProperty.OffsetOriginal, loadedProperty.Scale, loadedProperty.ScaleOriginal, loadedProperty.TexAnimationDef, loadedProperty.TextureKind);
-                            if (duplicateSourceController != null)
-                            {
-                                var sourceProperty = duplicateSourceController.MaterialTexturePropertyList.FirstOrDefault(x =>
-                                    x.ObjectType == loadedProperty.ObjectType
-                                    && x.CoordinateIndex == coordinateIndex
-                                    && x.Slot == loadedProperty.Slot
-                                    && x.MaterialName == loadedProperty.MaterialName
-                                    && x.Property == loadedProperty.Property);
-                                GameObject sourceGameObject = null;
-                                if (sourceProperty != null
-                                    && (sourceProperty.ObjectType == ObjectType.Character
-                                        || sourceProperty.ObjectType == ObjectType.Hair
-                                        || sourceProperty.CoordinateIndex == duplicateSourceController.CurrentCoordinateIndex))
-                                    sourceGameObject = duplicateSourceController.FindGameObject(
-                                        sourceProperty.ObjectType,
-                                        sourceProperty.Slot);
-                                newTextureProperty.InheritTextureOriginalSnapshot(sourceProperty, sourceGameObject);
-                            }
+                            MaterialTextureProperty newTextureProperty = new MaterialTextureProperty(loadedProperty.ObjectType, coordinateIndex, loadedProperty.Slot, loadedProperty.MaterialName, loadedProperty.Property, texID, loadedProperty.Offset, loadedProperty.OffsetOriginal, loadedProperty.Scale, loadedProperty.ScaleOriginal, loadedProperty.TexAnimationDef);
                             MaterialTexturePropertyList.Add(newTextureProperty);
                         }
+                    }
+                }
+
+                if (data.data.TryGetValue(nameof(MaterialCubemapPropertyList), out var materialCubemapProperties) && materialCubemapProperties != null)
+                {
+                    var properties = MessagePackSerializer.Deserialize<List<MaterialCubemapProperty>>((byte[])materialCubemapProperties);
+                    for (var i = 0; i < properties.Count; i++)
+                    {
+                        var loadedProperty = properties[i];
+                        if (!objectTypesToLoad.Contains(loadedProperty.ObjectType) || loadedProperty.NullCheck())
+                            continue;
+
+                        int importTexID;
+                        if (!importDictionary.TryGetValue(loadedProperty.TexID.Value, out importTexID))
+                            continue;
+                        var coordinateIndex = loadedProperty.ObjectType == ObjectType.Character
+                            ? 0
+                            : loadedProperty.CoordinateIndex;
+                        var newCubemapProperty = new MaterialCubemapProperty(
+                            loadedProperty.ObjectType,
+                            coordinateIndex,
+                            loadedProperty.Slot,
+                            loadedProperty.MaterialName,
+                            loadedProperty.Property,
+                            importTexID);
+
+                        if (duplicateSourceController != null)
+                        {
+                            var sourceProperty = duplicateSourceController.MaterialCubemapPropertyList.FirstOrDefault(x =>
+                                x.ObjectType == loadedProperty.ObjectType
+                                && x.CoordinateIndex == coordinateIndex
+                                && x.Slot == loadedProperty.Slot
+                                && x.MaterialName == loadedProperty.MaterialName
+                                && x.Property == loadedProperty.Property);
+                            GameObject sourceGameObject = null;
+                            if (sourceProperty != null
+                                && (sourceProperty.ObjectType == ObjectType.Character
+                                    || sourceProperty.ObjectType == ObjectType.Hair
+                                    || sourceProperty.CoordinateIndex == duplicateSourceController.CurrentCoordinateIndex))
+                                sourceGameObject = duplicateSourceController.FindGameObject(
+                                    sourceProperty.ObjectType,
+                                    sourceProperty.Slot);
+                            newCubemapProperty.InheritCubemapOriginalSnapshot(
+                                sourceProperty,
+                                sourceGameObject);
+                        }
+                        MaterialCubemapPropertyList.Add(newCubemapProperty);
                     }
                 }
 
@@ -432,6 +474,7 @@ namespace KK_Plugins.MaterialEditor
                 MaterialKeywordPropertyList.RemoveAll(x => (x.ObjectType == ObjectType.Clothing || x.ObjectType == ObjectType.Accessory) && x.CoordinateIndex == CurrentCoordinateIndex);
                 MaterialColorPropertyList.RemoveAll(x => (x.ObjectType == ObjectType.Clothing || x.ObjectType == ObjectType.Accessory) && x.CoordinateIndex == CurrentCoordinateIndex);
                 MaterialTexturePropertyList.RemoveAll(x => (x.ObjectType == ObjectType.Clothing || x.ObjectType == ObjectType.Accessory) && x.CoordinateIndex == CurrentCoordinateIndex);
+                MaterialCubemapPropertyList.RemoveAll(x => (x.ObjectType == ObjectType.Clothing || x.ObjectType == ObjectType.Accessory) && x.CoordinateIndex == CurrentCoordinateIndex);
                 MaterialShaderList.RemoveAll(x => (x.ObjectType == ObjectType.Clothing || x.ObjectType == ObjectType.Accessory) && x.CoordinateIndex == CurrentCoordinateIndex);
                 MaterialCopyList.RemoveAll(x => (x.ObjectType == ObjectType.Clothing || x.ObjectType == ObjectType.Accessory) && x.CoordinateIndex == CurrentCoordinateIndex);
 
@@ -450,6 +493,7 @@ namespace KK_Plugins.MaterialEditor
                     MaterialKeywordPropertyList.RemoveAll(x => x.ObjectType == ObjectType.Clothing && x.CoordinateIndex == CurrentCoordinateIndex);
                     MaterialColorPropertyList.RemoveAll(x => x.ObjectType == ObjectType.Clothing && x.CoordinateIndex == CurrentCoordinateIndex);
                     MaterialTexturePropertyList.RemoveAll(x => x.ObjectType == ObjectType.Clothing && x.CoordinateIndex == CurrentCoordinateIndex);
+                    MaterialCubemapPropertyList.RemoveAll(x => x.ObjectType == ObjectType.Clothing && x.CoordinateIndex == CurrentCoordinateIndex);
                     MaterialShaderList.RemoveAll(x => x.ObjectType == ObjectType.Clothing && x.CoordinateIndex == CurrentCoordinateIndex);
                     MaterialCopyList.RemoveAll(x => x.ObjectType == ObjectType.Clothing && x.CoordinateIndex == CurrentCoordinateIndex);
                     objectTypesToLoad.Add(ObjectType.Clothing);
@@ -462,6 +506,7 @@ namespace KK_Plugins.MaterialEditor
                     MaterialKeywordPropertyList.RemoveAll(x => x.ObjectType == ObjectType.Accessory && x.CoordinateIndex == CurrentCoordinateIndex);
                     MaterialColorPropertyList.RemoveAll(x => x.ObjectType == ObjectType.Accessory && x.CoordinateIndex == CurrentCoordinateIndex);
                     MaterialTexturePropertyList.RemoveAll(x => x.ObjectType == ObjectType.Accessory && x.CoordinateIndex == CurrentCoordinateIndex);
+                    MaterialCubemapPropertyList.RemoveAll(x => x.ObjectType == ObjectType.Accessory && x.CoordinateIndex == CurrentCoordinateIndex);
                     MaterialShaderList.RemoveAll(x => x.ObjectType == ObjectType.Accessory && x.CoordinateIndex == CurrentCoordinateIndex);
                     MaterialCopyList.RemoveAll(x => x.ObjectType == ObjectType.Accessory && x.CoordinateIndex == CurrentCoordinateIndex);
                     objectTypesToLoad.Add(ObjectType.Accessory);
@@ -559,10 +604,25 @@ namespace KK_Plugins.MaterialEditor
                             int? texID = null;
                             if (loadedProperty.TexID != null)
                                 texID = importDictionary[(int)loadedProperty.TexID];
-                            if (loadedProperty.TextureKind != ShaderPropertyType.Cubemap)
-                                MEAnimationUtil.RemapTexID(loadedProperty.TexAnimationDef, importDictionary);
-                            MaterialTextureProperty newTextureProperty = new MaterialTextureProperty(loadedProperty.ObjectType, CurrentCoordinateIndex, loadedProperty.Slot, loadedProperty.MaterialName, loadedProperty.Property, texID, loadedProperty.Offset, loadedProperty.OffsetOriginal, loadedProperty.Scale, loadedProperty.ScaleOriginal, loadedProperty.TexAnimationDef, loadedProperty.TextureKind);
+                            MEAnimationUtil.RemapTexID(loadedProperty.TexAnimationDef, importDictionary);
+                            MaterialTextureProperty newTextureProperty = new MaterialTextureProperty(loadedProperty.ObjectType, CurrentCoordinateIndex, loadedProperty.Slot, loadedProperty.MaterialName, loadedProperty.Property, texID, loadedProperty.Offset, loadedProperty.OffsetOriginal, loadedProperty.Scale, loadedProperty.ScaleOriginal, loadedProperty.TexAnimationDef);
                             MaterialTexturePropertyList.Add(newTextureProperty);
+                        }
+                    }
+                }
+
+                if (data.data.TryGetValue(nameof(MaterialCubemapPropertyList), out var materialCubemapProperties) && materialCubemapProperties != null)
+                {
+                    var properties = MessagePackSerializer.Deserialize<List<MaterialCubemapProperty>>((byte[])materialCubemapProperties);
+                    for (var i = 0; i < properties.Count; i++)
+                    {
+                        var loadedProperty = properties[i];
+                        if (objectTypesToLoad.Contains(loadedProperty.ObjectType) && !loadedProperty.NullCheck())
+                        {
+                            int? texID = null;
+                            if (loadedProperty.TexID != null)
+                                texID = importDictionary[loadedProperty.TexID.Value];
+                            MaterialCubemapPropertyList.Add(new MaterialCubemapProperty(loadedProperty.ObjectType, CurrentCoordinateIndex, loadedProperty.Slot, loadedProperty.MaterialName, loadedProperty.Property, texID));
                         }
                     }
                 }
@@ -720,11 +780,21 @@ namespace KK_Plugins.MaterialEditor
                 if (Instance.CheckBlacklist(property.MaterialName, property.Property)) continue;
 
                 SetTextureWithProperty(go, property);
-                if (property.TextureKind != ShaderPropertyType.Cubemap)
-                {
-                    SetTextureOffset(go, property.MaterialName, property.Property, property.Offset);
-                    SetTextureScale(go, property.MaterialName, property.Property, property.Scale);
-                }
+                SetTextureOffset(go, property.MaterialName, property.Property, property.Offset);
+                SetTextureScale(go, property.MaterialName, property.Property, property.Scale);
+            }
+            for (var i = 0; i < MaterialCubemapPropertyList.Count; i++)
+            {
+                var property = MaterialCubemapPropertyList[i];
+                if (property.ObjectType == ObjectType.Clothing && !clothes) continue;
+                if (property.ObjectType == ObjectType.Accessory && !accessories) continue;
+                if (property.ObjectType == ObjectType.Hair && !hair) continue;
+                if ((property.ObjectType == ObjectType.Clothing || property.ObjectType == ObjectType.Accessory) && property.CoordinateIndex != CurrentCoordinateIndex) continue;
+                if (property.ObjectType == ObjectType.Character && !body) continue;
+                var go = FindGameObject(property.ObjectType, property.Slot);
+                if (Instance.CheckBlacklist(property.MaterialName, property.Property)) continue;
+
+                SetCubemapWithProperty(go, property);
             }
             for (var i = 0; i < ProjectorPropertyList.Count; i++)
             {

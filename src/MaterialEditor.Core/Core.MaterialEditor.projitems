@@ -13,6 +13,7 @@
     <Compile Include="$(MSBuildThisFileDirectory)Core.MaterialEditor.CharaRepository.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)Core.MaterialEditor.CharaController.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)Core.MaterialEditor.CharaController.Edits.Core.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)Core.MaterialEditor.CharaController.Edits.Cubemap.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)Core.MaterialEditor.CharaController.Edits.Properties.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)Core.MaterialEditor.CharaController.Edits.TextureShader.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)Core.MaterialEditor.CharaController.Persistence.cs" />

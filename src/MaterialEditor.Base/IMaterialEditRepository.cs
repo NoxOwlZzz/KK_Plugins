@@ -38,6 +38,10 @@ namespace MaterialEditorAPI
         void SetMaterialTexture(object data, Material material, string propertyName, string filePath, GameObject gameObject);
         void RemoveMaterialTexture(object data, Material material, string propertyName, GameObject gameObject);
 
+        bool GetMaterialCubemapValueOriginal(object data, Material material, string propertyName, GameObject gameObject);
+        void SetMaterialCubemap(object data, Material material, string propertyName, string filePath, GameObject gameObject);
+        void RemoveMaterialCubemap(object data, Material material, string propertyName, GameObject gameObject);
+
         Vector2? GetMaterialTextureOffsetOriginal(object data, Material material, string propertyName, GameObject gameObject);
         void SetMaterialTextureOffset(object data, Material material, string propertyName, Vector2 value, GameObject gameObject);
         void RemoveMaterialTextureOffset(object data, Material material, string propertyName, GameObject gameObject);

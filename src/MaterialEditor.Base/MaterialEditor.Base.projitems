@@ -20,6 +20,7 @@
     <Compile Include="$(MSBuildThisFileDirectory)MaterialEditorExtension.Registry.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)ConfigurationManagerAttributes.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)CopyContainer.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)CubemapOriginalSnapshot.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)CubemapProjection.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)CubemapConversion.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)Export.Obj.cs" />
@@ -53,6 +54,7 @@
     <Compile Include="$(MSBuildThisFileDirectory)UI\UI.RowModel.Renderer.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)UI\UI.RowModel.MaterialShader.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)UI\UI.RowModel.Texture.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)UI\UI.RowModel.Cubemap.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)UI\UI.RowModel.Properties.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)UI\UI.RowStyle.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)UI\UI.RowViewFactory.cs" />
@@ -69,6 +71,7 @@
     <Compile Include="$(MSBuildThisFileDirectory)UI\UI.RowBinder.Renderer.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)UI\UI.RowBinder.MaterialShader.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)UI\UI.RowBinder.Texture.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)UI\UI.RowBinder.Cubemap.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)UI\UI.RowBinder.Color.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)UI\UI.RowBinder.FloatKeyword.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)UI\UI.RowView.cs" />

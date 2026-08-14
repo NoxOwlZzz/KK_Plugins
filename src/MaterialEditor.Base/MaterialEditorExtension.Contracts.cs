@@ -173,6 +173,8 @@ namespace MaterialEditorAPI
         public const string Boolean = "materialeditor.boolean";
         /// <summary>Texture import/export plus offset and scale.</summary>
         public const string Texture = "materialeditor.texture";
+        /// <summary>Native Cubemap import/export.</summary>
+        public const string Cubemap = "materialeditor.cubemap";
     }
 
     /// <summary>

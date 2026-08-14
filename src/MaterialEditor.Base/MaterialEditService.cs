@@ -99,6 +99,15 @@ namespace MaterialEditorAPI
         internal void RemoveMaterialTexture(object data, Material material, string propertyName, GameObject gameObject) =>
             GetRepository(data).RemoveMaterialTexture(data, material, propertyName, gameObject);
 
+        internal bool GetMaterialCubemapValueOriginal(object data, Material material, string propertyName, GameObject gameObject) =>
+            GetRepository(data).GetMaterialCubemapValueOriginal(data, material, propertyName, gameObject);
+
+        internal void SetMaterialCubemap(object data, Material material, string propertyName, string filePath, GameObject gameObject) =>
+            GetRepository(data).SetMaterialCubemap(data, material, propertyName, filePath, gameObject);
+
+        internal void RemoveMaterialCubemap(object data, Material material, string propertyName, GameObject gameObject) =>
+            GetRepository(data).RemoveMaterialCubemap(data, material, propertyName, gameObject);
+
         internal Vector2? GetMaterialTextureOffsetOriginal(object data, Material material, string propertyName, GameObject gameObject) =>
             GetRepository(data).GetMaterialTextureOffsetOriginal(data, material, propertyName, gameObject);
 
