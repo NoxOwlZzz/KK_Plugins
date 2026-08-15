@@ -10,7 +10,7 @@ namespace MaterialEditorAPI
     /// </summary>
     public static class MaterialEditorExtensionApi
     {
-        private static readonly Version Version = new Version(1, 1, 0);
+        private static readonly Version Version = new Version(1, 2, 0);
 
         /// <summary>Current semantic extension API version.</summary>
         public static Version ApiVersion => Version;
@@ -22,7 +22,11 @@ namespace MaterialEditorAPI
             | MaterialEditorApiCapability.PropertyDescriptorProviders
             | MaterialEditorApiCapability.PropertyEditors
             | MaterialEditorApiCapability.EditServiceFacade
-            | MaterialEditorApiCapability.PropertyTooltips;
+            | MaterialEditorApiCapability.PropertyTooltips
+            | MaterialEditorApiCapability.EnumPropertyEditors
+            | MaterialEditorApiCapability.VectorPropertyEditors
+            | MaterialEditorApiCapability.ConditionalPropertyVisibility
+            | MaterialEditorApiCapability.ToggleFloatPropertyEditors;
 
         /// <summary>Check whether every requested capability is available.</summary>
         public static bool Supports(MaterialEditorApiCapability capabilities) =>
@@ -130,6 +134,9 @@ namespace MaterialEditorAPI
         private static readonly Dictionary<string, EditorRegistration> EditorFactories =
             new Dictionary<string, EditorRegistration>(StringComparer.Ordinal);
         private static long _registrationSequence;
+        private static long _descriptorProviderGeneration;
+        private static long _descriptorProviderSnapshotGeneration = -1L;
+        private static ProviderRegistration[] _descriptorProviderSnapshot;
         private static MaterialEditService _activeEditService;
 
         internal static void SetActiveEditService(MaterialEditService editService)
@@ -299,11 +306,26 @@ namespace MaterialEditorAPI
             {
                 registration.Sequence = _registrationSequence++;
                 DescriptorProviders.Add(registration);
+                _descriptorProviderGeneration++;
+                _descriptorProviderSnapshot = null;
             }
+            MaterialEditorPerformance.Increment(
+                MaterialEditorPerformanceMetric.ProviderRegistrations);
             return new Registration(() =>
             {
+                bool removed;
                 lock (Sync)
-                    DescriptorProviders.Remove(registration);
+                {
+                    removed = DescriptorProviders.Remove(registration);
+                    if (removed)
+                    {
+                        _descriptorProviderGeneration++;
+                        _descriptorProviderSnapshot = null;
+                    }
+                }
+                if (removed)
+                    MaterialEditorPerformance.Increment(
+                        MaterialEditorPerformanceMetric.ProviderRemovals);
             });
         }
 
@@ -348,19 +370,44 @@ namespace MaterialEditorAPI
             MaterialEditorPropertyContext context)
         {
             ProviderRegistration[] providers;
-            lock (Sync)
+            var snapshotBuilt = false;
+            var snapshotSample = 0L;
+            try
             {
-                providers = DescriptorProviders
-                    .OrderByDescending(entry => entry.Priority)
-                    .ThenBy(entry => entry.Sequence)
-                    .ToArray();
+                lock (Sync)
+                {
+                    if (_descriptorProviderSnapshot == null
+                        || _descriptorProviderSnapshotGeneration
+                        != _descriptorProviderGeneration)
+                    {
+                        snapshotBuilt = true;
+                        snapshotSample = MaterialEditorPerformance.Start(
+                            MaterialEditorPerformanceMetric.ProviderSnapshotBuilds);
+                        _descriptorProviderSnapshot = DescriptorProviders
+                            .OrderByDescending(entry => entry.Priority)
+                            .ThenBy(entry => entry.Sequence)
+                            .ToArray();
+                        _descriptorProviderSnapshotGeneration =
+                            _descriptorProviderGeneration;
+                    }
+                    providers = _descriptorProviderSnapshot;
+                }
+            }
+            finally
+            {
+                if (snapshotBuilt)
+                    MaterialEditorPerformance.Stop(
+                        MaterialEditorPerformanceMetric.ProviderSnapshotBuilds,
+                        snapshotSample);
             }
 
             var result = new List<MaterialEditorPropertyDescriptor>();
             var keys = new HashSet<string>(StringComparer.Ordinal);
             foreach (var registration in providers)
             {
-                IEnumerable<MaterialEditorPropertyDescriptor> descriptors;
+                IList<MaterialEditorPropertyDescriptor> descriptors;
+                var providerSample = MaterialEditorPerformance.Start(
+                    MaterialEditorPerformanceMetric.ProviderCalls);
                 try
                 {
                     var provided = registration.Provider(context);
@@ -373,9 +420,18 @@ namespace MaterialEditorAPI
                     LogError($"property descriptor provider '{registration.OwnerId}'", ex);
                     continue;
                 }
+                finally
+                {
+                    MaterialEditorPerformance.Stop(
+                        MaterialEditorPerformanceMetric.ProviderCalls,
+                        providerSample);
+                }
 
                 if (descriptors == null)
                     continue;
+                MaterialEditorPerformance.Increment(
+                    MaterialEditorPerformanceMetric.ProviderEnumeratedDescriptors,
+                    descriptors.Count);
                 foreach (var descriptor in descriptors)
                 {
                     if (descriptor == null)
@@ -392,6 +448,10 @@ namespace MaterialEditorAPI
                         descriptor.PropertyName = descriptor.Id;
                     if (descriptor.Category == null)
                         descriptor.Category = string.Empty;
+                    if (descriptor.Group == null)
+                        descriptor.Group = string.Empty;
+                    if (descriptor.EnumOptions == null)
+                        descriptor.EnumOptions = new List<MaterialEditorEnumOption>();
                     result.Add(descriptor);
                 }
             }
@@ -408,6 +468,8 @@ namespace MaterialEditorAPI
             if (registration == null)
                 return null;
 
+            var providerSample = MaterialEditorPerformance.Start(
+                MaterialEditorPerformanceMetric.EditorFactoryCalls);
             try
             {
                 return registration.Factory(context, descriptor);
@@ -419,15 +481,17 @@ namespace MaterialEditorAPI
                     ex);
                 return null;
             }
+            finally
+            {
+                MaterialEditorPerformance.Stop(
+                    MaterialEditorPerformanceMetric.EditorFactoryCalls,
+                    providerSample);
+            }
         }
 
         internal static bool IsBuiltInEditor(string editorId)
         {
-            return editorId == MaterialEditorPropertyEditorIds.Float
-                   || editorId == MaterialEditorPropertyEditorIds.Color
-                   || editorId == MaterialEditorPropertyEditorIds.Boolean
-                   || editorId == MaterialEditorPropertyEditorIds.Texture
-                   || editorId == MaterialEditorPropertyEditorIds.Cubemap;
+            return ShaderPropertyEditorPolicy.IsKnownEditorId(editorId);
         }
 
         internal static bool HasPropertyEditor(string editorId)

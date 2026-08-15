@@ -28,7 +28,9 @@ namespace MaterialEditorAPI
         /// <summary>Keyword property name.</summary>
         KeywordProperty,
         /// <summary>Cubemap property name.</summary>
-        CubemapProperty
+        CubemapProperty = 10,
+        /// <summary>Vector property name.</summary>
+        VectorProperty = 9
     }
 
     /// <summary>

@@ -18,8 +18,24 @@ namespace KK_Plugins.MaterialEditor
 
         public void Close()
         {
-            Studio.colorPaletteCtrl.visible = false;
-            Studio.colorMenu.winTitle.text = "Color"; //Set as default name.
+            try
+            {
+                Studio.colorPaletteCtrl.visible = false;
+                Studio.colorMenu.winTitle.text = "Color"; //Set as default name.
+            }
+            finally
+            {
+                try
+                {
+                    Studio.colorMenu.updateColorFunc = null;
+                }
+                finally
+                {
+                    _onChanged = null;
+                    _slot = -1;
+                    _materialName = null;
+                }
+            }
         }
 
         public bool IsShowing(string title, object data, string materialName)
@@ -74,7 +90,29 @@ namespace KK_Plugins.MaterialEditor
 
         public void Close()
         {
-            Studio.colorPalette.visible = false;
+            try
+            {
+                var palette = Studio.colorPalette;
+                try
+                {
+                    palette.Close();
+                }
+                finally
+                {
+                    // Close() hides the CanvasGroup but leaves the reactive
+                    // visible flag set. Reset it so a later Setup(...), which
+                    // sets visible=true, emits the transition and reopens it.
+                    palette.visible = false;
+                }
+            }
+            finally
+            {
+                _slot = -1;
+                _materialName = null;
+                _title = null;
+                _onChanged = null;
+                _useAlpha = false;
+            }
         }
 
         public bool IsShowing(string title, object data, string materialName)
@@ -94,7 +132,14 @@ namespace KK_Plugins.MaterialEditor
 
         public void Setup(string title, object data, string materialName, Color color, Action<Color> onChanged, bool useAlpha)
         {
-            Studio.colorPalette.Setup(title, color, onChanged, useAlpha);
+            var palette = Studio.colorPalette;
+            if (!palette.isOpen)
+            {
+                // The palette's native close button also leaves its reactive
+                // visible flag set. Rearm it before asking Setup() to open.
+                palette.visible = false;
+            }
+            palette.Setup(title, color, onChanged, useAlpha);
 
             _slot = DataToSlot(data);
 

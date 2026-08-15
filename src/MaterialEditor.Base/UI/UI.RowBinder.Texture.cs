@@ -1,6 +1,5 @@
 ﻿using UnityEngine;
 using UnityEngine.UI;
-using static UILib.Extensions;
 
 namespace MaterialEditorAPI
 {
@@ -20,6 +19,11 @@ namespace MaterialEditorAPI
                 case RowModel.RowItemType.PropertyCategory:
                     BindCategory((PropertyCategoryRowModel)item, listeners);
                     break;
+                case RowModel.RowItemType.PropertySubcategory:
+                    BindSubcategory(
+                        (PropertySubcategoryRowModel)item,
+                        listeners);
+                    break;
                 case RowModel.RowItemType.TextureProperty:
                     BindTexture((TexturePropertyRowModel)item, listeners);
                     break;
@@ -35,23 +39,53 @@ namespace MaterialEditorAPI
             controls.SetVisible(true);
             ChangedStateBinding.SetLabel(controls.Label, item.LabelText);
             TooltipBinding.Bind(
-                controls.Label.gameObject,
+                controls.HeaderButton.gameObject,
                 item.TooltipText,
-                "Category name");
-            controls.CollapseButton.GetComponentInChildren<Text>().text =
-                item.Collapsed ? FoldGlyphs.Collapsed : FoldGlyphs.Expanded;
-            listeners.Listen(controls.CollapseButton, () =>
-            {
-                item.Collapsed = !item.Collapsed;
-                item.CollapsedOnChange?.Invoke(item.Collapsed);
-            });
+                item.LabelText,
+                controls.Label);
+            controls.CollapseIndicator.text = item.Collapsed
+                ? FoldGlyphs.Collapsed
+                : FoldGlyphs.Expanded;
+            MaterialEditorStyles.SetPropertyCategoryExpanded(
+                controls.HeaderButton,
+                !item.Collapsed);
+            listeners.Listen(
+                controls.HeaderButton,
+                () => item.CollapsedOnChange?.Invoke(!item.Collapsed));
+        }
+
+        private void BindSubcategory(
+            PropertySubcategoryRowModel item,
+            ListenerScope listeners)
+        {
+            var controls = _controls.PropertySubcategory;
+            controls.SetVisible(true);
+            ChangedStateBinding.SetLabel(controls.Label, item.LabelText);
+            TooltipBinding.Bind(
+                controls.HeaderButton.gameObject,
+                item.TooltipText,
+                item.LabelText,
+                controls.Label);
+            controls.CollapseIndicator.text = item.Collapsed
+                ? FoldGlyphs.Collapsed
+                : FoldGlyphs.Expanded;
+            MaterialEditorStyles.SetPropertySubcategoryExpanded(
+                controls.HeaderButton,
+                !item.Collapsed);
+            listeners.Listen(
+                controls.HeaderButton,
+                () => item.CollapsedOnChange?.Invoke(!item.Collapsed));
         }
 
         private void BindTexture(TexturePropertyRowModel item, ListenerScope listeners)
         {
             var controls = _controls.Texture;
             controls.SetVisible(true);
-            TooltipBinding.Bind(controls.Label.gameObject, item.TooltipText);
+            TooltipBinding.Bind(
+                controls.Label.gameObject,
+                item.TooltipText,
+                item.PropertyName,
+                controls.Label);
 
             System.Action refreshState = () =>
                 ChangedStateBinding.Apply(
@@ -65,7 +99,9 @@ namespace MaterialEditorAPI
                 var text = controls.ExportButton.GetComponentInChildren<Text>();
                 controls.ExportButton.enabled = item.Exists;
                 text.text = item.Exists ? "Export Texture" : "No Texture";
-                text.color = item.Exists ? Color.black : Color.gray;
+                text.color = item.Exists
+                    ? MaterialEditorTheme.Colors.PrimaryText
+                    : MaterialEditorTheme.Colors.DisabledText;
             };
 
             controls.ImportButton.GetComponentInChildren<Text>().text = "Import Texture";
@@ -125,7 +161,11 @@ namespace MaterialEditorAPI
         {
             var controls = _controls.OffsetScale;
             controls.SetVisible(true);
-            TooltipBinding.Bind(controls.Label.gameObject, item.TooltipText);
+            TooltipBinding.Bind(
+                controls.Label.gameObject,
+                item.TooltipText,
+                item.PropertyName,
+                controls.Label);
 
             System.Action refresh = () =>
                 ChangedStateBinding.Apply(

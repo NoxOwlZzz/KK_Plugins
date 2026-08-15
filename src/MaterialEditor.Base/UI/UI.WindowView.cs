@@ -1,6 +1,7 @@
 using System;
 using UILib;
 using UnityEngine;
+using UnityEngine.EventSystems;
 using UnityEngine.UI;
 using static MaterialEditorAPI.MaterialEditorPluginBase;
 
@@ -11,12 +12,29 @@ namespace MaterialEditorAPI
         internal Canvas Window { get; private set; }
         internal Image MainPanel { get; private set; }
         internal Image HeaderPanel { get; private set; }
+        internal Image ModePanel { get; private set; }
         internal Text HeaderTitle { get; private set; }
         internal ScrollRect ScrollableUI { get; private set; }
         internal InputField FilterInputField { get; private set; }
         internal Button CategoryNavigatorButton { get; private set; }
         internal Button CollapseAllCategoriesButton { get; private set; }
+        internal Button CollapseAllSectionsButton { get; private set; }
         internal Button ViewListButton { get; private set; }
+        internal Transform HeaderContextSlot => _topBar.HeaderContextSlot;
+
+        private MaterialEditorTopBarView _topBar;
+        private MaterialEditorRowActionMenu _rowActionMenu;
+        private Text _emptyStateText;
+        private Button _rightPanelToggleButton;
+        private Tooltip _rightPanelToggleTooltip;
+        private bool _selectionListsVisible;
+        private bool _renameListVisible;
+        private bool _rightPanelStateInitialized;
+        private MaterialEditorResponsiveLayout _responsiveLayout;
+        private Vector2 _responsiveBaseAnchoredPosition;
+        private bool _hasResponsiveBasePosition;
+        private bool _applyingSettings;
+        private MovableWindow _movableWindow;
 
         internal SelectListPanel RendererList { get; private set; }
         internal SelectListPanel MaterialList { get; private set; }
@@ -30,48 +48,87 @@ namespace MaterialEditorAPI
         internal MaterialEditorWindowView(
             Transform owner,
             string filter,
-            Action<string> refresh,
+            Action<string> filterChanged,
             Action close,
             Action toggleSidePanels,
+            Action hideSidePanels,
             Action toggleAllCategories,
+            Action toggleAllSections,
             Action<CategoryNavigationTarget> navigateToCategory,
             Action<CategoryNavigationTarget> toggleCategory)
         {
             Build(
-                owner, filter, refresh, close, toggleSidePanels,
-                toggleAllCategories,
+                owner, filter, filterChanged, close, toggleSidePanels,
+                hideSidePanels, toggleAllCategories, toggleAllSections,
                 navigateToCategory, toggleCategory);
         }
 
         internal void PrepareForDisplay(string filter)
         {
+            _rowActionMenu?.Close();
             Window.gameObject.SetActive(true);
             ApplySettings();
-            FilterInputField.Set(filter);
+            _topBar.PrepareForDisplay(filter);
         }
 
         internal void ApplySettings()
         {
-            if (Window != null)
-                Window.GetComponent<CanvasScaler>().referenceResolution = new Vector2(1920f / UIScale.Value, 1080f / UIScale.Value);
+            if (_applyingSettings)
+                return;
 
-            if (MainPanel != null)
-                SetMainRectWithMemory(
-                    GetDefaultMainLeftAnchor(),
-                    0.05f,
-                    GetDefaultMainRightAnchor(),
-                    UIHeight.Value * UIScale.Value);
+            _applyingSettings = true;
+            try
+            {
+                _responsiveLayout = CalculateResponsiveLayout();
+                if (Window != null)
+                {
+                    var scaler = Window.GetComponent<CanvasScaler>();
+                    var referenceResolution = new Vector2(
+                        MaterialEditorTheme.Metrics.CanvasReferenceWidth
+                        / _responsiveLayout.UiScale,
+                        MaterialEditorTheme.Metrics.CanvasReferenceHeight
+                        / _responsiveLayout.UiScale);
+                    if (scaler.referenceResolution != referenceResolution)
+                        scaler.referenceResolution = referenceResolution;
+                    _responsiveLayout = CalculateResponsiveLayout();
+                }
 
-            if (RendererList != null)
-                RendererList.Panel.transform.SetRect(1f, 0.5f, 1f, 1f, MaterialEditorLayout.Margin, MaterialEditorLayout.Margin / 2f, MaterialEditorLayout.Margin + UIListWidth.Value);
+                if (MainPanel != null)
+                    SetMainRectWithMemory(
+                        _responsiveLayout.MainLeftAnchor,
+                        _responsiveLayout.MainBottomAnchor,
+                        _responsiveLayout.MainRightAnchor,
+                        _responsiveLayout.MainTopAnchor);
 
-            if (MaterialList != null)
-                MaterialList.Panel.transform.SetRect(1f, 0f, 1f, 0.5f, MaterialEditorLayout.Margin, 0f, MaterialEditorLayout.Margin + UIListWidth.Value, -MaterialEditorLayout.Margin);
+                ApplySelectionPanelLayout();
 
-            if (RenameList != null)
-                RenameList.Panel.transform.SetRect(1f, 0.5f, 1f, 1f, MaterialEditorLayout.Margin, MaterialEditorLayout.Margin / 2f, MaterialEditorLayout.Margin + UIListWidth.Value);
+                if (RenameList != null)
+                    RenameList.Panel.transform.SetRect(
+                        1f,
+                        0.5f,
+                        1f,
+                        1f,
+                        MaterialEditorLayout.Margin,
+                        MaterialEditorLayout.Margin / 2f,
+                        MaterialEditorLayout.Margin
+                        + _responsiveLayout.RightPanelWidth);
 
-            CategoryNavigator?.ApplySettings();
+                ApplyRightPanelToggleLayout();
+
+                if (CategoryNavigator != null)
+                {
+                    CategoryNavigator.ApplySettings();
+                    _topBar?.SetCategoryNavigatorExpanded(
+                        CategoryNavigator.Expanded);
+                }
+
+                VirtualList?.EnsureViewportCapacity(
+                    _responsiveLayout.ViewportHeight);
+            }
+            finally
+            {
+                _applyingSettings = false;
+            }
         }
 
         internal void SetMainRectWithMemory(float anchorLeft, float anchorBottom, float anchorRight, float anchorTop)
@@ -79,137 +136,169 @@ namespace MaterialEditorAPI
             if (MainPanel == null)
                 return;
 
-            var positionMemory = MainPanel.transform.position;
+            var rect = MainPanel.rectTransform;
+            var positionMemory = rect.anchoredPosition;
+            var dragOffset = _hasResponsiveBasePosition
+                ? positionMemory - _responsiveBaseAnchoredPosition
+                : Vector2.zero;
             MainPanel.transform.SetRect(anchorLeft, anchorBottom, anchorRight, anchorTop);
-            if (!Input.GetKey(KeyCode.LeftControl))
-                MainPanel.transform.position = positionMemory;
+            _responsiveBaseAnchoredPosition = rect.anchoredPosition;
+            _hasResponsiveBasePosition = true;
+            if (Input.GetKey(KeyCode.LeftControl))
+                return;
+
+            if (_responsiveLayout != null)
+            {
+                var dragX = dragOffset.x;
+                var dragY = dragOffset.y;
+                _responsiveLayout.ClampDragOffset(
+                    GetWindowDragMode(),
+                    ref dragX,
+                    ref dragY);
+                dragOffset = new Vector2(dragX, dragY);
+            }
+            rect.anchoredPosition =
+                _responsiveBaseAnchoredPosition + dragOffset;
         }
 
-        internal void SetSelectionListsVisible(bool visible)
+        internal void ClampResponsiveDragPosition()
         {
-            RendererList.ToggleVisibility(visible);
-            MaterialList.ToggleVisibility(visible);
+            if (_responsiveLayout == null
+                || MainPanel == null
+                || !_hasResponsiveBasePosition)
+                return;
+
+            var rect = MainPanel.rectTransform;
+            var dragOffset =
+                rect.anchoredPosition - _responsiveBaseAnchoredPosition;
+            var dragX = dragOffset.x;
+            var dragY = dragOffset.y;
+            _responsiveLayout.ClampDragOffset(
+                GetWindowDragMode(),
+                ref dragX,
+                ref dragY);
+            rect.anchoredPosition = _responsiveBaseAnchoredPosition
+                                    + new Vector2(dragX, dragY);
         }
 
-        internal void SetRenameListVisible(bool visible)
+        private static MaterialEditorWindowDragMode GetWindowDragMode()
         {
-            RenameList.ToggleVisibility(visible);
+            if (WindowDragMode != null)
+                return WindowDragMode.Value;
+            return MaterialEditorWindowBoundsPolicy.FromLegacy(
+                PreventDragout != null && PreventDragout.Value);
         }
 
-        internal void SetViewListGlyph(string glyph)
+        private void ClampResponsiveDrag(PointerEventData eventData)
         {
-            ViewListButton.GetComponentInChildren<Text>().text = glyph;
+            ClampResponsiveDragPosition();
+        }
+
+        private void OnCanvasDimensionsChanged()
+        {
+            if (MainPanel != null)
+                ApplySettings();
+        }
+
+        internal void SetRightPanelState(
+            bool selectionListsVisible,
+            bool renameListVisible)
+        {
+            if (_rightPanelStateInitialized
+                && _selectionListsVisible == selectionListsVisible
+                && _renameListVisible == renameListVisible)
+                return;
+
+            _rightPanelStateInitialized = true;
+            _selectionListsVisible = selectionListsVisible;
+            _renameListVisible = renameListVisible;
+            UpdateRightPanelVisibility();
+            MaterialEditorPerformance.Increment(
+                MaterialEditorPerformanceMetric.LayoutInvalidations);
+            ApplySettings();
         }
 
         internal void SetHeaderTitleHorizontalOffset(float offset)
         {
-            if (HeaderTitle == null)
-                return;
+            _topBar.SetHeaderTitleHorizontalOffset(offset);
+        }
 
-            var rect = HeaderTitle.rectTransform;
-            rect.anchoredPosition =
-                new Vector2(offset, rect.anchoredPosition.y);
+        internal void SetHeaderContextControlVisible(bool visible)
+        {
+            _topBar.SetHeaderContextControlVisible(visible);
         }
 
         private void Build(
             Transform owner,
             string filter,
-            Action<string> refresh,
+            Action<string> filterChanged,
             Action close,
             Action toggleSidePanels,
+            Action hideSidePanels,
             Action toggleAllCategories,
+            Action toggleAllSections,
             Action<CategoryNavigationTarget> navigateToCategory,
             Action<CategoryNavigationTarget> toggleCategory)
         {
             Window = MaterialEditorControlFactory.CreateNewUISystem("MaterialEditorCanvas");
-            Window.GetComponent<CanvasScaler>().referenceResolution = new Vector2(1920f / UIScale.Value, 1080f / UIScale.Value);
+            _responsiveLayout = CalculateResponsiveLayout();
+            Window.GetComponent<CanvasScaler>().referenceResolution = new Vector2(
+                MaterialEditorTheme.Metrics.CanvasReferenceWidth
+                / _responsiveLayout.UiScale,
+                MaterialEditorTheme.Metrics.CanvasReferenceHeight
+                / _responsiveLayout.UiScale);
             Window.gameObject.transform.SetParent(owner);
             Window.sortingOrder = 1000;
+            Window.gameObject
+                .AddComponent<MaterialEditorResponsiveCanvasWatcher>()
+                .Initialize(OnCanvasDimensionsChanged);
 
-            MainPanel = MaterialEditorControlFactory.CreatePanel("Panel", Window.transform, MaterialEditorPanelRole.Main);
+            MainPanel = MaterialEditorControlFactory.CreatePanel(
+                "Panel",
+                Window.transform,
+                MaterialEditorPanelRole.CenterPanel);
             MainPanel.transform.SetRect(
-                GetDefaultMainLeftAnchor(),
-                0.05f,
-                GetDefaultMainRightAnchor(),
-                UIHeight.Value * UIScale.Value);
-            UIUtility.AddOutlineToObject(MainPanel.transform, Color.black);
+                _responsiveLayout.MainLeftAnchor,
+                _responsiveLayout.MainBottomAnchor,
+                _responsiveLayout.MainRightAnchor,
+                _responsiveLayout.MainTopAnchor);
+            UIUtility.AddOutlineToObject(
+                MainPanel.transform,
+                MaterialEditorTheme.Colors.Outline);
 
             TooltipManager.Init(Window.transform);
+            _rowActionMenu = Window.gameObject
+                .AddComponent<MaterialEditorRowActionMenu>();
 
-            HeaderPanel = MaterialEditorControlFactory.CreatePanel("Draggable", MainPanel.transform, MaterialEditorPanelRole.Header);
-            HeaderPanel.transform.SetRect(0f, 1f, 1f, 1f, 0f, -MaterialEditorLayout.HeaderHeight);
-            UIUtility.MakeObjectDraggable(HeaderPanel.rectTransform, MainPanel.rectTransform, PreventDragout.Value);
-
-            HeaderTitle = MaterialEditorControlFactory.CreateText(
-                "Nametext",
-                HeaderPanel.transform,
-                "Material Editor",
-                MaterialEditorTextRole.Title);
-            HeaderTitle.transform.SetRect();
-
-            CategoryNavigatorButton = MaterialEditorControlFactory.CreateButton(
-                "CategoryNavigatorButton",
-                HeaderPanel.transform,
-                ">");
-            CategoryNavigatorButton.transform.SetRect(
-                0f, 0f, 0f, 1f,
-                1f, 1f, 20f, -1f);
-            CategoryNavigatorButton.onClick.AddListener(ToggleCategoryNavigator);
-            TooltipManager.AddTooltip(
-                CategoryNavigatorButton.gameObject,
-                "Show or hide the category navigator");
-
-            FilterInputField = MaterialEditorControlFactory.CreateInputField("Filter", HeaderPanel.transform, "Filter");
-            FilterInputField.text = filter;
-            FilterInputField.transform.SetRect(
-                0f, 0f, 0f, 1f,
-                21f, 1f, 100f, -1f);
-            FilterInputField.onValueChanged.AddListener(value => refresh(value));
-            TooltipManager.AddTooltip(FilterInputField.gameObject, @"Filter visible items in the window.
-
-- Searches for renderers, materials and projectors
-- Searches starting with '_' will search for material properties
-- Combine multiple statements using a comma (an entry just has to match any of the search terms)
-- Use a '*' as a wildcard for any amount of characters (e.g. ""_pattern*1"" will find the ""PatternMask1"" property)
-- Use a '?' as a wildcard for a single character");
-
-            var persistSearch = MaterialEditorControlFactory.CreateToggle("PersistSearch", HeaderPanel.transform, "");
-            persistSearch.transform.SetRect(0f, 1f, 1f, 0.5f, 100f, 0f, 0f, 10f);
-            persistSearch.Set(PersistFilter.Value);
-            persistSearch.gameObject.GetComponentInChildren<CanvasRenderer>(true).transform.SetRect(0f, 1f, 0f, 0f, 0f, -19f, 19f, -1f);
-            persistSearch.onValueChanged.AddListener(value => PersistFilter.Value = value);
-            TooltipManager.AddTooltip(persistSearch.gameObject, "Keeps the filter between instances of this window instead of resetting them");
-
-            var persistSearchText = MaterialEditorControlFactory.CreateText(
-                "PersistSearchText",
-                HeaderPanel.transform,
-                "Persist search",
-                MaterialEditorTextRole.Label);
-            persistSearchText.transform.SetRect(0f, 0.15f, 1f, 0.85f, 120f, 0f, 0f, 0f);
-
-            CollapseAllCategoriesButton = MaterialEditorControlFactory.CreateButton(
-                "CollapseAllCategoriesButton",
-                HeaderPanel.transform,
-                FoldGlyphs.AllCollapsed);
-            CollapseAllCategoriesButton.transform.SetRect(
-                1f, 0f, 1f, 1f,
-                -60f, 1f, -41f, -1f);
-            CollapseAllCategoriesButton.onClick.AddListener(
-                () => toggleAllCategories());
-            TooltipManager.AddTooltip(
-                CollapseAllCategoriesButton.gameObject,
-                "Expand or collapse all property categories for every shader in the current item");
-
-            var closeButton = MaterialEditorControlFactory.CreateButton("CloseButton", HeaderPanel.transform, "");
-            closeButton.transform.SetRect(1f, 0f, 1f, 1f, -40f, 1f, -21f, -1f);
-            closeButton.onClick.AddListener(() => close());
-            CreateCloseGlyph(closeButton.transform);
-
-            ViewListButton = MaterialEditorControlFactory.CreateButton("ViewListButton", HeaderPanel.transform, ">");
-            ViewListButton.transform.SetRect(1f, 0f, 1f, 1f, -20f, 1f, -1f, -1f);
-            ViewListButton.onClick.AddListener(() => toggleSidePanels());
-
-            MaterialEditorStyles.ApplyTypography(HeaderPanel.gameObject);
+            _topBar = new MaterialEditorTopBarView(
+                MainPanel.transform,
+                Window.transform,
+                filter,
+                filterChanged,
+                close,
+                toggleSidePanels,
+                toggleAllCategories,
+                toggleAllSections,
+                ToggleCategoryNavigator,
+                _rowActionMenu.Close);
+            _rowActionMenu.Initialize(
+                Window.transform,
+                _topBar.CloseGlobalMenu);
+            HeaderPanel = _topBar.HeaderPanel;
+            ModePanel = _topBar.ModePanel;
+            HeaderTitle = _topBar.HeaderTitle;
+            FilterInputField = _topBar.FilterInputField;
+            CategoryNavigatorButton = _topBar.CategoryNavigatorButton;
+            CollapseAllCategoriesButton =
+                _topBar.CollapseAllCategoriesButton;
+            CollapseAllSectionsButton =
+                _topBar.CollapseAllSectionsButton;
+            ViewListButton = _topBar.ViewListButton;
+            _movableWindow = UIUtility.MakeObjectDraggable(
+                HeaderPanel.rectTransform,
+                MainPanel.rectTransform,
+                false);
+            _movableWindow.OnDragEvent += ClampResponsiveDrag;
 
             ScrollableUI = MaterialEditorControlFactory.CreateScrollView("MaterialEditorWindow", MainPanel.transform);
             ScrollableUI.transform.SetRect(
@@ -220,7 +309,7 @@ namespace MaterialEditorAPI
                 MaterialEditorLayout.Margin,
                 MaterialEditorLayout.Margin,
                 -MaterialEditorLayout.Margin,
-                -MaterialEditorLayout.HeaderHeight
+                -MaterialEditorTheme.Metrics.TopBarHeight
                 - MaterialEditorLayout.Margin / 2f);
             ScrollableUI.gameObject.AddComponent<Mask>();
             ScrollableUI.content.gameObject.AddComponent<VerticalLayoutGroup>();
@@ -229,6 +318,24 @@ namespace MaterialEditorAPI
             ScrollableUI.viewport.offsetMax = new Vector2(MaterialEditorLayout.ScrollbarOffset, 0f);
             ScrollableUI.movementType = ScrollRect.MovementType.Clamped;
             MaterialEditorStyles.ApplyScrollView(ScrollableUI);
+            _rowActionMenu.BindScrollRect(ScrollableUI);
+
+            _emptyStateText = MaterialEditorControlFactory.CreateText(
+                "MaterialEditorEmptyState",
+                ScrollableUI.viewport,
+                string.Empty,
+                MaterialEditorTextRole.Label);
+            _emptyStateText.transform.SetRect(0f, 0f, 1f, 1f);
+            _emptyStateText.alignment = TextAnchor.MiddleCenter;
+            _emptyStateText.resizeTextForBestFit = true;
+            _emptyStateText.resizeTextMinSize =
+                MaterialEditorTheme.Typography.PropertyLabelMinimumFontSize;
+            _emptyStateText.resizeTextMaxSize =
+                MaterialEditorTheme.Typography.PrimaryFontSize;
+            _emptyStateText.horizontalOverflow = HorizontalWrapMode.Wrap;
+            _emptyStateText.verticalOverflow = VerticalWrapMode.Truncate;
+            _emptyStateText.raycastTarget = false;
+            _emptyStateText.gameObject.SetActive(false);
 
             var template = RowViewFactory.CreateTemplate(ScrollableUI.content.transform);
             VirtualList = ScrollableUI.gameObject.AddComponent<VirtualList>();
@@ -238,23 +345,63 @@ namespace MaterialEditorAPI
 
             CategoryNavigator = new CategoryNavigatorView(
                 MainPanel.transform,
+                VirtualList.ScrollRect.content,
                 navigateToCategory,
-                toggleCategory);
+                toggleCategory,
+                SetCategoryNavigatorGlyph);
             SetCategoryNavigatorGlyph(CategoryNavigator.Expanded);
-            VirtualList.ViewportAnchorIndexChanged += CategoryNavigator.SetViewportAnchor;
+            VirtualList.ViewportAnchorIndexChanged += rowIndex =>
+            {
+                CategoryNavigator.SetViewportAnchor(
+                    rowIndex,
+                    VirtualList.ViewportAnchorIsProgrammatic);
+            };
 
-            BuildSelectionPanels();
+            BuildSelectionPanels(toggleSidePanels, hideSidePanels);
             BuildRenamePanel();
             ApplySettings();
         }
 
-        internal void SetPresentation(MaterialEditorPresentation presentation)
+        internal void SetPresentation(
+            MaterialEditorPresentation presentation,
+            bool deferCategoryAnchor = false)
         {
-            CategoryNavigator.SetPresentation(presentation);
-            CollapseAllCategoriesButton.GetComponentInChildren<Text>().text =
-                presentation != null && presentation.AllCategoriesCollapsed
-                    ? FoldGlyphs.AllExpanded
-                    : FoldGlyphs.AllCollapsed;
+            CategoryNavigator.SetPresentation(
+                presentation,
+                deferCategoryAnchor);
+            _topBar.SetPresentation(presentation);
+            SetEmptyState(
+                presentation == null
+                    ? null
+                    : MaterialEditorEmptyState.ForPresentation(
+                        presentation.Rows.Count,
+                        presentation.HasActiveFilter));
+        }
+
+        internal void RefreshSectionCollapseState(
+            MaterialEditorPresentation presentation)
+        {
+            _topBar.RefreshSectionCollapseState(presentation);
+        }
+
+        internal void ReleasePresentation()
+        {
+            _rowActionMenu.Close();
+            CategoryNavigator.ReleasePresentation();
+            _topBar.ReleasePresentation();
+            SetEmptyState(null);
+        }
+
+        private void SetEmptyState(string text)
+        {
+            if (_emptyStateText == null)
+                return;
+
+            var visible = !string.IsNullOrEmpty(text);
+            if (_emptyStateText.text != (text ?? string.Empty))
+                _emptyStateText.text = text ?? string.Empty;
+            if (_emptyStateText.gameObject.activeSelf != visible)
+                _emptyStateText.gameObject.SetActive(visible);
         }
 
         private void ToggleCategoryNavigator()
@@ -262,22 +409,97 @@ namespace MaterialEditorAPI
             if (CategoryNavigator == null)
                 return;
 
-            SetCategoryNavigatorGlyph(CategoryNavigator.ToggleExpanded());
+            CategoryNavigator.ToggleExpanded();
         }
 
         private void SetCategoryNavigatorGlyph(bool expanded)
         {
-            CategoryNavigatorButton.GetComponentInChildren<Text>().text =
-                expanded ? ">" : "<";
+            _topBar.SetCategoryNavigatorExpanded(expanded);
+            ApplySettings();
         }
 
-        private void BuildSelectionPanels()
+        private void BuildSelectionPanels(
+            Action toggleSidePanels,
+            Action hideSidePanels)
         {
-            RendererList = new SelectListPanel(MainPanel.transform, "RendererList", "Renderers");
+            RendererList = new SelectListPanel(
+                MainPanel.transform,
+                "RendererList",
+                "Renderers",
+                "No renderers",
+                true,
+                expanded => ApplySelectionPanelLayout());
             RendererList.ToggleVisibility(false);
 
-            MaterialList = new SelectListPanel(MainPanel.transform, "MaterialList", "Materials");
+            var rendererTitle = RendererList.Panel.transform.Find(
+                "RendererListTitle");
+            if (rendererTitle != null)
+            {
+                rendererTitle.SetRect(
+                    0f,
+                    1f,
+                    1f,
+                    1f,
+                    MaterialEditorTheme.Metrics.SelectionPanelHeaderHeight
+                    + MaterialEditorTheme.Spacing.Control,
+                    -MaterialEditorTheme.Metrics.SelectionPanelHeaderHeight,
+                    -MaterialEditorTheme.Metrics.SelectionPanelHeaderHeight
+                    - MaterialEditorTheme.Spacing.SelectionPanelContentInset,
+                    0f);
+            }
+
+            MaterialList = new SelectListPanel(
+                MainPanel.transform,
+                "MaterialList",
+                "Materials",
+                "No materials",
+                true,
+                expanded => ApplySelectionPanelLayout());
             MaterialList.ToggleVisibility(false);
+
+            _rightPanelToggleButton =
+                MaterialEditorControlFactory.CreateButton(
+                    "MaterialEditorSelectionListsToggleHorizontal",
+                    MainPanel.transform,
+                    MaterialEditorTheme.Glyphs.ChevronLeft);
+            _rightPanelToggleButton.onClick.AddListener(
+                () =>
+                {
+                    if (_selectionListsVisible || _renameListVisible)
+                        hideSidePanels();
+                    else
+                        toggleSidePanels();
+                });
+            _rightPanelToggleTooltip = TooltipManager.AddTooltip(
+                _rightPanelToggleButton.gameObject,
+                "Show Renderers and Materials");
+        }
+
+        private void ApplyRightPanelToggleLayout()
+        {
+            if (_rightPanelToggleButton == null)
+                return;
+
+            var expanded = _selectionListsVisible || _renameListVisible;
+            var width = expanded
+                ? MaterialEditorTheme.Metrics.SelectionPanelHeaderHeight
+                : MaterialEditorTheme.Metrics.SelectionPanelCollapsedWidth;
+            var right = expanded
+                ? MaterialEditorLayout.Margin
+                  + (_responsiveLayout == null
+                      ? MaterialEditorTheme.Metrics.SidePanelDefaultWidth
+                      : _responsiveLayout.RightPanelWidth)
+                : MaterialEditorTheme.Metrics.SelectionPanelCollapsedWidth;
+            _rightPanelToggleButton.transform.SetRect(
+                1f,
+                1f,
+                1f,
+                1f,
+                right - width,
+                -MaterialEditorTheme.Metrics.SelectionPanelHeaderHeight,
+                right,
+                0f);
+            _rightPanelToggleButton.transform.SetAsLastSibling();
         }
 
         private void BuildRenamePanel()
@@ -302,32 +524,126 @@ namespace MaterialEditorAPI
             MaterialEditorStyles.ApplyTypography(RenameList.Panel.gameObject);
         }
 
-        private static void CreateCloseGlyph(Transform parent)
+        private void ApplySelectionPanelLayout()
         {
-            var firstLine = MaterialEditorControlFactory.CreatePanel("x1", parent);
-            firstLine.transform.SetRect(0f, 0f, 1f, 1f, 8f, 0f, -8f);
-            firstLine.rectTransform.eulerAngles = new Vector3(0f, 0f, 45f);
-            firstLine.color = Color.black;
+            if (RendererList == null || MaterialList == null)
+                return;
 
-            var secondLine = MaterialEditorControlFactory.CreatePanel("x2", parent);
-            secondLine.transform.SetRect(0f, 0f, 1f, 1f, 8f, 0f, -8f);
-            secondLine.rectTransform.eulerAngles = new Vector3(0f, 0f, -45f);
-            secondLine.color = Color.black;
+            var left = MaterialEditorLayout.Margin;
+            var right = MaterialEditorLayout.Margin
+                        + (_responsiveLayout == null
+                            ? MaterialEditorTheme.Metrics.SidePanelDefaultWidth
+                            : _responsiveLayout.RightPanelWidth);
+            var gap = MaterialEditorLayout.Margin;
+            var headerHeight =
+                MaterialEditorTheme.Metrics.SelectionPanelHeaderHeight;
+
+            if (RendererList.Expanded && MaterialList.Expanded)
+            {
+                RendererList.Panel.transform.SetRect(
+                    1f, 0.5f, 1f, 1f,
+                    left, gap / 2f, right, 0f);
+                MaterialList.Panel.transform.SetRect(
+                    1f, 0f, 1f, 0.5f,
+                    left, 0f, right, -gap / 2f);
+                return;
+            }
+
+            if (!RendererList.Expanded && MaterialList.Expanded)
+            {
+                RendererList.Panel.transform.SetRect(
+                    1f, 1f, 1f, 1f,
+                    left, -headerHeight, right, 0f);
+                MaterialList.Panel.transform.SetRect(
+                    1f, 0f, 1f, 1f,
+                    left, 0f, right, -headerHeight);
+                return;
+            }
+
+            if (RendererList.Expanded && !MaterialList.Expanded)
+            {
+                RendererList.Panel.transform.SetRect(
+                    1f, 0f, 1f, 1f,
+                    left, headerHeight, right, 0f);
+                MaterialList.Panel.transform.SetRect(
+                    1f, 0f, 1f, 0f,
+                    left, 0f, right, headerHeight);
+                return;
+            }
+
+            RendererList.Panel.transform.SetRect(
+                1f, 1f, 1f, 1f,
+                left, -headerHeight, right, 0f);
+            MaterialList.Panel.transform.SetRect(
+                1f, 1f, 1f, 1f,
+                left, -2f * headerHeight, right, -headerHeight);
         }
 
-        private static float GetDefaultMainLeftAnchor()
+        private void UpdateRightPanelVisibility()
         {
-            var canvasWidth = 1920f / UIScale.Value;
-            var navigatorSpace =
-                MaterialEditorLayout.CategoryNavigatorWidth
-                + MaterialEditorLayout.Margin * 2f;
-            return Mathf.Max(0.05f, navigatorSpace / canvasWidth);
+            if (RendererList == null || MaterialList == null || RenameList == null)
+                return;
+
+            var showSelectionLists =
+                _selectionListsVisible && !_renameListVisible;
+            RendererList.ToggleVisibility(showSelectionLists);
+            MaterialList.ToggleVisibility(showSelectionLists);
+            RenameList.ToggleVisibility(_renameListVisible);
+            if (_rightPanelToggleButton != null)
+            {
+                var expanded = showSelectionLists || _renameListVisible;
+                var toggleLabel = _rightPanelToggleButton
+                    .GetComponentInChildren<Text>();
+                if (toggleLabel != null)
+                {
+                    toggleLabel.text = expanded
+                        ? MaterialEditorTheme.Glyphs.ChevronRight
+                        : MaterialEditorTheme.Glyphs.ChevronLeft;
+                }
+                _rightPanelToggleTooltip?.SetStandardTooltipText(
+                    expanded
+                        ? "Hide Renderers and Materials"
+                        : "Show Renderers and Materials");
+                _rightPanelToggleButton.gameObject.SetActive(true);
+            }
+
+            if (ViewListButton == null)
+                return;
+
+            var label = ViewListButton.GetComponentInChildren<Text>();
+            if (label == null)
+                return;
+            label.text = _renameListVisible
+                ? "Back to Renderers and Materials"
+                : (_selectionListsVisible
+                    ? "Hide Renderers and Materials"
+                    : "Show Renderers and Materials");
         }
 
-        private static float GetDefaultMainRightAnchor()
+        private MaterialEditorResponsiveLayout CalculateResponsiveLayout()
         {
-            var left = GetDefaultMainLeftAnchor();
-            return UIWidth.Value * UIScale.Value + left - 0.05f;
+            var leftState = CategoryNavigator == null
+                ? MaterialEditorResponsiveSideState.Hidden
+                : (CategoryNavigator.Expanded
+                    ? MaterialEditorResponsiveSideState.Expanded
+                    : MaterialEditorResponsiveSideState.Collapsed);
+            var rightState =
+                MaterialEditorResponsiveLayoutPolicy.GetRightSideState(
+                    _selectionListsVisible,
+                    _renameListVisible);
+            return MaterialEditorResponsiveLayoutPolicy.Calculate(
+                UIScale.Value,
+                UIWidth.Value,
+                UIHeight.Value,
+                UIListWidth.Value,
+                leftState,
+                rightState,
+                Window == null
+                    ? float.NaN
+                    : ((RectTransform)Window.transform).rect.width,
+                Window == null
+                    ? float.NaN
+                    : ((RectTransform)Window.transform).rect.height);
         }
     }
 }

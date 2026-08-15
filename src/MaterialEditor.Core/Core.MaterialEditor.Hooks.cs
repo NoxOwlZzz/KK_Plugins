@@ -493,24 +493,37 @@ namespace KK_Plugins.MaterialEditor
         [HarmonyPostfix, HarmonyPatch(typeof(ChaControl), nameof(ChaControl.UpdateSiru))]
         private static void ChaControl_UpdateSiru_Postfix(ChaControl __instance)
         {
-            if (__instance.customMatFace && __instance.rendFace && __instance.rendFace.sharedMaterials.Length > 1)
+            if (__instance.customMatFace && __instance.rendFace)
             {
-                for (int i = 0; i < __instance.rendFace.sharedMaterials.Length; i++)
+                var faceMaterials = __instance.rendFace.sharedMaterials;
+                if (faceMaterials.Length > 1)
                 {
-                    var mat = __instance.rendFace.sharedMaterials[i];
-                    mat.SetFloat("_liquidface", __instance.customMatFace.GetFloat("_liquidface"));
+                    var liquidFace = __instance.customMatFace.GetFloat("_liquidface");
+                    for (int i = 0; i < faceMaterials.Length; i++)
+                    {
+                        var mat = faceMaterials[i];
+                        mat.SetFloat("_liquidface", liquidFace);
+                    }
                 }
             }
 
-            if (__instance.customMatBody && __instance.rendBody && __instance.rendBody.sharedMaterials.Length > 1)
+            if (__instance.customMatBody && __instance.rendBody)
             {
-                for (int i = 0; i < __instance.rendBody.sharedMaterials.Length; i++)
+                var bodyMaterials = __instance.rendBody.sharedMaterials;
+                if (bodyMaterials.Length > 1)
                 {
-                    var mat = __instance.rendBody.sharedMaterials[i];
-                    mat.SetFloat("_liquidftop", __instance.customMatBody.GetFloat("_liquidftop"));
-                    mat.SetFloat("_liquidfbot", __instance.customMatBody.GetFloat("_liquidfbot"));
-                    mat.SetFloat("_liquidbtop", __instance.customMatBody.GetFloat("_liquidbtop"));
-                    mat.SetFloat("_liquidbbot", __instance.customMatBody.GetFloat("_liquidbbot"));
+                    var liquidFrontTop = __instance.customMatBody.GetFloat("_liquidftop");
+                    var liquidFrontBottom = __instance.customMatBody.GetFloat("_liquidfbot");
+                    var liquidBackTop = __instance.customMatBody.GetFloat("_liquidbtop");
+                    var liquidBackBottom = __instance.customMatBody.GetFloat("_liquidbbot");
+                    for (int i = 0; i < bodyMaterials.Length; i++)
+                    {
+                        var mat = bodyMaterials[i];
+                        mat.SetFloat("_liquidftop", liquidFrontTop);
+                        mat.SetFloat("_liquidfbot", liquidFrontBottom);
+                        mat.SetFloat("_liquidbtop", liquidBackTop);
+                        mat.SetFloat("_liquidbbot", liquidBackBottom);
+                    }
                 }
             }
         }
@@ -525,18 +538,21 @@ namespace KK_Plugins.MaterialEditor
         [HarmonyPostfix, HarmonyPatch(typeof(EyeLookMaterialControll), nameof(EyeLookMaterialControll.Update))]
         private static void EyeLookMaterialControll_Update_Postfix(EyeLookMaterialControll __instance, Material ____material)
         {
-            if (__instance._renderer.sharedMaterials.Length == 1)
+            var materials = __instance._renderer.sharedMaterials;
+            if (materials.Length <= 1)
                 return;
 
             for (int i = 0; i < __instance.texStates.Length; i++)
             {
                 var texState = __instance.texStates[i];
+                var offset = ____material.GetTextureOffset(texState.texID);
+                var scale = ____material.GetTextureScale(texState.texID);
 
-                for (int j = 0; j < __instance._renderer.sharedMaterials.Length; j++)
+                for (int j = 0; j < materials.Length; j++)
                 {
-                    var mat = __instance._renderer.sharedMaterials[j];
-                    mat.SetTextureOffset(texState.texID, ____material.GetTextureOffset(texState.texID));
-                    mat.SetTextureScale(texState.texID, ____material.GetTextureScale(texState.texID));
+                    var mat = materials[j];
+                    mat.SetTextureOffset(texState.texID, offset);
+                    mat.SetTextureScale(texState.texID, scale);
                 }
             }
         }

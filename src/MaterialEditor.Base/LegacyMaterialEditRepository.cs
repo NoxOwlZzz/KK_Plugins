@@ -97,6 +97,31 @@ namespace MaterialEditorAPI
         public void RemoveMaterialColorProperty(object data, Material material, string propertyName, GameObject gameObject) =>
             _ui.RemoveMaterialColorProperty(data, material, propertyName, gameObject);
 
+        // Deliberate compatibility bridge: MaterialEditorUI predates native vector persistence, but
+        // Color and Vector4 are both lossless four-float storage. Legacy implementations persist the
+        // value under the color key; repository-backed builds migrate that key in memory when schema
+        // metadata identifies the property as Vector. SetVector is applied last to preserve runtime
+        // vector semantics, while old MaterialEditorUI subclasses remain binary compatible.
+        public Vector4? GetMaterialVectorPropertyValueOriginal(object data, Material material, string propertyName, GameObject gameObject)
+        {
+            var value = _ui.GetMaterialColorPropertyValueOriginal(data, material, propertyName, gameObject);
+            return value == null
+                ? (Vector4?)null
+                : new Vector4(value.Value.r, value.Value.g, value.Value.b, value.Value.a);
+        }
+        public void SetMaterialVectorProperty(object data, Material material, string propertyName, Vector4 value, GameObject gameObject)
+        {
+            _ui.SetMaterialColorProperty(data, material, propertyName, new Color(value.x, value.y, value.z, value.w), gameObject);
+            SetVector(gameObject, material.NameFormatted(), propertyName, value);
+        }
+        public void RemoveMaterialVectorProperty(object data, Material material, string propertyName, GameObject gameObject)
+        {
+            var original = GetMaterialVectorPropertyValueOriginal(data, material, propertyName, gameObject);
+            _ui.RemoveMaterialColorProperty(data, material, propertyName, gameObject);
+            if (original != null)
+                SetVector(gameObject, material.NameFormatted(), propertyName, original.Value);
+        }
+
         public float? GetMaterialFloatPropertyValueOriginal(object data, Material material, string propertyName, GameObject gameObject) =>
             _ui.GetMaterialFloatPropertyValueOriginal(data, material, propertyName, gameObject);
         public void SetMaterialFloatProperty(object data, Material material, string propertyName, float value, GameObject gameObject) =>

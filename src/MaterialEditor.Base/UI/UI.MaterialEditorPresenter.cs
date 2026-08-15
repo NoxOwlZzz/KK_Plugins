@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Text.RegularExpressions;
 using UnityEngine;
 using static MaterialEditorAPI.MaterialAPI;
 using static MaterialEditorAPI.MaterialEditorPluginBase;
@@ -36,24 +35,13 @@ namespace MaterialEditorAPI
         Color value,
         Action<Color> onChanged);
 
-    internal static class MaterialEditorFilter
-    {
-        internal static bool Matches(string text, string filter)
-        {
-            string regex =
-                "^.*"
-                + Regex.Escape(filter).Replace("\\?", ".").Replace("\\*", ".*")
-                + ".*$";
-            return Regex.IsMatch(text, regex, RegexOptions.IgnoreCase);
-        }
-    }
-
     internal sealed class MaterialEditorPresentationActions
     {
         internal Action<GameObject, object, string> Refresh { get; set; }
         internal Action<GameObject, object, string> RefreshDeferred { get; set; }
-        internal Action<GameObject, object, string> RefreshConditionsDeferred { get; set; }
+        internal Action<MaterialConditionInvalidationHandle> RequestCondition { get; set; }
         internal Action<GameObject, object, IEnumerable<Renderer>> RefreshMaterialSelection { get; set; }
+        internal Action<RendererSectionPresentation, bool> SetRendererCollapsed { get; set; }
         internal Action<GameObject, Material, object> ShowRename { get; set; }
         internal Action<Renderer> ExportUv { get; set; }
         internal Action<Renderer> RequestObjExport { get; set; }
@@ -78,6 +66,7 @@ namespace MaterialEditorAPI
         private readonly MaterialEditorSessionState _session;
         private readonly MaterialEditorPresentationActions _actions;
         private readonly MaterialSectionPresenter _materialSections;
+        private int _nextPresentationToken;
 
         internal MaterialEditorPresenter(
             MaterialEditService editService,
@@ -94,114 +83,144 @@ namespace MaterialEditorAPI
             GameObject gameObject,
             object data,
             string filter,
-            IEnumerable<Renderer> rendererSource,
-            IEnumerable<Projector> projectorSource)
+            IList<Renderer> rendererSource,
+            IList<Projector> projectorSource)
         {
-            var allRenderers = rendererSource.ToList();
-            var allProjectors = projectorSource.ToList();
-            var rendererFilter = new List<string>();
-            var propertyFilter = new List<string>();
-            ParseFilter(filter, rendererFilter, propertyFilter);
-
-            var renderers = SelectRenderers(allRenderers, rendererFilter);
-            var projectors = SelectProjectors(allProjectors, rendererFilter);
-            var materials = SelectMaterials(gameObject, allRenderers, renderers, rendererFilter);
-            var presentation = new MaterialEditorPresentation();
-            var rows = presentation.Rows;
-
-            foreach (var renderer in renderers)
-                AddRendererRows(rows, gameObject, data, renderer);
-
-            foreach (var material in materials.Values)
+            var rebuildSample = MaterialEditorPerformance.Start(
+                MaterialEditorPerformanceMetric.PresentationRebuild);
+            try
             {
-                _materialSections.AddRows(new MaterialSectionContext(
-                    _editService,
-                    presentation,
-                    gameObject,
-                    data,
-                    filter,
-                    allRenderers,
-                    propertyFilter,
-                    material,
-                    null));
-            }
+                var allRenderers = rendererSource;
+                var allProjectors = projectorSource;
+                var rendererFilter = new List<string>();
+                var propertyFilter = new List<string>();
+                IList<Renderer> renderers;
+                IList<Projector> projectors;
+                Dictionary<string, Material> materials;
+                IList<MaterialEditorFilterPattern> preparedPropertyFilter;
+                var filteringSample = MaterialEditorPerformance.Start(
+                    MaterialEditorPerformanceMetric.Filtering);
+                try
+                {
+                    MaterialEditorFilter.Parse(
+                        filter,
+                        rendererFilter,
+                        propertyFilter);
+                    var rendererPatterns = MaterialEditorFilter.Prepare(
+                        rendererFilter);
+                    var propertyPatterns = MaterialEditorFilter.Prepare(
+                        propertyFilter);
+                    renderers = SelectRenderers(allRenderers, rendererPatterns);
+                    projectors = rendererPatterns.Count == 0
+                        ? null
+                        : SelectProjectors(allProjectors, rendererPatterns);
+                    materials = SelectMaterials(
+                        gameObject,
+                        allRenderers,
+                        renderers,
+                        rendererPatterns);
 
-            foreach (var projector in rendererFilter.Count == 0 ? allProjectors : projectors)
+                    preparedPropertyFilter = propertyPatterns;
+                }
+                finally
+                {
+                    MaterialEditorPerformance.Stop(
+                        MaterialEditorPerformanceMetric.Filtering,
+                        filteringSample);
+                }
+
+                var presentation = new MaterialEditorPresentation(
+                    NextPresentationToken());
+                presentation.HasActiveFilter =
+                    rendererFilter.Count != 0 || propertyFilter.Count != 0;
+                presentation.HasPropertyFilter = propertyFilter.Count != 0;
+                var rows = presentation.Rows;
+
+                foreach (var renderer in renderers)
+                    AddRendererRows(presentation, gameObject, data, renderer);
+
+                foreach (var material in materials.Values)
+                {
+                    _materialSections.AddRows(new MaterialSectionContext(
+                        _editService,
+                        presentation,
+                        gameObject,
+                        data,
+                        filter,
+                        allRenderers,
+                        preparedPropertyFilter,
+                        material,
+                        null));
+                }
+
+                foreach (var projector in rendererFilter.Count == 0 ? allProjectors : projectors)
+                {
+                    _materialSections.AddRows(new MaterialSectionContext(
+                        _editService,
+                        presentation,
+                        gameObject,
+                        data,
+                        filter,
+                        allRenderers,
+                        preparedPropertyFilter,
+                        projector.material,
+                        projector));
+                }
+
+                MaterialEditorPerformance.Increment(
+                    MaterialEditorPerformanceMetric.RowModelCreation,
+                    rows.Count);
+                return presentation;
+            }
+            finally
             {
-                _materialSections.AddRows(new MaterialSectionContext(
-                    _editService,
-                    presentation,
-                    gameObject,
-                    data,
-                    filter,
-                    allRenderers,
-                    propertyFilter,
-                    projector.material,
-                    projector));
+                MaterialEditorPerformance.Stop(
+                    MaterialEditorPerformanceMetric.PresentationRebuild,
+                    rebuildSample);
             }
-
-            return presentation;
         }
 
-        private static void ParseFilter(
-            string filter,
-            ICollection<string> rendererFilter,
-            ICollection<string> propertyFilter)
+        private int NextPresentationToken()
         {
-            if (filter.IsNullOrEmpty())
-                return;
-
-            var parts = filter
-                .Split(',')
-                .Select(value => value.Trim())
-                .Where(value => !string.IsNullOrEmpty(value))
-                .ToList();
-
-            foreach (var part in parts)
+            unchecked
             {
-                if (part.StartsWith("_"))
-                {
-                    var property = part.Trim('_');
-                    if (!property.IsNullOrEmpty())
-                        propertyFilter.Add(property);
-                }
-                else
-                {
-                    rendererFilter.Add(part);
-                }
+                _nextPresentationToken++;
+                if (_nextPresentationToken == 0)
+                    _nextPresentationToken++;
             }
+            return _nextPresentationToken;
         }
 
-        private List<Renderer> SelectRenderers(
+        private IList<Renderer> SelectRenderers(
             IList<Renderer> allRenderers,
-            IList<string> filter)
+            IList<MaterialEditorFilterPattern> filter)
         {
             if (_session.SelectedRenderers.Count > 0)
-                return new List<Renderer>(_session.SelectedRenderers);
+                return _session.SelectedRenderers;
             if (filter.Count == 0)
-                return new List<Renderer>(allRenderers);
+                return allRenderers;
 
             var renderers = new List<Renderer>();
             foreach (var renderer in allRenderers)
-                foreach (var filterWord in filter)
-                    if (MaterialEditorFilter.Matches(renderer.NameFormatted(), filterWord.Trim())
+                foreach (var filterPattern in filter)
+                    if (filterPattern.Matches(renderer.NameFormatted())
                         && !renderers.Contains(renderer))
                         renderers.Add(renderer);
 
             return renderers;
         }
 
-        private static List<Projector> SelectProjectors(
-            IEnumerable<Projector> allProjectors,
-            IList<string> filter)
+        private static IList<Projector> SelectProjectors(
+            IList<Projector> allProjectors,
+            IList<MaterialEditorFilterPattern> filter)
         {
             var projectors = new List<Projector>();
             if (filter.Count == 0)
                 return projectors;
 
             foreach (var projector in allProjectors)
-                foreach (var filterWord in filter)
-                    if (MaterialEditorFilter.Matches(projector.NameFormatted(), filterWord.Trim()))
+                foreach (var filterPattern in filter)
+                    if (filterPattern.Matches(projector.NameFormatted()))
                         projectors.Add(projector);
 
             return projectors;
@@ -209,9 +228,9 @@ namespace MaterialEditorAPI
 
         private Dictionary<string, Material> SelectMaterials(
             GameObject gameObject,
-            IEnumerable<Renderer> allRenderers,
-            IEnumerable<Renderer> selectedRenderers,
-            IList<string> filter)
+            IList<Renderer> allRenderers,
+            IList<Renderer> selectedRenderers,
+            IList<MaterialEditorFilterPattern> filter)
         {
             var materials = new Dictionary<string, Material>();
             if (filter.Count == 0)
@@ -224,8 +243,8 @@ namespace MaterialEditorAPI
 
             foreach (var renderer in allRenderers)
                 foreach (var material in GetSelectedMaterials(gameObject, renderer))
-                    foreach (var filterWord in filter)
-                        if (MaterialEditorFilter.Matches(material.NameFormatted(), filterWord.Trim()))
+                    foreach (var filterPattern in filter)
+                        if (filterPattern.Matches(material.NameFormatted()))
                             materials[material.NameFormatted()] = material;
 
             return materials;
@@ -240,22 +259,30 @@ namespace MaterialEditorAPI
         }
 
         private void AddRendererRows(
-            ICollection<RowModel> rows,
+            MaterialEditorPresentation presentation,
             GameObject gameObject,
             object data,
             Renderer renderer)
         {
             var rendererName = renderer.NameFormatted();
-            var edits = new MaterialEditorEditService(
-                _editService,
+            var rendererKey = MaterialEditorSectionKeys.Renderer(
                 gameObject,
-                data);
-            rows.Add(new RendererRowModel()
+                renderer,
+                GetRelativeRendererPath(gameObject, renderer),
+                GetRendererComponentIndex(renderer));
+            var collapsed = MaterialEditorSessionState.IsCollapsed(
+                _session.CollapsedRendererSections,
+                rendererKey);
+            RendererSectionPresentation section = null;
+            var header = new RendererRowModel()
             {
                 GameObject = gameObject,
                 Data = data,
                 Renderer = renderer,
                 RendererName = rendererName,
+                Collapsed = collapsed,
+                CollapsedOnChange = value =>
+                    _actions.SetRendererCollapsed(section, value),
                 ExportUv = () => _actions.ExportUv(renderer),
                 ExportObj = () => _actions.RequestObjExport(renderer),
                 SelectInterpolable = () =>
@@ -265,7 +292,34 @@ namespace MaterialEditorAPI
                         string.Empty,
                         string.Empty,
                         rendererName)
-            });
+            };
+            section = new RendererSectionPresentation(
+                presentation.OwnerToken,
+                rendererKey,
+                presentation.Rows.Count,
+                collapsed,
+                () => BuildRendererChildRows(gameObject, data, renderer),
+                value =>
+                {
+                    header.Collapsed = value;
+                    _session.SetRendererCollapsed(rendererKey, value);
+                });
+            presentation.RendererSections.Add(section);
+            presentation.Rows.Add(header);
+            if (!collapsed)
+                presentation.Rows.AddRange(section.GetRowsForState(false));
+        }
+
+        private IList<RowModel> BuildRendererChildRows(
+            GameObject gameObject,
+            object data,
+            Renderer renderer)
+        {
+            var rows = new List<RowModel>(5);
+            var edits = new MaterialEditorEditService(
+                _editService,
+                gameObject,
+                data);
 
             var originalValue = edits.GetOriginalRendererProperty(
                 renderer,
@@ -332,7 +386,7 @@ namespace MaterialEditorAPI
 
             var meshRenderer = renderer as SkinnedMeshRenderer;
             if (meshRenderer == null)
-                return;
+                return rows;
 
 #if !KK
             originalValue = edits.GetOriginalRendererProperty(
@@ -379,6 +433,44 @@ namespace MaterialEditorAPI
                         renderer,
                         RendererProperties.RecalculateNormals)
             });
+            return rows;
+        }
+
+        private static string GetRelativeRendererPath(
+            GameObject gameObject,
+            Renderer renderer)
+        {
+            if (renderer == null || renderer.transform == null)
+                return string.Empty;
+
+            var root = gameObject == null ? null : gameObject.transform;
+            var current = renderer.transform;
+            var segments = new Stack<string>();
+            while (current != null && current != root)
+            {
+                segments.Push(
+                    (current.name ?? string.Empty)
+                    + "["
+                    + current.GetSiblingIndex()
+                    + "]");
+                current = current.parent;
+            }
+
+            var path = segments.Count == 0
+                ? "."
+                : string.Join("/", segments.ToArray());
+            return current == root ? path : "external/" + path;
+        }
+
+        private static int GetRendererComponentIndex(Renderer renderer)
+        {
+            if (renderer == null || renderer.gameObject == null)
+                return -1;
+            var renderers = renderer.gameObject.GetComponents<Renderer>();
+            for (var index = 0; index < renderers.Length; index++)
+                if (ReferenceEquals(renderers[index], renderer))
+                    return index;
+            return -1;
         }
     }
 }

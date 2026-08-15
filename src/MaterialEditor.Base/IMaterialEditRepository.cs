@@ -54,6 +54,10 @@ namespace MaterialEditorAPI
         void SetMaterialColorProperty(object data, Material material, string propertyName, Color value, GameObject gameObject);
         void RemoveMaterialColorProperty(object data, Material material, string propertyName, GameObject gameObject);
 
+        Vector4? GetMaterialVectorPropertyValueOriginal(object data, Material material, string propertyName, GameObject gameObject);
+        void SetMaterialVectorProperty(object data, Material material, string propertyName, Vector4 value, GameObject gameObject);
+        void RemoveMaterialVectorProperty(object data, Material material, string propertyName, GameObject gameObject);
+
         float? GetMaterialFloatPropertyValueOriginal(object data, Material material, string propertyName, GameObject gameObject);
         void SetMaterialFloatProperty(object data, Material material, string propertyName, float value, GameObject gameObject);
         void RemoveMaterialFloatProperty(object data, Material material, string propertyName, GameObject gameObject);
@@ -61,6 +65,40 @@ namespace MaterialEditorAPI
         bool? GetMaterialKeywordPropertyValueOriginal(object data, Material material, string propertyName, GameObject gameObject);
         void SetMaterialKeywordProperty(object data, Material material, string propertyName, bool value, GameObject gameObject);
         void RemoveMaterialKeywordProperty(object data, Material material, string propertyName, GameObject gameObject);
+    }
+
+    /// <summary>
+    /// Optional repository capability for texture imports that are applied on a later Update.
+    /// The completion result lets the UI refresh from the material's real state instead of
+    /// optimistically assuming that decoding and assignment succeeded.
+    /// </summary>
+    internal interface IMaterialTextureImportCompletionRepository
+    {
+        void SetMaterialTexture(
+            object data,
+            Material material,
+            string propertyName,
+            string filePath,
+            GameObject gameObject,
+            Action<bool> completed);
+    }
+
+    /// <summary>
+    /// Optional repository capability used by the incremental Cubemap import
+    /// coordinator. Passing the already-read bytes prevents character and
+    /// Studio controllers from performing a second disk read on the main thread.
+    /// The opaque content key lets the controller acquire its own cache lease
+    /// without repeating SHA-256 after the coordinator warmed the cache.
+    /// </summary>
+    internal interface IMaterialCubemapDataImportRepository
+    {
+        bool SetMaterialCubemap(
+            object data,
+            Material material,
+            string propertyName,
+            byte[] encodedData,
+            MaterialEditorCubemapContentKey contentKey,
+            GameObject gameObject);
     }
 
 }

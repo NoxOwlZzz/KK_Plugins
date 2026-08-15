@@ -1,16 +1,26 @@
 using System.Collections.Generic;
 using ExtensibleSaveFormat;
 using MaterialEditorAPI;
-using KKAPI.Utilities;
 using MessagePack;
 using System.Linq;
 using System.IO;
 
 namespace KK_Plugins.MaterialEditor
 {
-    internal class TextureSaveHandler : TextureSaveHandlerBase
+    /// <summary>
+    /// Compatibility texture persistence for KKAPI versions before the local-texture API.
+    /// New saves always use Material Editor's original bundled version-1 format. The
+    /// version-2 local and deduplicated formats remain readable for forward compatibility.
+    /// </summary>
+    internal sealed class TextureSaveHandler
     {
         internal static TextureSaveHandler Instance;
+        internal string LocalTexturePath { get; set; }
+        internal readonly string LocalTexPrefix;
+        internal readonly string LocalTexSavePrefix;
+        internal readonly string DedupedTexSavePrefix;
+        internal readonly string DedupedTexSavePostfix;
+        internal readonly string LocalTexUnusedFolder;
 #if !EC
         private Dictionary<string, byte[]> DedupedTextureData = null;
 #endif
@@ -22,159 +32,256 @@ namespace KK_Plugins.MaterialEditor
             string dedupedTexSavePrefix = "DEDUPED_",
             string dedupedTexSavePostfix = "_DATA",
             string localTexUnusedFolder = "_Unused"
-        ) : base(
-            localTexturePath,
-            localTexPrefix,
-            localTexSavePrefix,
-            dedupedTexSavePrefix,
-            dedupedTexSavePostfix,
-            localTexUnusedFolder
-        ) { Instance = this; }
+        )
+        {
+            LocalTexturePath = localTexturePath;
+            LocalTexPrefix = localTexPrefix;
+            LocalTexSavePrefix = localTexSavePrefix;
+            DedupedTexSavePrefix = dedupedTexSavePrefix;
+            DedupedTexSavePostfix = dedupedTexSavePostfix;
+            LocalTexUnusedFolder = localTexUnusedFolder;
+            Instance = this;
+        }
 
-        protected override object DefaultData()
+        private static object DefaultData()
         {
             return new Dictionary<int, TextureContainer>();
         }
 
-        public override void Save(PluginData pluginData, string key, object data, bool isCharaController)
+        internal static void DisposeTextureContainers(
+            IDictionary<int, TextureContainer> textures)
         {
+            if (textures == null)
+                return;
+
+            var disposed = new HashSet<TextureContainer>();
+            foreach (var texture in textures.Values)
+                if (texture != null && disposed.Add(texture))
+                    texture.Dispose();
+            textures.Clear();
+        }
+
+        internal static TextureContainer CreateTextureContainer(byte[] data)
+        {
+            var performanceSample = MaterialEditorPerformance.Start(
+                MaterialEditorPerformanceMetric.TextureHashing);
             try
             {
-                base.Save(pluginData, key, data, isCharaController);
+                // TextureContainerManager.Acquire computes the content hash used by
+                // its shared backing store. Keep the production operation intact.
+                return new TextureContainer(data);
             }
-            catch (System.Exception ex)
+            finally
             {
-                MaterialEditorPluginBase.Logger.LogError(ex);
-                MaterialEditorPluginBase.Logger.LogWarning("Save method failed, falling back to Bundled saving!");
+                MaterialEditorPerformance.Stop(
+                    MaterialEditorPerformanceMetric.TextureHashing,
+                    performanceSample);
+            }
+        }
+
+        /// <summary>
+        /// Saves textures in the legacy bundled format understood by the installed runtime.
+        /// </summary>
+        public void Save(PluginData pluginData, string key, object data, bool isCharaController)
+        {
+            var performanceSample = MaterialEditorPerformance.Start(
+                MaterialEditorPerformanceMetric.Save);
+            try
+            {
                 SaveBundled(pluginData, key, data, isCharaController);
             }
-        }
-
-        public override T Load<T>(PluginData pluginData, string key, bool isCharaController)
-        {
-            if (pluginData.version <= 2)
-                return base.Load<T>(pluginData, key, isCharaController);
-            else
+            finally
             {
-                MaterialEditorPluginBase.Logger.LogMessage("[MaterialEditor] Unsupported save data! Please update your plugin!");
-                throw new System.Exception("Unsupported save data! Plugin is outdated.");
+                MaterialEditorPerformance.Stop(
+                    MaterialEditorPerformanceMetric.Save,
+                    performanceSample);
             }
         }
 
-        protected override bool IsBundled(PluginData pluginData, string key, out object data)
+        /// <summary>
+        /// Loads bundled data first, then the version-2 deduplicated or local formats.
+        /// Malformed or incomplete external texture data degrades to an empty dictionary.
+        /// </summary>
+        public T Load<T>(PluginData pluginData, string key, bool isCharaController)
         {
-            return pluginData.data.TryGetValue(key, out data) && data != null;
-        }
+            var performanceSample = MaterialEditorPerformance.Start(
+                MaterialEditorPerformanceMetric.Load);
+            try
+            {
+                object loaded = DefaultData();
+                try
+                {
+                    if (pluginData?.data == null)
+                        return (T)loaded;
 
+                    if (pluginData.version > 2)
+                    {
+                        MaterialEditorPluginBase.Logger.LogWarning(
+                            $"[MaterialEditor] Texture save format version {pluginData.version} is not supported; "
+                            + "the texture data was left untouched and skipped.");
+                        return (T)loaded;
+                    }
+
+                    if (pluginData.data.TryGetValue(key, out var bundledData) && bundledData != null)
+                        loaded = LoadBundled(pluginData, key, bundledData, isCharaController);
 #if !EC
-        protected override bool IsDeduped(PluginData pluginData, string key, out object data)
-        {
-            return pluginData.data.TryGetValue(DedupedTexSavePrefix + key, out data) && data != null;
-        }
+                    else if (pluginData.data.TryGetValue(DedupedTexSavePrefix + key, out var dedupedData)
+                             && dedupedData != null)
+                        loaded = LoadDeduped(pluginData, key, dedupedData, isCharaController);
 #endif
+                    else if (pluginData.data.TryGetValue(LocalTexSavePrefix + key, out var localData)
+                             && localData != null)
+                        loaded = LoadLocal(pluginData, key, localData, isCharaController);
+                }
+                catch (System.Exception ex)
+                {
+                    MaterialEditorPluginBase.Logger.LogError(ex);
+                    MaterialEditorPluginBase.Logger.LogWarning(
+                        "[MaterialEditor] Texture data could not be loaded; continuing without those textures.");
+                    loaded = DefaultData();
+                }
 
-        protected override bool IsLocal(PluginData pluginData, string key, out object data)
-        {
-            return pluginData.data.TryGetValue(LocalTexSavePrefix + key, out data) && data != null;
+                if (loaded is T typed)
+                    return typed;
+
+                MaterialEditorPluginBase.Logger.LogWarning(
+                    "[MaterialEditor] Texture data had an unexpected type; continuing without those textures.");
+                return (T)DefaultData();
+            }
+            finally
+            {
+                MaterialEditorPerformance.Stop(
+                    MaterialEditorPerformanceMetric.Load,
+                    performanceSample);
+            }
         }
 
-        protected override void SaveBundled(PluginData pluginData, string key, object dictRaw, bool isCharaController = false)
+        private static void SaveBundled(PluginData pluginData, string key, object dictRaw, bool isCharaController = false)
         {
             if (!(dictRaw is Dictionary<int, TextureContainer> dict && dict != null))
                 throw new System.ArgumentException("dictRaw must be Dictionary<int, TextureContainer> and not null!");
             pluginData.version = 1;
-            pluginData.data.Add(key, MessagePackSerializer.Serialize(dict.ToDictionary(pair => pair.Key, pair => pair.Value.Data)));
+            pluginData.data[key] = MessagePackSerializer.Serialize(
+                dict.ToDictionary(pair => pair.Key, pair => pair.Value.Data));
         }
 
-        protected override object LoadBundled(PluginData data, string key, object dataBundled, bool isCharaController = false)
+        private static object LoadBundled(PluginData data, string key, object dataBundled, bool isCharaController = false)
         {
-            return MessagePackSerializer.Deserialize<Dictionary<int, byte[]>>((byte[])dataBundled)
-                .ToDictionary(pair => pair.Key, pair => new TextureContainer(pair.Value));
+            var serializedTextures =
+                MessagePackSerializer.Deserialize<Dictionary<int, byte[]>>((byte[])dataBundled);
+            var result = new Dictionary<int, TextureContainer>();
+            try
+            {
+                foreach (var pair in serializedTextures)
+                    result.Add(pair.Key, CreateTextureContainer(pair.Value));
+                return result;
+            }
+            catch
+            {
+                DisposeTextureContainers(result);
+                throw;
+            }
         }
 
 #if !EC
-
-        protected override void SaveDeduped(PluginData data, string key, object dictRaw, bool isCharaController = false)
+        private object LoadDeduped(PluginData data, string key, object dataDeduped, bool isCharaController = false)
         {
-            if (!(dictRaw is Dictionary<int, TextureContainer> dict && dict != null))
-                throw new System.ArgumentException("dictRaw must be Dictionary<int, TextureContainer> and not null!");
-            data.version = 2;
+            var textureReferences = MessagePackSerializer.Deserialize<Dictionary<int, string>>(
+                (byte[])dataDeduped);
 
-            data.data.Add(DedupedTexSavePrefix + key, MessagePackSerializer.Serialize(
-                dict.ToDictionary(pair => pair.Key, pair => pair.Value.Hash.ToString("X16"))
-            ));
-            if (isCharaController)
-                return;
-
-            HashSet<long> hashes = new HashSet<long>();
-            Dictionary<string, byte[]> dicHashToData = new Dictionary<string, byte[]>();
-            foreach (var kvp in dict)
+            if (DedupedTextureData == null)
             {
-                string hashString = kvp.Value.Hash.ToString("X16");
-                hashes.Add(kvp.Value.Hash);
-                dicHashToData.Add(hashString, kvp.Value.Data);
-            }
+                object textureBytes = null;
+                data.data.TryGetValue(
+                    DedupedTexSavePrefix + key + DedupedTexSavePostfix,
+                    out textureBytes);
 
-            foreach (var controller in MaterialEditorCharaController.charaControllers)
-                foreach (var textureContainer in controller.TextureDictionary.Values.Where(x => !hashes.Contains(x.Hash)))
+                if (textureBytes == null)
                 {
-                    hashes.Add(textureContainer.Hash);
-                    dicHashToData.Add(textureContainer.Hash.ToString("X16"), textureContainer.Data);
+                    var sceneData = MEStudio.GetSceneController()?.GetExtendedData();
+                    sceneData?.data?.TryGetValue(
+                        DedupedTexSavePrefix + key + DedupedTexSavePostfix,
+                        out textureBytes);
                 }
 
-            data.data.Add(DedupedTexSavePrefix + key + DedupedTexSavePostfix, MessagePackSerializer.Serialize(dicHashToData));
-        }
-
-        protected override object LoadDeduped(PluginData data, string key, object dataDeduped, bool isCharaController = false)
-        {
-            if (data.data.TryGetValue(DedupedTexSavePrefix + key, out var dedupedData) && dedupedData != null)
-            {
-                if (DedupedTextureData == null)
-                    if (MEStudio.GetSceneController().GetExtendedData()?.data.TryGetValue(DedupedTexSavePrefix + key + DedupedTexSavePostfix, out var dataBytes) == true && dataBytes != null)
-                        DedupedTextureData = MessagePackSerializer.Deserialize<Dictionary<string, byte[]>>((byte[])dataBytes);
-                    else
-                        MaterialEditorPluginBase.Logger.LogMessage($"[MaterialEditor] Failed to load deduped {(isCharaController ? "character" : "scene")} textures!");
-                Dictionary<int, TextureContainer> result = new Dictionary<int, TextureContainer>();
-                if (DedupedTextureData != null)
-                    result = MessagePackSerializer.Deserialize<Dictionary<int, string>>((byte[])dedupedData).ToDictionary(pair => pair.Key, pair => new TextureContainer(DedupedTextureData[pair.Value]));
-                if (!isCharaController)
-                    DedupedTextureData = null;
-                return result;
+                if (textureBytes != null)
+                    DedupedTextureData = MessagePackSerializer.Deserialize<Dictionary<string, byte[]>>(
+                        (byte[])textureBytes);
             }
 
-            return DefaultData();
+            var result = new Dictionary<int, TextureContainer>();
+            try
+            {
+                if (DedupedTextureData == null)
+                {
+                    MaterialEditorPluginBase.Logger.LogWarning(
+                        $"[MaterialEditor] Missing deduplicated texture payload for {(isCharaController ? "character" : "scene")} data.");
+                }
+                else
+                {
+                    foreach (var pair in textureReferences)
+                    {
+                        if (pair.Value != null
+                            && DedupedTextureData.TryGetValue(pair.Value, out var bytes)
+                            && bytes != null
+                            && bytes.Length > 0)
+                        {
+                            result[pair.Key] = CreateTextureContainer(bytes);
+                        }
+                        else
+                        {
+                            MaterialEditorPluginBase.Logger.LogWarning(
+                                $"[MaterialEditor] Deduplicated texture '{pair.Value}' is missing; it was skipped.");
+                        }
+                    }
+                }
+
+                return result;
+            }
+            catch
+            {
+                DisposeTextureContainers(result);
+                throw;
+            }
+            finally
+            {
+                if (!isCharaController)
+                    DedupedTextureData = null;
+            }
         }
 
 #endif
-        protected override void SaveLocal(PluginData data, string key, object dictRaw, bool isCharaController = false)
+        private object LoadLocal(PluginData data, string key, object dataLocal, bool isCharaController = false)
         {
-            if (!(dictRaw is Dictionary<int, TextureContainer> dict && dict != null))
-                throw new System.ArgumentException("dictRaw must be Dictionary<int, TextureContainer> and not null!");
-            data.version = 2;
-
-            if (!Directory.Exists(LocalTexturePath))
-                Directory.CreateDirectory(LocalTexturePath);
-
-            var hashDict = dict.ToDictionary(pair => pair.Key, pair => pair.Value.Hash.ToString("X16"));
-            foreach (var kvp in hashDict)
+            var hashDictionary = MessagePackSerializer.Deserialize<Dictionary<int, string>>(
+                (byte[])dataLocal);
+            var result = new Dictionary<int, TextureContainer>();
+            try
             {
-                string fileName = LocalTexPrefix + kvp.Value + "." + ImageTypeIdentifier.Identify(dict[kvp.Key].Data);
-                string filePath = Path.Combine(LocalTexturePath, fileName);
-                if (!File.Exists(filePath))
-                    File.WriteAllBytes(filePath, dict[kvp.Key].Data);
+                foreach (var pair in hashDictionary)
+                {
+                    var bytes = LoadLocal(pair.Value);
+                    if (bytes.Length > 0)
+                        result[pair.Key] = CreateTextureContainer(bytes);
+                }
+                return result;
             }
-
-            data.data.Add(LocalTexSavePrefix + key, MessagePackSerializer.Serialize(hashDict));
-        }
-
-        protected override object LoadLocal(PluginData data, string key, object dataLocal, bool isCharaController = false)
-        {
-            var hashDic = MessagePackSerializer.Deserialize<Dictionary<int, string>>((byte[])data.data[LocalTexSavePrefix + key]);
-            return hashDic.ToDictionary(kvp => kvp.Key, kvp => new TextureContainer(LoadLocal(kvp.Value)));
+            catch
+            {
+                DisposeTextureContainers(result);
+                throw;
+            }
         }
 
         private byte[] LoadLocal(string hash)
         {
+            if (!IsSafeTextureHash(hash))
+            {
+                MaterialEditorPluginBase.Logger.LogWarning(
+                    "[MaterialEditor] Invalid local texture identifier; it was skipped.");
+                return new byte[0];
+            }
+
             if (!Directory.Exists(LocalTexturePath))
             {
                 MaterialEditorPluginBase.Logger.LogMessage("[MaterialEditor] Local texture directory doesn't exist, can't load texture!");
@@ -195,6 +302,54 @@ namespace KK_Plugins.MaterialEditor
             }
 
             return File.ReadAllBytes(files[0]);
+        }
+
+        private static bool IsSafeTextureHash(string hash)
+        {
+            if (hash == null || hash.Length != 16)
+                return false;
+
+            for (var i = 0; i < hash.Length; i++)
+            {
+                var c = hash[i];
+                if (!((c >= '0' && c <= '9')
+                      || (c >= 'a' && c <= 'f')
+                      || (c >= 'A' && c <= 'F')))
+                    return false;
+            }
+
+            return true;
+        }
+
+        internal static string IdentifyImageExtension(byte[] data, string fallback = "bin")
+        {
+            if (data == null)
+                return fallback;
+            if (HasBytes(data, 0, 0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A))
+                return "png";
+            if (HasBytes(data, 0, 0xFF, 0xD8, 0xFF))
+                return "jpg";
+            if (HasBytes(data, 0, 0x47, 0x49, 0x46, 0x38, 0x37, 0x61)
+                || HasBytes(data, 0, 0x47, 0x49, 0x46, 0x38, 0x39, 0x61))
+                return "gif";
+            if (HasBytes(data, 0, 0x42, 0x4D))
+                return "bmp";
+            if (HasBytes(data, 0, 0x44, 0x44, 0x53, 0x20))
+                return "dds";
+            if (HasBytes(data, 0, 0x52, 0x49, 0x46, 0x46)
+                && HasBytes(data, 8, 0x57, 0x45, 0x42, 0x50))
+                return "webp";
+            return fallback;
+        }
+
+        private static bool HasBytes(byte[] data, int offset, params byte[] expected)
+        {
+            if (data.Length < offset + expected.Length)
+                return false;
+            for (var i = 0; i < expected.Length; i++)
+                if (data[offset + i] != expected[i])
+                    return false;
+            return true;
         }
     }
 }

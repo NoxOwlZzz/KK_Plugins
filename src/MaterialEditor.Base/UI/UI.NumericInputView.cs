@@ -101,6 +101,13 @@ namespace MaterialEditorAPI
             RefreshText();
         }
 
+        internal void SetMixed()
+        {
+            _editing = false;
+            _hasValue = false;
+            SetTextWithoutNotification(InputField, "Mixed");
+        }
+
         internal void CommitValue(float value)
         {
             _editing = false;

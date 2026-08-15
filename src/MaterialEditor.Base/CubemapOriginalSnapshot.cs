@@ -1,8 +1,23 @@
+using System;
 using System.Collections.Generic;
 using UnityEngine;
 
 namespace MaterialEditorAPI
 {
+    internal sealed class MaterialCubemapOriginalBinding
+    {
+        internal MaterialCubemapOriginalBinding(
+            MaterialCubemapBindingIdentity identity,
+            Cubemap value)
+        {
+            Identity = identity;
+            Value = value;
+        }
+
+        internal MaterialCubemapBindingIdentity Identity { get; private set; }
+        internal Cubemap Value { get; private set; }
+    }
+
     internal static class MaterialCubemapOriginalSnapshot
     {
         private sealed class MaterialReferenceComparer : IEqualityComparer<Material>
@@ -12,15 +27,21 @@ namespace MaterialEditorAPI
 
             public bool Equals(Material left, Material right)
             {
-                return object.ReferenceEquals(left, right);
+                return ReferenceEquals(left, right);
             }
 
             public int GetHashCode(Material material)
             {
-                return object.ReferenceEquals(material, null)
+                return ReferenceEquals(material, null)
                     ? 0
                     : System.Runtime.CompilerServices.RuntimeHelpers.GetHashCode(material);
             }
+        }
+
+        private sealed class MaterialBinding
+        {
+            internal MaterialCubemapBindingIdentity Identity;
+            internal Material Material;
         }
 
         internal static Dictionary<Material, Cubemap> SynchronizeByMaterialReference(
@@ -30,11 +51,14 @@ namespace MaterialEditorAPI
             IDictionary<Material, Cubemap> originals)
         {
             var synchronized = NewReferenceDictionary();
-            var materials = GetMatchingMaterials(gameObject, materialName, propertyName);
+            var bindings = GetMatchingBindings(gameObject, materialName, propertyName);
             var fullPropertyName = "_" + propertyName;
-            for (var index = 0; index < materials.Count; index++)
+            for (var index = 0; index < bindings.Count; index++)
             {
-                var material = materials[index];
+                var material = bindings[index].Material;
+                if (synchronized.ContainsKey(material))
+                    continue;
+
                 Cubemap original;
                 synchronized.Add(
                     material,
@@ -45,7 +69,7 @@ namespace MaterialEditorAPI
             return synchronized;
         }
 
-        internal static List<Cubemap> GetOrderedValues(
+        internal static List<MaterialCubemapOriginalBinding> GetStableValues(
             GameObject gameObject,
             string materialName,
             string propertyName,
@@ -54,35 +78,96 @@ namespace MaterialEditorAPI
             if (originals == null)
                 return null;
 
-            var values = new List<Cubemap>();
-            var materials = GetMatchingMaterials(gameObject, materialName, propertyName);
-            for (var index = 0; index < materials.Count; index++)
+            var values = new List<MaterialCubemapOriginalBinding>();
+            var identities = new HashSet<MaterialCubemapBindingIdentity>();
+            var bindings = GetMatchingBindings(gameObject, materialName, propertyName);
+            for (var index = 0; index < bindings.Count; index++)
             {
+                var binding = bindings[index];
                 Cubemap original;
-                if (!TryGetByReference(originals, materials[index], out original))
+                if (!identities.Add(binding.Identity)
+                    || !TryGetByReference(originals, binding.Material, out original))
                     return null;
-                values.Add(original);
+                values.Add(new MaterialCubemapOriginalBinding(binding.Identity, original));
             }
             return values;
+        }
+
+        internal static List<MaterialCubemapOriginalBinding> CloneStableValues(
+            IList<MaterialCubemapOriginalBinding> values)
+        {
+            if (values == null)
+                return null;
+
+            var clone = new List<MaterialCubemapOriginalBinding>(values.Count);
+            for (var index = 0; index < values.Count; index++)
+            {
+                var value = values[index];
+                if (value == null)
+                    return null;
+                clone.Add(new MaterialCubemapOriginalBinding(value.Identity, value.Value));
+            }
+            return clone;
         }
 
         internal static bool TryRemapToCurrentMaterials(
             GameObject gameObject,
             string materialName,
             string propertyName,
-            IList<Cubemap> orderedValues,
-            out Dictionary<Material, Cubemap> remapped)
+            IList<MaterialCubemapOriginalBinding> stableValues,
+            out Dictionary<Material, Cubemap> remapped,
+            out string failureReason)
         {
             remapped = NewReferenceDictionary();
-            if (orderedValues == null || orderedValues.Count == 0)
+            failureReason = null;
+            if (stableValues == null || stableValues.Count == 0)
+            {
+                failureReason = "The inherited Cubemap original snapshot is empty.";
+                return false;
+            }
+
+            var currentBindings = GetMatchingBindings(gameObject, materialName, propertyName);
+            var savedIdentities = new List<MaterialCubemapBindingIdentity>(stableValues.Count);
+            for (var index = 0; index < stableValues.Count; index++)
+            {
+                var value = stableValues[index];
+                if (value == null)
+                {
+                    failureReason = "The inherited Cubemap original snapshot contains an invalid entry.";
+                    return false;
+                }
+                savedIdentities.Add(value.Identity);
+            }
+
+            var currentIdentities = new List<MaterialCubemapBindingIdentity>(currentBindings.Count);
+            for (var index = 0; index < currentBindings.Count; index++)
+                currentIdentities.Add(currentBindings[index].Identity);
+
+            int[] savedIndexByCurrentIndex;
+            if (!MaterialCubemapIdentityMatcher.TryMatch(
+                    savedIdentities,
+                    currentIdentities,
+                    out savedIndexByCurrentIndex,
+                    out failureReason))
                 return false;
 
-            var materials = GetMatchingMaterials(gameObject, materialName, propertyName);
-            if (materials.Count != orderedValues.Count)
-                return false;
-
-            for (var index = 0; index < materials.Count; index++)
-                remapped.Add(materials[index], orderedValues[index]);
+            for (var index = 0; index < currentBindings.Count; index++)
+            {
+                var material = currentBindings[index].Material;
+                var original = stableValues[savedIndexByCurrentIndex[index]].Value;
+                Cubemap existing;
+                if (TryGetByReference(remapped, material, out existing))
+                {
+                    if (!ReferenceEquals(existing, original))
+                    {
+                        remapped.Clear();
+                        failureReason = "One material reference maps to conflicting Cubemap originals.";
+                        return false;
+                    }
+                    continue;
+                }
+                remapped.Add(material, original);
+            }
             return true;
         }
 
@@ -95,13 +180,21 @@ namespace MaterialEditorAPI
             if (originals == null)
                 return;
 
-            var materials = GetMatchingMaterials(gameObject, materialName, propertyName);
+            var restored = NewReferenceDictionary();
+            var bindings = GetMatchingBindings(gameObject, materialName, propertyName);
             var fullPropertyName = "_" + propertyName;
-            for (var index = 0; index < materials.Count; index++)
+            for (var index = 0; index < bindings.Count; index++)
             {
+                var material = bindings[index].Material;
+                if (restored.ContainsKey(material))
+                    continue;
+
                 Cubemap original;
-                if (TryGetByReference(originals, materials[index], out original))
-                    materials[index].SetTexture(fullPropertyName, original);
+                if (TryGetByReference(originals, material, out original))
+                {
+                    material.SetTexture(fullPropertyName, original);
+                    restored.Add(material, original);
+                }
             }
         }
 
@@ -127,7 +220,7 @@ namespace MaterialEditorAPI
         {
             if (originals != null)
                 foreach (var entry in originals)
-                    if (object.ReferenceEquals(entry.Key, material))
+                    if (ReferenceEquals(entry.Key, material))
                     {
                         original = entry.Value;
                         return true;
@@ -137,37 +230,113 @@ namespace MaterialEditorAPI
             return false;
         }
 
-        private static List<Material> GetMatchingMaterials(
+        private static List<MaterialBinding> GetMatchingBindings(
             GameObject gameObject,
             string materialName,
             string propertyName)
         {
-            var matches = new List<Material>();
-            if (gameObject == null)
+            var matches = new List<MaterialBinding>();
+            if (gameObject == null
+                || string.IsNullOrEmpty(materialName)
+                || string.IsNullOrEmpty(propertyName))
                 return matches;
 
-            var materials = MaterialAPI.GetObjectMaterials(gameObject, materialName);
+            var root = gameObject.transform;
             var fullPropertyName = "_" + propertyName;
-            for (var index = 0; index < materials.Count; index++)
+            foreach (var renderer in MaterialAPI.GetRendererList(gameObject))
             {
-                var material = materials[index];
-                if (material == null
-                    || material.NameFormatted() != materialName
-                    || !material.HasProperty(fullPropertyName)
-                    || ContainsReference(matches, material))
+                if (renderer == null)
                     continue;
 
-                matches.Add(material);
+                var componentIndex = FindComponentIndex(
+                    renderer.gameObject.GetComponents<Renderer>(),
+                    renderer);
+                var relativePath = GetRelativePath(root, renderer.transform);
+                if (componentIndex < 0 || relativePath == null)
+                    continue;
+
+                var materials = renderer.materials;
+                for (var slot = 0; slot < materials.Length; slot++)
+                {
+                    var material = materials[slot];
+                    if (material == null
+                        || material.NameFormatted() != materialName
+                        || !material.HasProperty(fullPropertyName))
+                        continue;
+
+                    matches.Add(new MaterialBinding
+                    {
+                        Identity = new MaterialCubemapBindingIdentity(
+                            MaterialCubemapBindingKind.Renderer,
+                            relativePath,
+                            componentIndex,
+                            slot,
+                            materialName,
+                            propertyName),
+                        Material = material
+                    });
+                }
+            }
+
+            foreach (var projector in MaterialAPI.GetProjectorList(gameObject))
+            {
+                if (projector == null || projector.material == null)
+                    continue;
+
+                var componentIndex = FindComponentIndex(
+                    projector.gameObject.GetComponents<Projector>(),
+                    projector);
+                var relativePath = GetRelativePath(root, projector.transform);
+                var material = projector.material;
+                if (componentIndex < 0
+                    || relativePath == null
+                    || material.NameFormatted() != materialName
+                    || !material.HasProperty(fullPropertyName))
+                    continue;
+
+                matches.Add(new MaterialBinding
+                {
+                    Identity = new MaterialCubemapBindingIdentity(
+                        MaterialCubemapBindingKind.Projector,
+                        relativePath,
+                        componentIndex,
+                        0,
+                        materialName,
+                        propertyName),
+                    Material = material
+                });
             }
             return matches;
         }
 
-        private static bool ContainsReference(IList<Material> materials, Material candidate)
+        private static int FindComponentIndex<T>(T[] components, T candidate)
+            where T : UnityEngine.Object
         {
-            for (var index = 0; index < materials.Count; index++)
-                if (object.ReferenceEquals(materials[index], candidate))
-                    return true;
-            return false;
+            for (var index = 0; index < components.Length; index++)
+                if (ReferenceEquals(components[index], candidate))
+                    return index;
+            return -1;
+        }
+
+        private static string GetRelativePath(Transform root, Transform target)
+        {
+            if (root == null || target == null)
+                return null;
+            if (ReferenceEquals(root, target))
+                return "$";
+
+            var segments = new Stack<string>();
+            var current = target;
+            while (current != null && !ReferenceEquals(current, root))
+            {
+                var segmentName = current.name ?? string.Empty;
+                segments.Push(
+                    segmentName.Length + ":" + segmentName);
+                current = current.parent;
+            }
+            if (!ReferenceEquals(current, root))
+                return null;
+            return "$/" + string.Join("/", segments.ToArray());
         }
     }
 }

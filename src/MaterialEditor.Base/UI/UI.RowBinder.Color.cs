@@ -15,7 +15,11 @@ namespace MaterialEditorAPI
         {
             var colorItem = (ColorPropertyRowModel)item;
             _controls.SetVisible(true);
-            TooltipBinding.Bind(_controls.Label.gameObject, colorItem.TooltipText);
+            TooltipBinding.Bind(
+                _controls.Label.gameObject,
+                colorItem.TooltipText,
+                colorItem.PropertyName,
+                _controls.Label);
 
             System.Action refreshInputs = () =>
             {

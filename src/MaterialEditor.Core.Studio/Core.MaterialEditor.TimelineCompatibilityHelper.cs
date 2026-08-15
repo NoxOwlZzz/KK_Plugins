@@ -132,11 +132,15 @@ namespace MaterialEditorAPI
                    interpolateAfter: null,
                    getValue: (oci, parameter) =>
                    {
-                       var tex = parameter.GetMaterial(oci).GetTexture($"_{parameter.propertyName}");
+                       var tex = MaterialPropertyAccess.GetTexture(
+                           parameter.GetMaterial(oci),
+                           MaterialPropertyIdCache.Get(parameter.propertyName));
                        //When no texture is set (by default or custom) return -1 to prevent a null reference when trying to convert the texture to bytes
                        //-1 will never exist in the texture dictionary and null will be used as a texture, which functions the same as the default empty texture
                        if (tex == null) return -1;
-                       return SetAndGetTextureID(tex.ToTexture2D().EncodeToPNG());
+                        return SetAndGetTextureID(
+                            MaterialEditorPluginBase.EncodeTextureToPng(
+                                tex.ToTexture2D()));
                    },
                    readValueFromXml: (parameter, node) => XmlConvert.ToInt32(node.Attributes["value"].Value),
                    writeValueToXml: (parameter, writer, value) =>
@@ -158,7 +162,9 @@ namespace MaterialEditorAPI
                    name: "Texture Scale Property",
                    interpolateBefore: (oci, parameter, leftValue, rightValue, factor) => SetTextureScale(parameter.GetGameObject(oci), parameter.materialName, parameter.propertyName, Vector2.LerpUnclamped(leftValue, rightValue, factor)),
                    interpolateAfter: null,
-                   getValue: (oci, parameter) => parameter.GetMaterial(oci).GetTextureScale($"_{parameter.propertyName}"),
+                   getValue: (oci, parameter) => MaterialPropertyAccess.GetTextureScale(
+                       parameter.GetMaterial(oci),
+                       MaterialPropertyIdCache.Get(parameter.propertyName)),
                    readValueFromXml: (parameter, node) =>
                    {
                        return new Vector2(
@@ -186,7 +192,9 @@ namespace MaterialEditorAPI
                    name: "Texture Offset Property",
                    interpolateBefore: (oci, parameter, leftValue, rightValue, factor) => SetTextureOffset(parameter.GetGameObject(oci), parameter.materialName, parameter.propertyName, Vector2.LerpUnclamped(leftValue, rightValue, factor)),
                    interpolateAfter: null,
-                   getValue: (oci, parameter) => parameter.GetMaterial(oci).GetTextureOffset($"_{parameter.propertyName}"),
+                   getValue: (oci, parameter) => MaterialPropertyAccess.GetTextureOffset(
+                       parameter.GetMaterial(oci),
+                       MaterialPropertyIdCache.Get(parameter.propertyName)),
                    readValueFromXml: (parameter, node) =>
                    {
                        return new Vector2(
@@ -214,7 +222,9 @@ namespace MaterialEditorAPI
                    name: "Color Property",
                    interpolateBefore: (oci, parameter, leftValue, rightValue, factor) => SetColor(parameter.GetGameObject(oci), parameter.materialName, parameter.propertyName, Color.LerpUnclamped(leftValue, rightValue, factor)),
                    interpolateAfter: null,
-                   getValue: (oci, parameter) => parameter.GetMaterial(oci).GetColor($"_{parameter.propertyName}"),
+                   getValue: (oci, parameter) => MaterialPropertyAccess.GetColor(
+                       parameter.GetMaterial(oci),
+                       MaterialPropertyIdCache.Get(parameter.propertyName)),
                    readValueFromXml: (parameter, node) =>
                    {
                        return new Color(
@@ -246,7 +256,9 @@ namespace MaterialEditorAPI
                    name: "Float Property",
                    interpolateBefore: (oci, parameter, leftValue, rightValue, factor) => SetFloat(parameter.GetGameObject(oci), parameter.materialName, parameter.propertyName, Mathf.LerpUnclamped(leftValue, rightValue, factor)),
                    interpolateAfter: null,
-                   getValue: (oci, parameter) => parameter.GetMaterial(oci).GetFloat($"_{parameter.propertyName}"),
+                   getValue: (oci, parameter) => MaterialPropertyAccess.GetFloat(
+                       parameter.GetMaterial(oci),
+                       MaterialPropertyIdCache.Get(parameter.propertyName)),
                    readValueFromXml: (parameter, node) => XmlConvert.ToSingle(node.Attributes["value"].Value),
                    writeValueToXml: (parameter, writer, value) => writer.WriteAttributeString("value", value.ToString()),
                    getParameter: GetMaterialInfoParameter,
@@ -278,6 +290,9 @@ namespace MaterialEditorAPI
 
         private static MaterialInfo GetMaterialInfoParameter(ObjectCtrlInfo oci)
         {
+            if (selectedInterpolable == null
+                || selectedInterpolable.GameObject == null)
+                return null;
             return new MaterialInfo(selectedInterpolable.GameObject.GetFullPath(), selectedInterpolable.MaterialName, selectedInterpolable.PropertyName, selectedInterpolable.RendererName);
         }
 
@@ -295,6 +310,9 @@ namespace MaterialEditorAPI
 
         private static ProjectorInfo GetProjectorInfoParameter(ObjectCtrlInfo oci)
         {
+            if (selectedProjectorInterpolable == null
+                || selectedProjectorInterpolable.GameObject == null)
+                return null;
             return new ProjectorInfo(selectedProjectorInterpolable.GameObject.GetFullPath(), selectedProjectorInterpolable.ProjectorName, selectedProjectorInterpolable.Property);
         }
 
@@ -324,7 +342,9 @@ namespace MaterialEditorAPI
 
         private static bool IsCompatibleWithTarget(RowModel.RowItemType rowtype)
         {
-            if (selectedInterpolable != null && selectedInterpolable.RowType == rowtype)
+            if (selectedInterpolable != null
+                && selectedInterpolable.GameObject != null
+                && selectedInterpolable.RowType == rowtype)
                 if (rowtype == RowModel.RowItemType.Renderer && !selectedInterpolable.RendererName.IsNullOrEmpty())
                     return true;
                 else if (rowtype == RowModel.RowItemType.Shader && !selectedInterpolable.MaterialName.IsNullOrEmpty())
@@ -336,7 +356,9 @@ namespace MaterialEditorAPI
 
         private static bool IsCompatibleWithProjectorTarget()
         {
-            if (selectedProjectorInterpolable != null && !selectedProjectorInterpolable.ProjectorName.IsNullOrEmpty())
+            if (selectedProjectorInterpolable != null
+                && selectedProjectorInterpolable.GameObject != null
+                && !selectedProjectorInterpolable.ProjectorName.IsNullOrEmpty())
                 return true;
             return false;
         }

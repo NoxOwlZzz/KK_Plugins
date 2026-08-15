@@ -26,6 +26,7 @@ namespace MaterialEditorAPI
                 : Padding;
             layout.childForceExpandWidth = false;
             layout.childAlignment = TextAnchor.MiddleLeft;
+            layout.spacing = MaterialEditorTheme.Spacing.Control;
             return panel;
         }
 
@@ -38,9 +39,20 @@ namespace MaterialEditorAPI
         {
             var label = MaterialEditorControlFactory.CreateText(name, parent, value);
             label.alignment = TextAnchor.MiddleLeft;
-            label.color = Color.black;
+            label.color = MaterialEditorTheme.Colors.PrimaryText;
             SetWidth(label, width, flexibleWidth);
             return label;
+        }
+
+        internal static void ConfigurePropertyLabel(Text label)
+        {
+            if (label == null)
+                return;
+
+            label.resizeTextForBestFit = false;
+            label.fontSize = MaterialEditorTheme.Typography.PrimaryFontSize;
+            label.horizontalOverflow = HorizontalWrapMode.Wrap;
+            label.verticalOverflow = VerticalWrapMode.Truncate;
         }
 
         internal static LayoutElement SetWidth(
@@ -61,7 +73,10 @@ namespace MaterialEditorAPI
             string tooltipText,
             bool layoutOwnedBySpec = false)
         {
-            var button = MaterialEditorControlFactory.CreateButton(objectName, parent, "O");
+            var button = MaterialEditorControlFactory.CreateButton(
+                objectName,
+                parent,
+                MaterialEditorTheme.Glyphs.Interpolable);
             if (!layoutOwnedBySpec)
                 SetWidth(button, InterpolableButtonWidth);
 

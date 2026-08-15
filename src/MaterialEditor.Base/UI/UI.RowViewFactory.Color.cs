@@ -21,6 +21,7 @@ namespace MaterialEditorAPI
                 string.Empty,
                 0f,
                 0f);
+            RowViewFactorySupport.ConfigurePropertyLabel(label);
             label.gameObject.AddComponent<LabelClickTrigger>();
 
             RowViewFactorySupport.CreateInterpolableButton(
@@ -34,15 +35,14 @@ namespace MaterialEditorAPI
             var blue = CreateChannel(panel.transform, "B", "ColorBText", "ColorBInput");
             var alpha = CreateChannel(panel.transform, "A", "ColorAText", "ColorAInput");
 
-            MaterialEditorControlFactory.CreateButton(
+            MaterialEditorControlFactory.CreateSwatchButton(
                 "ColorEditButton",
-                panel.transform,
-                string.Empty);
+                panel.transform);
 
             var reset = MaterialEditorControlFactory.CreateButton(
                 "ColorResetButton",
                 panel.transform,
-                "Reset");
+                MaterialEditorTheme.Glyphs.Reset);
             TooltipManager.AddTooltip(
                 reset.gameObject,
                 "Reset the selected property to its original value");
@@ -68,7 +68,7 @@ namespace MaterialEditorAPI
         {
             var label = MaterialEditorControlFactory.CreateText(labelName, parent, channel);
             label.alignment = TextAnchor.MiddleLeft;
-            label.color = Color.black;
+            label.color = MaterialEditorTheme.Colors.PrimaryText;
 
             var input = MaterialEditorControlFactory.CreateNumericInput(
                 inputName,

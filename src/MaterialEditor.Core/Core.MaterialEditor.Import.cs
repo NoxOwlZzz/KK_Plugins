@@ -92,6 +92,24 @@ namespace KK_Plugins.MaterialEditor
                     else
                         data.data["MaterialColorPropertyList"] = null;
                 }
+                if (data.data.TryGetValue("MaterialVectorPropertyList", out var vectorProperties) && vectorProperties != null)
+                {
+                    var properties = MessagePackSerializer.Deserialize<List<MaterialEditorCharaController.MaterialVectorProperty>>((byte[])vectorProperties);
+                    properties.RemoveAll(x => x.CoordinateIndex != 0);
+
+                    properties.RemoveAll(x => x.ObjectType == MaterialEditorCharaController.ObjectType.Clothing && x.Slot == 7);
+                    for (int i = 0; i < properties.Count; i++)
+                    {
+                        var property = properties[i];
+                        if (property.Slot == 8)
+                            property.Slot = 7;
+                    }
+
+                    if (properties.Count > 0)
+                        data.data["MaterialVectorPropertyList"] = MessagePackSerializer.Serialize(properties);
+                    else
+                        data.data["MaterialVectorPropertyList"] = null;
+                }
                 if (data.data.TryGetValue("MaterialTexturePropertyList", out var textureProperties) && textureProperties != null)
                 {
                     var properties = MessagePackSerializer.Deserialize<List<MaterialEditorCharaController.MaterialTextureProperty>>((byte[])textureProperties);
@@ -247,6 +265,32 @@ namespace KK_Plugins.MaterialEditor
                         data.data["MaterialColorPropertyList"] = MessagePackSerializer.Serialize(propertiesNew);
                     else
                         data.data["MaterialColorPropertyList"] = null;
+                }
+                if (data.data.TryGetValue("MaterialVectorPropertyList", out var vectorProperties) && vectorProperties != null)
+                {
+                    List<MaterialEditorCharaController.MaterialVectorProperty> properties = MessagePackSerializer.Deserialize<List<MaterialEditorCharaController.MaterialVectorProperty>>((byte[])vectorProperties);
+                    List<MaterialEditorCharaController.MaterialVectorProperty> propertiesNew = new List<MaterialEditorCharaController.MaterialVectorProperty>();
+
+                    foreach (var property in properties)
+                    {
+                        if (property.ObjectType == MaterialEditorCharaController.ObjectType.Accessory || property.ObjectType == MaterialEditorCharaController.ObjectType.Clothing)
+                        {
+                            if (coordinateMapping.TryGetValue(property.CoordinateIndex, out int? newIndex) && newIndex != null)
+                            {
+                                property.CoordinateIndex = (int)newIndex;
+                                propertiesNew.Add(property);
+                            }
+                        }
+                        else
+                        {
+                            propertiesNew.Add(property);
+                        }
+                    }
+
+                    if (propertiesNew.Count > 0)
+                        data.data["MaterialVectorPropertyList"] = MessagePackSerializer.Serialize(propertiesNew);
+                    else
+                        data.data["MaterialVectorPropertyList"] = null;
                 }
                 if (data.data.TryGetValue("MaterialTexturePropertyList", out var textureProperties) && textureProperties != null)
                 {
@@ -408,6 +452,22 @@ namespace KK_Plugins.MaterialEditor
                         data.data["MaterialColorProperty"] = MessagePackSerializer.Serialize(properties);
                     else
                         data.data["MaterialColorProperty"] = null;
+                }
+                if (data.data.TryGetValue("MaterialVectorPropertyList", out var vectorProperties) && vectorProperties != null)
+                {
+                    var properties = MessagePackSerializer.Deserialize<List<MaterialEditorCharaController.MaterialVectorProperty>>((byte[])vectorProperties);
+                    properties.RemoveAll(x => x.ObjectType == MaterialEditorCharaController.ObjectType.Clothing && x.Slot == 7);
+                    for (int i = 0; i < properties.Count; i++)
+                    {
+                        var property = properties[i];
+                        if (property.Slot == 8)
+                            property.Slot = 7;
+                    }
+
+                    if (properties.Count > 0)
+                        data.data["MaterialVectorPropertyList"] = MessagePackSerializer.Serialize(properties);
+                    else
+                        data.data["MaterialVectorPropertyList"] = null;
                 }
                 if (data.data.TryGetValue("MaterialTexturePropertyList", out var textureProperties) && textureProperties != null)
                 {

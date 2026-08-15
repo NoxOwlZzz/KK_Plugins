@@ -7,8 +7,6 @@ namespace MaterialEditorAPI
 {
     internal class TooltipManager : MonoBehaviour
     {
-        private const float TooltipWidth = 280f;
-        private const float TooltipMaximumHeight = 360f;
         private static TooltipManager Instance;
         private readonly HashSet<Tooltip> _tooltips = new HashSet<Tooltip>();
 
@@ -53,13 +51,14 @@ namespace MaterialEditorAPI
             var panel = MaterialEditorControlFactory.CreatePanel("TooltipPanel", parent);
             var panelTransform = (RectTransform)panel.transform;
 
-            panel.color = new Color(0.2f, 0.2f, 0.2f, 0.98f);
+            panel.color = MaterialEditorTheme.Colors.TooltipSurface;
+            panel.raycastTarget = false;
             panelTransform.pivot = Vector3.zero;
             panelTransform.anchorMax = Vector3.zero;
             panelTransform.anchorMin = Vector3.zero;
             panelTransform.SetSizeWithCurrentAnchors(
                 RectTransform.Axis.Horizontal,
-                TooltipWidth);
+                MaterialEditorTheme.Metrics.TooltipWidth);
 
             var tooltipText = MaterialEditorControlFactory.CreateText(
                 "ToolTipText",
@@ -68,12 +67,17 @@ namespace MaterialEditorAPI
                 MaterialEditorTextRole.Tooltip);
             tooltipText.alignment = TextAnchor.MiddleCenter;
             tooltipText.resizeTextForBestFit = false;
-            tooltipText.fontSize = 11;
+            tooltipText.fontSize = MaterialEditorTheme.Typography.TooltipFontSize;
             tooltipText.supportRichText = false;
+            tooltipText.raycastTarget = false;
             tooltipText.horizontalOverflow = HorizontalWrapMode.Wrap;
             tooltipText.verticalOverflow = VerticalWrapMode.Overflow;
             var layout = panel.gameObject.AddComponent<HorizontalLayoutGroup>();
-            layout.padding = new RectOffset(4, 4, 2, 2);
+            layout.padding = new RectOffset(
+                MaterialEditorTheme.Spacing.TooltipHorizontalPadding,
+                MaterialEditorTheme.Spacing.TooltipHorizontalPadding,
+                MaterialEditorTheme.Spacing.TooltipVerticalPadding,
+                MaterialEditorTheme.Spacing.TooltipVerticalPadding);
             layout.childAlignment = TextAnchor.MiddleCenter;
             layout.childControlWidth = true;
             layout.childForceExpandWidth = true;
@@ -223,6 +227,7 @@ namespace MaterialEditorAPI
                 tooltipText.text = text;
                 RefreshLayout();
             }
+            Panel.transform.SetAsLastSibling();
             Panel.gameObject.SetActive(true);
         }
 
@@ -233,13 +238,15 @@ namespace MaterialEditorAPI
 
         private void RefreshLayout()
         {
-            var textWidth = TooltipWidth - 8f;
+            var textWidth = MaterialEditorTheme.Metrics.TooltipWidth
+                            - MaterialEditorTheme.Spacing.TooltipHorizontalPadding * 2f;
             tooltipText.rectTransform.SetSizeWithCurrentAnchors(
                 RectTransform.Axis.Horizontal,
                 textWidth);
             var height = Mathf.Min(
-                TooltipMaximumHeight,
-                tooltipText.preferredHeight + 4f);
+                MaterialEditorTheme.Metrics.TooltipMaximumHeight,
+                tooltipText.preferredHeight
+                + MaterialEditorTheme.Spacing.TooltipVerticalPadding * 2f);
             panelTransform.SetSizeWithCurrentAnchors(
                 RectTransform.Axis.Vertical,
                 height);
@@ -261,7 +268,9 @@ namespace MaterialEditorAPI
                 return;
             }
 
-            position += new Vector2(5f, 5f);
+            position += new Vector2(
+                MaterialEditorTheme.Spacing.TooltipCursorOffset,
+                MaterialEditorTheme.Spacing.TooltipCursorOffset);
             var parentRect = parent.rect;
             var size = panelTransform.rect.size;
             position.x = Mathf.Clamp(

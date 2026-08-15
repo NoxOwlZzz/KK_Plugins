@@ -22,32 +22,56 @@ namespace MaterialEditorAPI
             Projector = projector;
             MaterialName = materialName;
             Name = definition.Name;
-            DisplayName = string.IsNullOrEmpty(definition.DisplayName)
+            var currentDisplayName = string.IsNullOrEmpty(definition.DisplayName)
                 ? definition.Name
                 : definition.DisplayName;
+            var shaderName = material.shader.NameFormatted();
+            var catalogDisplayName = ShaderUiMetadataRegistry.GetPropertyDisplayName(
+                shaderName,
+                definition.Name);
+            var hasExplicitDisplayName = definition.HasExplicitDisplayName
+                || (!string.IsNullOrEmpty(definition.DisplayName)
+                    && definition.DisplayName != definition.Name);
+            DisplayName = hasExplicitDisplayName
+                ? currentDisplayName
+                : string.IsNullOrEmpty(catalogDisplayName)
+                    ? currentDisplayName
+                    : catalogDisplayName;
             Type = definition.Type;
+            PropertyHandle = Type == ShaderPropertyType.Keyword
+                ? default(MaterialPropertyHandle)
+                : MaterialPropertyIdCache.Get(Name);
             MinValue = definition.MinValue;
             MaxValue = definition.MaxValue;
-            IsAdvanced = definition.UiLevel == MaterialEditorPropertyUiLevel.Advanced;
-            EditorId = string.IsNullOrEmpty(definition.EditorId)
-                ? GetEditorId(definition.Type)
+            var editorId = string.IsNullOrEmpty(definition.EditorId)
+                ? ShaderPropertyEditorPolicy.GetDefaultEditorId(definition.Type)
                 : definition.EditorId;
-            EnumOptions = definition.EnumOptions
-                          ?? new List<MaterialEditorEnumOption>();
-            Invert = definition.Invert;
-            PublicDescriptor = new MaterialEditorPropertyDescriptor(
+            var catalogTooltip = ShaderUiMetadataRegistry.GetPropertyTooltip(
+                shaderName,
+                definition.Name);
+            var publicDescriptor = new MaterialEditorPropertyDescriptor(
                 definition.Name,
                 DisplayName,
-                EditorId)
+                editorId)
             {
                 PropertyName = definition.Name,
                 Category = category ?? string.Empty,
+                Order = definition.Order ?? 0,
+                Group = definition.Group ?? string.Empty,
+                VisibilityCondition = definition.ShowIf,
+                VectorComponentCount = definition.VectorComponentCount,
+                OffValue = definition.OffValue,
+                OnValue = definition.OnValue,
                 Minimum = definition.MinValue,
                 Maximum = definition.MaxValue,
-                TooltipText = ShaderUiMetadataRegistry.GetPropertyTooltip(
-                    material.shader.NameFormatted(),
-                    definition.Name)
+                TooltipText = string.IsNullOrEmpty(catalogTooltip)
+                    ? definition.TooltipText
+                    : catalogTooltip
             };
+            if (definition.EnumOptions != null)
+                ((List<MaterialEditorEnumOption>)publicDescriptor.EnumOptions)
+                    .AddRange(definition.EnumOptions);
+            PublicDescriptor = publicDescriptor;
         }
 
         internal PropertyDescriptor(
@@ -71,11 +95,11 @@ namespace MaterialEditorAPI
                 ? descriptor.Id
                 : descriptor.DisplayName;
             Type = type;
+            PropertyHandle = Type == ShaderPropertyType.Keyword
+                ? default(MaterialPropertyHandle)
+                : MaterialPropertyIdCache.Get(Name);
             MinValue = descriptor.Minimum;
             MaxValue = descriptor.Maximum;
-            EditorId = descriptor.EditorId;
-            EnumOptions = new List<MaterialEditorEnumOption>();
-            Invert = false;
             PublicDescriptor = descriptor;
         }
 
@@ -87,33 +111,11 @@ namespace MaterialEditorAPI
         internal string Name { get; }
         internal string DisplayName { get; }
         internal ShaderPropertyType Type { get; }
+        internal MaterialPropertyHandle PropertyHandle { get; }
         internal float? MinValue { get; }
         internal float? MaxValue { get; }
-        internal bool IsAdvanced { get; }
-        internal string EditorId { get; }
-        internal IList<MaterialEditorEnumOption> EnumOptions { get; }
-        internal bool Invert { get; }
-        internal System.Action PresentationRefresh { get; set; }
         internal MaterialEditorPropertyDescriptor PublicDescriptor { get; }
 
-        private static string GetEditorId(ShaderPropertyType type)
-        {
-            switch (type)
-            {
-                case ShaderPropertyType.Texture:
-                    return MaterialEditorPropertyEditorIds.Texture;
-                case ShaderPropertyType.Cubemap:
-                    return MaterialEditorPropertyEditorIds.Cubemap;
-                case ShaderPropertyType.Color:
-                    return MaterialEditorPropertyEditorIds.Color;
-                case ShaderPropertyType.Float:
-                    return MaterialEditorPropertyEditorIds.Float;
-                case ShaderPropertyType.Keyword:
-                    return MaterialEditorPropertyEditorIds.Boolean;
-                default:
-                    return string.Empty;
-            }
-        }
     }
 
     internal sealed class PropertyRowModelFactory
@@ -132,7 +134,26 @@ namespace MaterialEditorAPI
         internal IEnumerable<RowModel> Create(PropertyDescriptor descriptor)
         {
             IEnumerable<RowModel> rows;
-            switch (descriptor.Type)
+            var editorId = descriptor.PublicDescriptor?.EditorId;
+            if (descriptor.Type == ShaderPropertyType.Float
+                && editorId == MaterialEditorPropertyEditorIds.Enum
+                && descriptor.PublicDescriptor.EnumOptions != null
+                && descriptor.PublicDescriptor.EnumOptions.Count > 0)
+            {
+                rows = new[] { CreateEnumRow(descriptor) };
+            }
+            else if (descriptor.Type == ShaderPropertyType.Float
+                     && editorId == MaterialEditorPropertyEditorIds.Toggle)
+            {
+                rows = new[] { CreateFloatToggleRow(descriptor) };
+            }
+            else if ((descriptor.Type == ShaderPropertyType.Vector
+                      || descriptor.Type == ShaderPropertyType.Color)
+                     && IsVectorEditor(editorId))
+            {
+                rows = new[] { CreateVectorRow(descriptor) };
+            }
+            else switch (descriptor.Type)
             {
                 case ShaderPropertyType.Texture:
                     rows = CreateTextureRows(descriptor);
@@ -144,16 +165,13 @@ namespace MaterialEditorAPI
                     rows = new[] { CreateColorRow(descriptor) };
                     break;
                 case ShaderPropertyType.Float:
-                    if (descriptor.EditorId == ShaderPropertyEditorIds.Enum
-                        && descriptor.EnumOptions.Count > 0)
-                        rows = new[] { CreateEnumRow(descriptor) };
-                    else if (descriptor.EditorId == ShaderPropertyEditorIds.Boolean)
-                        rows = new[] { CreateFloatToggleRow(descriptor) };
-                    else
-                        rows = new[] { CreateFloatRow(descriptor) };
+                    rows = new[] { CreateFloatRow(descriptor) };
                     break;
                 case ShaderPropertyType.Keyword:
                     rows = new[] { CreateKeywordRow(descriptor) };
+                    break;
+                case ShaderPropertyType.Vector:
+                    rows = new[] { CreateVectorRow(descriptor) };
                     break;
                 default:
                     rows = new RowModel[0];
@@ -161,8 +179,7 @@ namespace MaterialEditorAPI
             }
             return WithMetadata(
                 rows,
-                descriptor.PublicDescriptor?.TooltipText,
-                descriptor.IsAdvanced);
+                descriptor.PublicDescriptor?.TooltipText);
         }
 
         internal IEnumerable<RowModel> CreateExtension(
@@ -177,8 +194,7 @@ namespace MaterialEditorAPI
 
             return WithMetadata(
                 CreateExtensionRows(context, descriptor, editor),
-                descriptor.TooltipText,
-                false);
+                descriptor.TooltipText);
         }
 
         private IEnumerable<RowModel> CreateExtensionRows(
@@ -202,6 +218,18 @@ namespace MaterialEditorAPI
             if (textureEditor != null)
                 return CreateExtensionTextureRows(context, descriptor, textureEditor);
 
+            var enumEditor = editor as MaterialEditorEnumPropertyEditor;
+            if (enumEditor != null)
+                return new[] { CreateExtensionEnumRow(context, descriptor, enumEditor) };
+
+            var vectorEditor = editor as MaterialEditorVectorPropertyEditor;
+            if (vectorEditor != null)
+                return new[] { CreateExtensionVectorRow(context, descriptor, vectorEditor) };
+
+            var toggleEditor = editor as MaterialEditorTogglePropertyEditor;
+            if (toggleEditor != null)
+                return new[] { CreateExtensionToggleRow(context, descriptor, toggleEditor) };
+
             MaterialEditorPluginBase.Logger?.LogWarning(
                 $"Property editor '{descriptor.EditorId}' returned an unsupported editor type.");
             return new RowModel[0];
@@ -209,12 +237,10 @@ namespace MaterialEditorAPI
 
         private static IEnumerable<RowModel> WithMetadata(
             IEnumerable<RowModel> rows,
-            string tooltipText,
-            bool isAdvanced)
+            string tooltipText)
         {
             foreach (var row in rows)
             {
-                row.IsAdvanced = isAdvanced;
                 row.TooltipText = tooltipText;
                 yield return row;
             }
@@ -228,6 +254,9 @@ namespace MaterialEditorAPI
             var material = descriptor.Material;
             var projector = descriptor.Projector;
             var propertyName = descriptor.Name;
+            var currentTexture = MaterialPropertyAccess.GetTexture(
+                material,
+                descriptor.PropertyHandle);
 
             var textureItem = new TexturePropertyRowModel(descriptor.DisplayName)
             {
@@ -238,7 +267,7 @@ namespace MaterialEditorAPI
                 PropertyName = propertyName,
                 PublicDescriptor = descriptor.PublicDescriptor,
                 Changed = !_editService.GetMaterialTextureValueOriginal(data, material, propertyName, gameObject),
-                Exists = material.GetTexture("_" + propertyName) != null,
+                Exists = currentTexture != null,
                 Export = () => _actions.ExportTexture(material, propertyName),
                 SelectInterpolable = () =>
                     _actions.SelectInterpolable(
@@ -263,15 +292,21 @@ namespace MaterialEditorAPI
                         material,
                         propertyName,
                         gameObject);
-                textureItem.Exists =
-                    material.GetTexture("_" + propertyName) != null;
+                var restoredTexture = MaterialPropertyAccess.GetTexture(
+                    material,
+                    descriptor.PropertyHandle);
+                textureItem.Exists = restoredTexture != null;
             };
 
-            var textureOffset = material.GetTextureOffset($"_{propertyName}");
+            var textureOffset = MaterialPropertyAccess.GetTextureOffset(
+                material,
+                descriptor.PropertyHandle);
             var textureOffsetOriginal =
                 _editService.GetMaterialTextureOffsetOriginal(data, material, propertyName, gameObject)
                 ?? textureOffset;
-            var textureScale = material.GetTextureScale($"_{propertyName}");
+            var textureScale = MaterialPropertyAccess.GetTextureScale(
+                material,
+                descriptor.PropertyHandle);
             var textureScaleOriginal =
                 _editService.GetMaterialTextureScaleOriginal(data, material, propertyName, gameObject)
                 ?? textureScale;
@@ -320,7 +355,9 @@ namespace MaterialEditorAPI
                     material,
                     propertyName,
                     gameObject),
-                Exists = material.GetTexture("_" + propertyName) is Cubemap,
+                Exists = MaterialPropertyAccess.GetTexture(
+                    material,
+                    descriptor.PropertyHandle) is Cubemap,
                 Export = () => _actions.ExportCubemap(material, propertyName)
             };
             cubemapItem.Import = () =>
@@ -343,8 +380,9 @@ namespace MaterialEditorAPI
                         material,
                         propertyName,
                         gameObject);
-                cubemapItem.Exists =
-                    material.GetTexture("_" + propertyName) is Cubemap;
+                cubemapItem.Exists = MaterialPropertyAccess.GetTexture(
+                    material,
+                    descriptor.PropertyHandle) is Cubemap;
             };
             return cubemapItem;
         }
@@ -355,7 +393,9 @@ namespace MaterialEditorAPI
             var data = descriptor.Data;
             var material = descriptor.Material;
             var propertyName = descriptor.Name;
-            var value = material.GetColor($"_{propertyName}");
+            var value = MaterialPropertyAccess.GetColor(
+                material,
+                descriptor.PropertyHandle);
             var original =
                 _editService.GetMaterialColorPropertyValueOriginal(data, material, propertyName, gameObject)
                 ?? value;
@@ -394,7 +434,9 @@ namespace MaterialEditorAPI
             var data = descriptor.Data;
             var material = descriptor.Material;
             var propertyName = descriptor.Name;
-            var value = material.GetFloat($"_{propertyName}");
+            var value = MaterialPropertyAccess.GetFloat(
+                material,
+                descriptor.PropertyHandle);
             var original =
                 _editService.GetMaterialFloatPropertyValueOriginal(data, material, propertyName, gameObject)
                 ?? value;
@@ -418,138 +460,170 @@ namespace MaterialEditorAPI
 
         private EnumPropertyRowModel CreateEnumRow(PropertyDescriptor descriptor)
         {
-            var gameObject = descriptor.GameObject;
-            var data = descriptor.Data;
-            var material = descriptor.Material;
-            var propertyName = descriptor.Name;
-            var value = material.GetFloat($"_{propertyName}");
+            var value = MaterialPropertyAccess.GetFloat(
+                descriptor.Material,
+                descriptor.PropertyHandle);
             var original =
                 _editService.GetMaterialFloatPropertyValueOriginal(
-                    data,
-                    material,
-                    propertyName,
-                    gameObject)
+                    descriptor.Data,
+                    descriptor.Material,
+                    descriptor.Name,
+                    descriptor.GameObject)
                 ?? value;
-
             return new EnumPropertyRowModel(descriptor.DisplayName)
             {
-                GameObject = gameObject,
-                Data = data,
-                Material = material,
+                GameObject = descriptor.GameObject,
+                Data = descriptor.Data,
+                Material = descriptor.Material,
                 Projector = descriptor.Projector,
-                PropertyName = propertyName,
+                PropertyName = descriptor.Name,
                 PublicDescriptor = descriptor.PublicDescriptor,
                 Value = value,
                 OriginalValue = original,
-                Options = descriptor.EnumOptions,
-                CurrentValues = GetFloatValues(descriptor),
-                SelectInterpolable = () =>
-                    _actions.SelectInterpolable(
-                        gameObject,
-                        RowModel.RowItemType.FloatProperty,
-                        descriptor.MaterialName,
-                        propertyName,
-                        string.Empty),
+                Options = descriptor.PublicDescriptor.EnumOptions,
+                SelectInterpolable = () => _actions.SelectInterpolable(
+                    descriptor.GameObject,
+                    RowModel.RowItemType.FloatProperty,
+                    descriptor.MaterialName,
+                    descriptor.Name,
+                    string.Empty),
                 ValueOnChange = newValue =>
                     _editService.SetMaterialFloatProperty(
-                        data,
-                        material,
-                        propertyName,
+                        descriptor.Data,
+                        descriptor.Material,
+                        descriptor.Name,
                         newValue,
-                        gameObject),
+                        descriptor.GameObject),
                 ValueOnReset = () =>
                     _editService.RemoveMaterialFloatProperty(
-                        data,
-                        material,
-                        propertyName,
-                        gameObject),
-                PresentationRefresh = descriptor.PresentationRefresh
+                        descriptor.Data,
+                        descriptor.Material,
+                        descriptor.Name,
+                        descriptor.GameObject)
             };
-        }
-
-        private static IList<float> GetFloatValues(PropertyDescriptor descriptor)
-        {
-            var values = new List<float>();
-            var materialPropertyName = "_" + descriptor.Name;
-            if (descriptor.Projector != null)
-            {
-                if (descriptor.Material.HasProperty(materialPropertyName))
-                    values.Add(descriptor.Material.GetFloat(materialPropertyName));
-                return values;
-            }
-
-            var visited = new HashSet<Material>();
-            foreach (var renderer in GetRendererList(descriptor.GameObject))
-            {
-                foreach (var material in GetMaterials(descriptor.GameObject, renderer))
-                {
-                    if (!visited.Add(material)
-                        || material.NameFormatted() != descriptor.MaterialName
-                        || !material.HasProperty(materialPropertyName))
-                    {
-                        continue;
-                    }
-
-                    values.Add(material.GetFloat(materialPropertyName));
-                }
-            }
-
-            if (values.Count == 0
-                && descriptor.Material.HasProperty(materialPropertyName))
-            {
-                values.Add(descriptor.Material.GetFloat(materialPropertyName));
-            }
-            return values;
         }
 
         private FloatTogglePropertyRowModel CreateFloatToggleRow(
             PropertyDescriptor descriptor)
         {
-            var gameObject = descriptor.GameObject;
-            var data = descriptor.Data;
-            var material = descriptor.Material;
-            var propertyName = descriptor.Name;
-            var value = material.GetFloat($"_{propertyName}");
+            var value = MaterialPropertyAccess.GetFloat(
+                descriptor.Material,
+                descriptor.PropertyHandle);
             var original =
                 _editService.GetMaterialFloatPropertyValueOriginal(
-                    data,
-                    material,
-                    propertyName,
-                    gameObject)
+                    descriptor.Data,
+                    descriptor.Material,
+                    descriptor.Name,
+                    descriptor.GameObject)
                 ?? value;
-
             return new FloatTogglePropertyRowModel(descriptor.DisplayName)
             {
-                GameObject = gameObject,
-                Data = data,
-                Material = material,
+                GameObject = descriptor.GameObject,
+                Data = descriptor.Data,
+                Material = descriptor.Material,
                 Projector = descriptor.Projector,
-                PropertyName = propertyName,
+                PropertyName = descriptor.Name,
                 PublicDescriptor = descriptor.PublicDescriptor,
                 Value = value,
                 OriginalValue = original,
-                Invert = descriptor.Invert,
-                SelectInterpolable = () =>
-                    _actions.SelectInterpolable(
-                        gameObject,
-                        RowModel.RowItemType.FloatProperty,
-                        descriptor.MaterialName,
-                        propertyName,
-                        string.Empty),
+                OffValue = descriptor.PublicDescriptor.OffValue,
+                OnValue = descriptor.PublicDescriptor.OnValue,
+                SelectInterpolable = () => _actions.SelectInterpolable(
+                    descriptor.GameObject,
+                    RowModel.RowItemType.FloatProperty,
+                    descriptor.MaterialName,
+                    descriptor.Name,
+                    string.Empty),
                 ValueOnChange = newValue =>
                     _editService.SetMaterialFloatProperty(
-                        data,
-                        material,
-                        propertyName,
+                        descriptor.Data,
+                        descriptor.Material,
+                        descriptor.Name,
                         newValue,
-                        gameObject),
+                        descriptor.GameObject),
                 ValueOnReset = () =>
                     _editService.RemoveMaterialFloatProperty(
-                        data,
-                        material,
-                        propertyName,
-                        gameObject),
-                PresentationRefresh = descriptor.PresentationRefresh
+                        descriptor.Data,
+                        descriptor.Material,
+                        descriptor.Name,
+                        descriptor.GameObject)
+            };
+        }
+
+        private VectorPropertyRowModel CreateVectorRow(PropertyDescriptor descriptor)
+        {
+            var value = MaterialPropertyAccess.GetVector(
+                descriptor.Material,
+                descriptor.PropertyHandle);
+            Vector4 original;
+            System.Action<Vector4> setValue;
+            System.Action resetValue;
+            if (descriptor.Type == ShaderPropertyType.Color)
+            {
+                var originalColor = _editService.GetMaterialColorPropertyValueOriginal(
+                    descriptor.Data,
+                    descriptor.Material,
+                    descriptor.Name,
+                    descriptor.GameObject);
+                original = originalColor.HasValue
+                    ? (Vector4)originalColor.Value
+                    : value;
+                setValue = newValue => _editService.SetMaterialColorProperty(
+                    descriptor.Data,
+                    descriptor.Material,
+                    descriptor.Name,
+                    new Color(newValue.x, newValue.y, newValue.z, newValue.w),
+                    descriptor.GameObject);
+                resetValue = () => _editService.RemoveMaterialColorProperty(
+                    descriptor.Data,
+                    descriptor.Material,
+                    descriptor.Name,
+                    descriptor.GameObject);
+            }
+            else
+            {
+                original = _editService.GetMaterialVectorPropertyValueOriginal(
+                               descriptor.Data,
+                               descriptor.Material,
+                               descriptor.Name,
+                               descriptor.GameObject)
+                           ?? value;
+                setValue = newValue => _editService.SetMaterialVectorProperty(
+                    descriptor.Data,
+                    descriptor.Material,
+                    descriptor.Name,
+                    newValue,
+                    descriptor.GameObject);
+                resetValue = () => _editService.RemoveMaterialVectorProperty(
+                    descriptor.Data,
+                    descriptor.Material,
+                    descriptor.Name,
+                    descriptor.GameObject);
+            }
+
+            return new VectorPropertyRowModel(descriptor.DisplayName)
+            {
+                GameObject = descriptor.GameObject,
+                Data = descriptor.Data,
+                Material = descriptor.Material,
+                Projector = descriptor.Projector,
+                PropertyName = descriptor.Name,
+                PublicDescriptor = descriptor.PublicDescriptor,
+                Value = value,
+                OriginalValue = original,
+                ComponentCount = GetVectorComponentCount(descriptor.PublicDescriptor),
+                Minimum = descriptor.MinValue,
+                Maximum = descriptor.MaxValue,
+                SelectInterpolable = descriptor.Type == ShaderPropertyType.Color
+                    ? (System.Action)(() => _actions.SelectInterpolable(
+                        descriptor.GameObject,
+                        RowModel.RowItemType.ColorProperty,
+                        descriptor.MaterialName,
+                        descriptor.Name,
+                        string.Empty))
+                    : null,
+                ValueOnChange = setValue,
+                ValueOnReset = resetValue
             };
         }
 
@@ -563,6 +637,9 @@ namespace MaterialEditorAPI
             System.Action<float> changeValue,
             System.Action resetValue)
         {
+            var hasRange = FloatPropertyRangePolicy.HasUsableRange(
+                minValue,
+                maxValue);
             var item = new FloatPropertyRowModel(descriptor.DisplayName)
             {
                 GameObject = descriptor.GameObject,
@@ -573,15 +650,16 @@ namespace MaterialEditorAPI
                 PublicDescriptor = descriptor.PublicDescriptor,
                 Value = value,
                 OriginalValue = original,
+                HasRange = hasRange,
                 SelectInterpolable = selectInterpolable,
                 ValueOnChange = changeValue,
-                ValueOnReset = resetValue,
-                PresentationRefresh = descriptor.PresentationRefresh
+                ValueOnReset = resetValue
             };
-            if (minValue != null)
+            if (hasRange)
+            {
                 item.SliderMinimum = minValue.Value;
-            if (maxValue != null)
                 item.SliderMaximum = maxValue.Value;
+            }
             return item;
         }
 
@@ -609,8 +687,7 @@ namespace MaterialEditorAPI
                 ValueOnChange = newValue =>
                     _editService.SetMaterialKeywordProperty(data, material, propertyName, newValue, gameObject),
                 ValueOnReset = () =>
-                    _editService.RemoveMaterialKeywordProperty(data, material, propertyName, gameObject),
-                PresentationRefresh = descriptor.PresentationRefresh
+                    _editService.RemoveMaterialKeywordProperty(data, material, propertyName, gameObject)
             };
         }
 
@@ -629,6 +706,7 @@ namespace MaterialEditorAPI
                 PublicDescriptor = descriptor,
                 Value = editor.Value,
                 OriginalValue = editor.OriginalValue,
+                HasRange = true,
                 SliderMinimum = editor.Minimum,
                 SliderMaximum = editor.Maximum,
                 SelectInterpolable = editor.SelectInterpolable ?? (() => { }),
@@ -730,6 +808,124 @@ namespace MaterialEditorAPI
                 ScaleOnReset = editor.ResetScale ?? (() => { })
             };
             return new RowModel[] { texture, transform };
+        }
+
+        private static EnumPropertyRowModel CreateExtensionEnumRow(
+            MaterialEditorPropertyContext context,
+            MaterialEditorPropertyDescriptor descriptor,
+            MaterialEditorEnumPropertyEditor editor)
+        {
+            return new EnumPropertyRowModel(descriptor.DisplayName)
+            {
+                GameObject = context.Target.GameObject,
+                Data = context.Target.Data,
+                Material = context.Target.Material,
+                Projector = context.Target.Projector,
+                PropertyName = descriptor.PropertyName,
+                PublicDescriptor = descriptor,
+                Value = editor.Value,
+                OriginalValue = editor.OriginalValue,
+                IsMixed = editor.IsMixed,
+                Options = editor.Options,
+                SelectInterpolable = editor.SelectInterpolable,
+                ValueOnChange = editor.ValueChanged,
+                ValueOnReset = editor.Reset
+            };
+        }
+
+        private static VectorPropertyRowModel CreateExtensionVectorRow(
+            MaterialEditorPropertyContext context,
+            MaterialEditorPropertyDescriptor descriptor,
+            MaterialEditorVectorPropertyEditor editor)
+        {
+            return new VectorPropertyRowModel(descriptor.DisplayName)
+            {
+                GameObject = context.Target.GameObject,
+                Data = context.Target.Data,
+                Material = context.Target.Material,
+                Projector = context.Target.Projector,
+                PropertyName = descriptor.PropertyName,
+                PublicDescriptor = descriptor,
+                Value = editor.Value,
+                OriginalValue = editor.OriginalValue,
+                ComponentCount = editor.ComponentCount,
+                Minimum = descriptor.Minimum,
+                Maximum = descriptor.Maximum,
+                MixedComponents = CopyMixedComponents(editor.MixedComponents),
+                SelectInterpolable = editor.SelectInterpolable,
+                ComponentOnChange = editor.ComponentChanged,
+                ValueOnChange = editor.ValueChanged,
+                ValueOnReset = editor.Reset
+            };
+        }
+
+        private static FloatTogglePropertyRowModel CreateExtensionToggleRow(
+            MaterialEditorPropertyContext context,
+            MaterialEditorPropertyDescriptor descriptor,
+            MaterialEditorTogglePropertyEditor editor)
+        {
+            return new FloatTogglePropertyRowModel(descriptor.DisplayName)
+            {
+                GameObject = context.Target.GameObject,
+                Data = context.Target.Data,
+                Material = context.Target.Material,
+                Projector = context.Target.Projector,
+                PropertyName = descriptor.PropertyName,
+                PublicDescriptor = descriptor,
+                Value = editor.Value,
+                OriginalValue = editor.OriginalValue,
+                OffValue = editor.OffValue,
+                OnValue = editor.OnValue,
+                IsMixed = editor.IsMixed,
+                SelectInterpolable = editor.SelectInterpolable,
+                ValueOnChange = editor.ValueChanged,
+                ValueOnReset = editor.Reset
+            };
+        }
+
+        private static bool IsVectorEditor(string editorId)
+        {
+            return editorId == MaterialEditorPropertyEditorIds.Vector2
+                   || editorId == MaterialEditorPropertyEditorIds.Vector3
+                   || editorId == MaterialEditorPropertyEditorIds.Vector4;
+        }
+
+        private static int GetVectorComponentCount(
+            MaterialEditorPropertyDescriptor descriptor)
+        {
+            if (descriptor.VectorComponentCount.HasValue
+                && descriptor.VectorComponentCount.Value >= 2
+                && descriptor.VectorComponentCount.Value <= 4)
+                return descriptor.VectorComponentCount.Value;
+            if (descriptor.EditorId == MaterialEditorPropertyEditorIds.Vector2)
+                return 2;
+            if (descriptor.EditorId == MaterialEditorPropertyEditorIds.Vector3)
+                return 3;
+            return 4;
+        }
+
+        private static bool[] CopyMixedComponents(IList<bool> source)
+        {
+            var performanceSample = MaterialEditorPerformance.Start(
+                MaterialEditorPerformanceMetric.MixedStateCopies);
+            try
+            {
+                var result = new bool[4];
+                var copyCount = MaterialEditorMixedStatePerformance
+                    .GetComponentCopyCount(source, result.Length);
+                for (var index = 0; index < copyCount; index++)
+                    result[index] = source[index];
+                MaterialEditorPerformance.Increment(
+                    MaterialEditorPerformanceMetric.MixedComponentsCopied,
+                    copyCount);
+                return result;
+            }
+            finally
+            {
+                MaterialEditorPerformance.Stop(
+                    MaterialEditorPerformanceMetric.MixedStateCopies,
+                    performanceSample);
+            }
         }
     }
 }

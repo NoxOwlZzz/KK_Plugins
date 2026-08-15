@@ -1,4 +1,4 @@
-﻿using System.Collections.Generic;
+using System.Collections.Generic;
 using UnityEngine;
 
 namespace MaterialEditorAPI
@@ -20,6 +20,10 @@ namespace MaterialEditorAPI
         /// List of color property edits
         /// </summary>
         public List<MaterialColorProperty> MaterialColorPropertyList = new List<MaterialColorProperty>();
+        /// <summary>
+        /// List of vector property edits
+        /// </summary>
+        public List<MaterialVectorProperty> MaterialVectorPropertyList = new List<MaterialVectorProperty>();
         /// <summary>
         /// List of texture property edits
         /// </summary>
@@ -44,10 +48,25 @@ namespace MaterialEditorAPI
         {
             get
             {
-                if (MaterialFloatPropertyList.Count == 0 && MaterialKeywordPropertyList.Count == 0 && MaterialColorPropertyList.Count == 0 && MaterialTexturePropertyList.Count == 0 && MaterialCubemapPropertyList.Count == 0 && MaterialShaderList.Count == 0 && ProjectorPropertyList.Count == 0)
-                    return true;
-                return false;
+                return !HasAny(MaterialFloatPropertyList)
+                       && !HasAny(MaterialKeywordPropertyList)
+                       && !HasAny(MaterialColorPropertyList)
+                       && !HasAny(MaterialVectorPropertyList)
+                       && !HasAny(MaterialTexturePropertyList)
+                       && !HasAny(MaterialCubemapPropertyList)
+                       && !HasAny(MaterialShaderList)
+                       && !HasAny(ProjectorPropertyList);
             }
+        }
+
+        private static bool HasAny<T>(IList<T> values) where T : class
+        {
+            if (values == null)
+                return false;
+            for (var index = 0; index < values.Count; index++)
+                if (values[index] != null)
+                    return true;
+            return false;
         }
 
         /// <summary>
@@ -58,6 +77,7 @@ namespace MaterialEditorAPI
             MaterialFloatPropertyList = new List<MaterialFloatProperty>();
             MaterialKeywordPropertyList = new List<MaterialKeywordProperty>();
             MaterialColorPropertyList = new List<MaterialColorProperty>();
+            MaterialVectorPropertyList = new List<MaterialVectorProperty>();
             MaterialTexturePropertyList = new List<MaterialTextureProperty>();
             MaterialCubemapPropertyList = new List<MaterialCubemapProperty>();
             MaterialShaderList = new List<MaterialShader>();
@@ -136,6 +156,32 @@ namespace MaterialEditorAPI
             /// <param name="property">Name of the property</param>
             /// <param name="value">Value</param>
             public MaterialColorProperty(string property, Color value)
+            {
+                Property = property;
+                Value = value;
+            }
+        }
+
+        /// <summary>
+        /// Data storage class for vector properties
+        /// </summary>
+        public class MaterialVectorProperty
+        {
+            /// <summary>
+            /// Name of the property
+            /// </summary>
+            public string Property;
+            /// <summary>
+            /// Value
+            /// </summary>
+            public Vector4 Value;
+
+            /// <summary>
+            /// Data storage class for vector properties
+            /// </summary>
+            /// <param name="property">Name of the property</param>
+            /// <param name="value">Value</param>
+            public MaterialVectorProperty(string property, Vector4 value)
             {
                 Property = property;
                 Value = value;

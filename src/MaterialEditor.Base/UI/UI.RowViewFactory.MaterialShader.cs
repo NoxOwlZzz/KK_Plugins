@@ -20,56 +20,55 @@ namespace MaterialEditorAPI
             var collapse = MaterialEditorControlFactory.CreateButton(
                 "MaterialCollapseButton",
                 panel.transform,
-                "-");
+                MaterialEditorTheme.Glyphs.MaterialExpanded);
             RowViewFactorySupport.SetWidth(collapse, SmallButtonWidth);
             TooltipManager.AddTooltip(
                 collapse.gameObject,
                 "Expand or collapse this material section");
-            RowViewFactorySupport.CreateLabel(
-                "MaterialLabel",
-                panel.transform,
-                string.Empty,
-                0f,
-                0f);
-
             var materialName = RowViewFactorySupport.CreateLabel(
                 "MaterialText",
                 panel.transform,
                 string.Empty,
                 LabelWidth,
                 1f);
+            RowViewFactorySupport.ConfigurePropertyLabel(materialName);
             materialName.gameObject.AddComponent<LabelClickTrigger>();
             TooltipManager.AddTooltip(materialName.gameObject, "Material name");
 
-            CreateMaterialButton(
-                "MaterialCopy",
+            var copyEdits = MaterialEditorControlFactory.CreateButton(
+                "MaterialCopyEditsButton",
                 panel.transform,
-                "Copy Edits",
-                MaterialButtonWidth,
-                "Copy all the <b>edits</b> of this material");
-            CreateMaterialButton(
-                "MaterialPaste",
+                "Copy Edits");
+            RowViewFactorySupport.SetWidth(copyEdits, MaterialButtonWidth);
+            TooltipManager.AddTooltip(
+                copyEdits.gameObject,
+                "Copy all edits from this material");
+
+            var pasteEdits = MaterialEditorControlFactory.CreateButton(
+                "MaterialPasteEditsButton",
                 panel.transform,
-                "Paste Edits",
-                MaterialButtonWidth,
-                "Paste all the copied edits");
-            CreateMaterialButton(
-                "MaterialCopyRemove",
+                "Paste Edits");
+            RowViewFactorySupport.SetWidth(pasteEdits, MaterialButtonWidth);
+            TooltipManager.AddTooltip(
+                pasteEdits.gameObject,
+                "Copy material edits before pasting");
+
+            var actions = MaterialEditorControlFactory.CreateButton(
+                "MaterialActionMenuButton",
                 panel.transform,
-                "Copy Material",
-                MaterialButtonWidth,
-                "Make a copy of this material.\n\nUseful for overlaying different effects onto an object with different material shaders/properties");
-            CreateMaterialButton(
-                "MaterialRename",
-                panel.transform,
-                ">",
-                MaterialRenameButtonWidth,
-                "Rename material instances");
+                "...");
+            RowViewFactorySupport.SetWidth(actions, SmallButtonWidth);
+            TooltipManager.AddTooltip(
+                actions.gameObject,
+                "Material actions");
         }
 
         private static void CreateShaderRow(Transform parent)
         {
-            var panel = RowViewFactorySupport.CreatePanel("ShaderPanel", parent, ItemColor);
+            var panel = RowViewFactorySupport.CreatePanel(
+                "ShaderPanel",
+                parent,
+                MaterialEditorStyles.ShaderColor);
             var collapse = MaterialEditorControlFactory.CreateButton(
                 "ShaderCollapseButton",
                 panel.transform,
@@ -82,8 +81,9 @@ namespace MaterialEditorAPI
                 "ShaderLabel",
                 panel.transform,
                 string.Empty,
-                LabelWidth,
+                ShaderLabelMinimumWidth,
                 1f);
+            RowViewFactorySupport.ConfigurePropertyLabel(label);
             label.gameObject.AddComponent<LabelClickTrigger>();
 
             var categories = MaterialEditorControlFactory.CreateButton(
@@ -100,34 +100,34 @@ namespace MaterialEditorAPI
                 panel.transform,
                 "Select the currently selected shader property and its render queue as interpolables in timeline");
 
-            var uiMode = MaterialEditorControlFactory.CreateButton(
-                "ShaderUiModeButton",
-                panel.transform,
-                "Basic");
-            RowViewFactorySupport.SetWidth(
-                uiMode,
-                MaterialEditorLayout.ShaderModeButtonWidth);
-            TooltipManager.AddTooltip(
-                uiMode.gameObject,
-                "Switch Basic/Advanced properties for this shader only");
-
             var dropdown = MaterialEditorControlFactory.CreateDropdown(
                 "ShaderDropdown",
                 panel.transform);
-            dropdown.transform.SetRect(0f, 0f, 0f, 1f, 0f, 0f, 100f);
-            dropdown.captionText.transform.SetRect(0f, 0f, 1f, 1f, 5f, 2f, -15f, -2f);
+            dropdown.transform.SetRect(
+                0f, 0f, 0f, 1f,
+                0f, 0f,
+                MaterialEditorTheme.Metrics.DropdownTemplateWidth);
+            dropdown.captionText.transform.SetRect(
+                0f, 0f, 1f, 1f,
+                MaterialEditorTheme.Spacing.DropdownCaptionLeftInset,
+                MaterialEditorTheme.Spacing.DropdownCaptionVerticalInset,
+                -MaterialEditorTheme.Spacing.DropdownCaptionRightInset,
+                -MaterialEditorTheme.Spacing.DropdownCaptionVerticalInset);
             dropdown.captionText.alignment = TextAnchor.MiddleLeft;
             dropdown.options.Clear();
             dropdown.options.Add(new Dropdown.OptionData("Reset"));
             foreach (var shader in MaterialEditorPluginBase.XMLShaderProperties)
                 if (shader.Key != "default")
                     dropdown.options.Add(new Dropdown.OptionData(shader.Key));
-            RowViewFactorySupport.SetWidth(dropdown, ShaderDropdownWidth);
+            var dropdownLayout = RowViewFactorySupport.SetWidth(
+                dropdown,
+                ShaderDropdownWidth);
+            dropdownLayout.minWidth = ShaderDropdownMinimumWidth;
 
             var reset = MaterialEditorControlFactory.CreateButton(
                 "ShaderResetButton",
                 panel.transform,
-                "Reset");
+                MaterialEditorTheme.Glyphs.Reset);
             RowViewFactorySupport.SetWidth(reset, ResetButtonWidth);
             TooltipManager.AddTooltip(
                 reset.gameObject,
@@ -147,7 +147,8 @@ namespace MaterialEditorAPI
                 string.Empty);
             label.gameObject.AddComponent<LabelClickTrigger>();
             label.alignment = TextAnchor.MiddleLeft;
-            label.color = Color.black;
+            label.color = MaterialEditorTheme.Colors.PrimaryText;
+            RowViewFactorySupport.ConfigurePropertyLabel(label);
 
             var input = MaterialEditorControlFactory.CreateInputField(
                 "ShaderRenderQueueInput",
@@ -160,22 +161,11 @@ namespace MaterialEditorAPI
             var reset = MaterialEditorControlFactory.CreateButton(
                 "ShaderRenderQueueResetButton",
                 panel.transform,
-                "Reset");
+                MaterialEditorTheme.Glyphs.Reset);
             TooltipManager.AddTooltip(
                 reset.gameObject,
                 "Reset this property to its original value");
         }
 
-        private static void CreateMaterialButton(
-            string name,
-            Transform parent,
-            string text,
-            float width,
-            string tooltip)
-        {
-            var button = MaterialEditorControlFactory.CreateButton(name, parent, text);
-            RowViewFactorySupport.SetWidth(button, width);
-            TooltipManager.AddTooltip(button.gameObject, tooltip);
-        }
     }
 }

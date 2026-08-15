@@ -1,9 +1,10 @@
 # Shader Tooltip Catalog Specification and Authoring Guide
 
 Material Editor tooltip catalogs let shader authors describe shaders, property
-categories, and individual properties without putting large blocks of text in
-the Sideloader manifest. A catalog is an XML `TextAsset` stored in an
-AssetBundle. It does not require a `MonoBehaviour` or a prefab component.
+categories, individual properties, and optional property display labels without
+putting that presentation metadata in the Sideloader manifest. A catalog is an
+XML `TextAsset` stored in an AssetBundle. It does not require a `MonoBehaviour`
+or a prefab component.
 
 This document defines schema version 1. Tooltip catalogs require a Material
 Editor build that reports the `PropertyTooltips` extension capability. Older
@@ -81,7 +82,7 @@ The root element must be `MaterialEditorTooltips` and must declare
 <?xml version="1.0" encoding="utf-8"?>
 <MaterialEditorTooltips SchemaVersion="1">
   <TooltipSet Id="family.common">
-    <Property Name="MainTex">Base color texture.</Property>
+    <Property Name="MainTex" DisplayName="Main Texture">Base color texture.</Property>
     <Property Name="Alpha">
       Opacity: 0 is transparent and 1 is opaque.
     </Property>
@@ -114,7 +115,7 @@ Supported elements:
 | `Shader` | `Name` | Defines metadata for one exact shader name. |
 | `UseTooltipSet` | `Ref` | At the catalog root, applies a reusable set to every Shader in the current manifest. Inside a `Shader`, applies it only to that Shader. |
 | `Tooltip` | None | Defines the tooltip shown on the Shader row. |
-| `Property` | `Name` | Defines the tooltip shown on a property label. |
+| `Property` | `Name` | Defines a property tooltip and may also define its literal UI label with optional `DisplayName`. Either value may be supplied independently. |
 | `Category` | `Name` | Defines the tooltip shown on a category header and navigator entry. |
 
 Unknown elements are ignored. A missing `Id`, `Name`, or `Ref` does not define
@@ -164,6 +165,34 @@ Names are ordinal and case-sensitive.
 
 If a name does not match exactly, the entry is simply unused.
 
+## Property Display Names
+
+`Property` accepts an optional literal `DisplayName` attribute:
+
+```xml
+<Property Name="MainTex" DisplayName="Main Texture">Base color texture.</Property>
+<Property Name="DetailMask" DisplayName="Detail Mask"/>
+```
+
+A property may provide a display name, tooltip text, or both. `DisplayName`
+changes only the rendered UI label. It does not change `Name`, the Unity shader
+property, or any persistence key. Leading and trailing attribute whitespace is
+removed; an empty value is treated as absent. Search always matches the stable
+`Name`; a catalog-only label is not an additional search key.
+
+The final property-label priority is:
+
+1. A non-empty `DisplayName` authored on the schema-2 manifest `Property`.
+2. A non-empty `DisplayName` resolved from this tooltip catalog.
+3. The property's existing visible/internal label, normally its manifest
+   `Name`.
+
+Catalog display names use the same scope and override order documented below,
+but are merged independently from tooltip text. A later property entry can
+replace only the tooltip, only the display name, or both. Omitting
+`DisplayName` does not clear a label inherited from a reusable set or earlier
+catalog.
+
 ## Reusable Sets and Override Order
 
 A shader may apply multiple sets:
@@ -186,6 +215,8 @@ Resolution order, from lowest to highest priority:
 
 An override replaces the complete tooltip. Text is never concatenated. This is
 important when two shaders use the same property name with opposite meanings.
+Property `DisplayName` values follow the same resolution order in a separate
+map; tooltip and label overrides do not erase one another.
 
 ## Aliases with `Ref`
 
@@ -198,10 +229,13 @@ A property or category can reuse already resolved text under another name:
 </Shader>
 ```
 
-`Ref` is resolved against metadata already available at that point: referenced
-manifest defaults, Shader-specific referenced sets, and earlier entries in the
-same scope. Put the source entry before an alias. If the reference cannot be
-resolved, Material Editor logs a warning and skips that alias.
+`Ref` is resolved against tooltip text already available at that point:
+referenced manifest defaults, Shader-specific referenced sets, and earlier
+entries in the same scope. Put the source entry before an alias. If the
+reference cannot be resolved, Material Editor logs a warning and skips that
+alias. `Ref` does not copy `DisplayName`; give the alias its own literal label
+when needed, for example
+`<Property Name="Opacity" Ref="Alpha" DisplayName="Opacity"/>`.
 
 Explicit text takes priority over `Ref`:
 
@@ -265,6 +299,8 @@ with a direct override, and one alias before releasing a catalog.
   `UseTooltipSet`.
 - Shader-specific semantic differences use complete overrides.
 - Text is concise, stable, English-only, and contains no Rich Text.
+- Optional property `DisplayName` labels are literal, intentional, and distinct
+  from their stable internal `Name` values.
 - The game log contains no tooltip catalog warnings.
 
 See [shader_tooltip_catalog_template.xml](shader_tooltip_catalog_template.xml)

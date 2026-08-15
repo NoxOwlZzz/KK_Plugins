@@ -52,6 +52,12 @@ Reviewed additions currently recorded in `PublicAPI.Unshipped.txt` include the s
 - custom property descriptor providers and semantic property editor factories
 - `MaterialEditorEditService`, a stable facade over repository-backed edits
 - optional English property tooltip metadata and the `PropertyTooltips` capability
+- bounded numeric conditions and the `ConditionalPropertyVisibility`
+  capability
+- semantic Enum, Vector2/3/4, and Float-backed Toggle editor contracts with
+  append-only capability flags
+- `MaterialAPI.ShaderPropertyType.Vector = 4`, Vector copy payloads,
+  `MaterialAPI.SetVector`, and repository-backed Vector facade operations
 
 These APIs deliberately do not expose the internal row model, row view, binder registry, or concrete Unity controls.
 
@@ -95,5 +101,7 @@ For an additive API change:
 5. Move reviewed entries to `PublicAPI.Shipped.txt` when preparing a release.
 
 Extension API usage and behavioral semantics are documented in [Extension API.md](Extension%20API.md).
+The reviewed Phase 1 surface is summarized in
+[`EXTENSION_API_CHANGES.md`](../../EXTENSION_API_CHANGES.md).
 
 Do not silence compatibility diagnostics globally. Any suppression or removed API marker requires an explicit compatibility review in the pull request.

@@ -135,6 +135,32 @@ Built-in editor IDs are:
 - `MaterialEditorPropertyEditorIds.Color`
 - `MaterialEditorPropertyEditorIds.Boolean`
 - `MaterialEditorPropertyEditorIds.Texture`
+- `MaterialEditorPropertyEditorIds.Enum`
+- `MaterialEditorPropertyEditorIds.Vector2`
+- `MaterialEditorPropertyEditorIds.Vector3`
+- `MaterialEditorPropertyEditorIds.Vector4`
+- `MaterialEditorPropertyEditorIds.Toggle`
+
+The API 1.2 descriptor metadata is optional and defaults compatibly.
+`VisibilityCondition` is the extension equivalent of `ShowIf`. Enum
+descriptors provide numeric `EnumOptions`; Vector descriptors may set
+`VectorComponentCount`; Float-backed Toggle descriptors may set `OffValue` and
+`OnValue`. Query the matching capability before using each family:
+
+```csharp
+var phaseOneEditors =
+    MaterialEditorApiCapability.EnumPropertyEditors |
+    MaterialEditorApiCapability.VectorPropertyEditors |
+    MaterialEditorApiCapability.ToggleFloatPropertyEditors |
+    MaterialEditorApiCapability.ConditionalPropertyVisibility;
+
+if (!MaterialEditorExtensionApi.Supports(phaseOneEditors))
+    return;
+```
+
+`MaterialEditorEditService` also provides `GetOriginalVector`, `SetVector`, and
+`ResetVector`. These operations use the same active Maker/Studio repository as
+the built-in UI.
 
 Built-in editors use the descriptor's `PropertyName` and the Material Editor edit-service facade, so values are persisted through the normal repository. Non-keyword shader properties are shown only when the material reports that the backing property exists.
 
@@ -196,7 +222,15 @@ private static MaterialEditorPropertyEditor CreateOpacityEditor(
 }
 ```
 
-Factories may return `MaterialEditorFloatPropertyEditor`, `MaterialEditorColorPropertyEditor`, `MaterialEditorBooleanPropertyEditor`, or `MaterialEditorTexturePropertyEditor`. Material Editor adapts these semantic definitions to its current internal rows and controls.
+Factories may return `MaterialEditorFloatPropertyEditor`,
+`MaterialEditorColorPropertyEditor`, `MaterialEditorBooleanPropertyEditor`,
+`MaterialEditorTexturePropertyEditor`, `MaterialEditorEnumPropertyEditor`,
+`MaterialEditorVectorPropertyEditor`, or
+`MaterialEditorTogglePropertyEditor`. Material Editor adapts these semantic
+definitions to its current internal rows and controls. Enum and Toggle editors
+can report `IsMixed`; Vector editors can report `MixedComponents` and may
+provide `ComponentChanged` so changing one component does not overwrite other
+mixed targets.
 
 Editor IDs are global and must be namespaced with the provider plugin ID. Registering an existing ID throws. Built-in IDs cannot be replaced.
 
@@ -212,3 +246,7 @@ The semantic contracts in this document are public API. The following remain int
 - UI hierarchy names, child order, and layout values
 
 New editor families and capabilities may be added in compatible releases. Existing enum values, registrations, descriptors, event contexts, and facade method signatures follow the policy in [Public API Compatibility.md](Public%20API%20Compatibility.md).
+
+The complete API 1.2 additions, examples, modified-count limitation, and native
+Vector Timeline limitation are documented in
+[`EXTENSION_API_CHANGES.md`](../../EXTENSION_API_CHANGES.md).

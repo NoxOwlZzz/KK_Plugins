@@ -38,11 +38,19 @@ namespace MaterialEditorAPI
         private MaterialEditorSelectionController _selectionController;
         private MaterialEditorPresenter _presenter;
         private MaterialEditorPresentation _presentation;
-        private Coroutine _conditionRefreshCoroutine;
-        private int _conditionRefreshVersion;
-        private GameObject _conditionRefreshGameObject;
-        private object _conditionRefreshData;
-        private string _conditionRefreshFilter;
+        private readonly DeferredRefreshCoordinator _deferredRefresh =
+            new DeferredRefreshCoordinator();
+        private Coroutine _deferredRefreshCoroutine;
+        private static readonly WaitForEndOfFrame PresentationEndOfFrame =
+            new WaitForEndOfFrame();
+        private readonly PresentationInvalidationCoordinator<
+            MaterialConditionInvalidationHandle>
+            _presentationInvalidation =
+                new PresentationInvalidationCoordinator<
+                    MaterialConditionInvalidationHandle>();
+        private Coroutine _presentationInvalidationCoroutine;
+        private long _presentationInvalidationCoroutineLeaseId;
+        private bool _transientContentReleased;
 
         private static readonly List<Action<MaterialEditorLabelClickEventArgs>> LabelClickHandlers = new List<Action<MaterialEditorLabelClickEventArgs>>();
 
@@ -70,6 +78,8 @@ namespace MaterialEditorAPI
         internal const float MaterialButtonWidth = MaterialEditorLayout.MaterialButtonWidth;
         internal const float MaterialRenameButtonWidth = MaterialEditorLayout.MaterialRenameButtonWidth;
         // Shader
+        internal const float ShaderLabelMinimumWidth = MaterialEditorLayout.ShaderLabelMinimumWidth;
+        internal const float ShaderDropdownMinimumWidth = MaterialEditorLayout.ShaderDropdownMinimumWidth;
         internal const float ShaderDropdownWidth = MaterialEditorLayout.ShaderDropdownWidth;
         // RenderQueue
         internal const float RenderQueueInputFieldWidth = MaterialEditorLayout.RenderQueueInputWidth;
@@ -97,7 +107,8 @@ namespace MaterialEditorAPI
         internal static readonly Color RendererColor = MaterialEditorStyles.RendererColor;
         internal static readonly Color MaterialColor = MaterialEditorStyles.MaterialColor;
         internal static readonly Color CategoryColor = MaterialEditorStyles.CategoryColor;
-        internal static readonly Color ItemColor = MaterialEditorStyles.TransparentRowColor;
+        internal static readonly Color SubcategoryColor = MaterialEditorStyles.SubcategoryColor;
+        internal static readonly Color ItemColor = MaterialEditorStyles.PropertyColor;
         internal static readonly Color ItemColorChanged = MaterialEditorStyles.ChangedRowColor;
         #endregion
 
@@ -114,6 +125,11 @@ namespace MaterialEditorAPI
             get => Session.CurrentData;
             set => Session.CurrentData = value;
         }
+
+        internal static GameObject RetainedTargetGameObject =>
+            Session.CurrentGameObject;
+
+        internal static object RetainedTargetData => Session.CurrentData;
 
         private MaterialEditService _materialEditService;
         private static string CurrentFilter
@@ -180,10 +196,12 @@ namespace MaterialEditorAPI
             _windowView = new MaterialEditorWindowView(
                 transform,
                 CurrentFilter,
-                RefreshUI,
+                HandleFilterChanged,
                 () => Visible = false,
                 () => _selectionController.ToggleSidePanels(),
+                () => _selectionController.HideSidePanels(),
                 ToggleAllCategories,
+                ToggleAllSections,
                 NavigateToCategory,
                 ToggleCategory);
             _selectionController = new MaterialEditorSelectionController(
@@ -191,16 +209,20 @@ namespace MaterialEditorAPI
                 _windowView,
                 EditService,
                 PopulateList);
+            _selectionController.InitializeViewState();
             _presenter = new MaterialEditorPresenter(
                 EditService,
                 Session,
                 new MaterialEditorPresentationActions
                 {
-                    Refresh = PopulateList,
-                    RefreshDeferred = (go, data, filter) =>
-                        StartCoroutine(PopulateListCoroutine(go, data, filter)),
-                    RefreshConditionsDeferred = ScheduleConditionRefresh,
+                    Refresh = (go, data, filter) => PopulateList(
+                        go,
+                        data,
+                        ResolveFilterForCurrentTarget(go, data, filter)),
+                    RefreshDeferred = SchedulePopulateList,
+                    RequestCondition = HandleConditionChanged,
                     RefreshMaterialSelection = PopulateMaterialList,
+                    SetRendererCollapsed = SetRendererCollapsed,
                     ShowRename = PopulateRenameList,
                     ExportUv = Export.ExportUVMaps,
                     RequestObjExport = Session.RequestObjExport,
@@ -230,6 +252,14 @@ namespace MaterialEditorAPI
             _windowView?.SetHeaderTitleHorizontalOffset(offset);
         }
 
+        private protected Transform HeaderContextSlot =>
+            _windowView?.HeaderContextSlot;
+
+        private protected void SetHeaderContextControlVisible(bool visible)
+        {
+            _windowView?.SetHeaderContextControlVisible(visible);
+        }
+
         /// <summary>
         /// Refresh the MaterialEditor UI
         /// </summary>
@@ -252,13 +282,15 @@ namespace MaterialEditorAPI
             }
             set
             {
+                var wasVisible = Visible;
                 if (MaterialEditorWindow != null)
                     MaterialEditorWindow.gameObject.SetActive(value);
                 if (!value)
-                {
-                    ActiveUi?.CancelConditionRefresh();
-                    TexChangeWatcher?.Dispose();
-                }
+                    ActiveUi?.ReleaseTransientUiContent();
+                else if (!wasVisible)
+                    ActiveUi?.RestoreTransientUiContent();
+                if (wasVisible && !value)
+                    LogPerformanceSummaryOnWindowClose();
             }
         }
 
@@ -319,15 +351,59 @@ namespace MaterialEditorAPI
         /// <param name="filter">Comma separated list of text to filter the results</param>
         protected void PopulateList(GameObject go, object data, string filter = null)
         {
-            CancelConditionRefresh();
-            _selectionController.CloseRenamePanel();
+            CancelPendingRefreshes();
+            PopulateListCore(go, data, filter, null, false);
+        }
+
+        private void PopulateList(
+            GameObject go,
+            object data,
+            string filter,
+            VirtualList.TopRowAnchor topRowAnchor)
+        {
+            CancelPendingRefreshes();
+            PopulateListCore(go, data, filter, topRowAnchor, false);
+        }
+
+        private void PopulateListCore(
+            GameObject go,
+            object data,
+            string filter,
+            VirtualList.TopRowAnchor topRowAnchor,
+            bool preserveRenamePanel,
+            bool publishViewportAnchor = true)
+        {
+            var previousTarget = CurrentGameObject;
+            var previousTargetWasDestroyed =
+                !ReferenceEquals(previousTarget, null) && previousTarget == null;
+            _transientContentReleased = false;
+            if (!preserveRenamePanel)
+                _selectionController.CloseRenamePanel();
+
+            if (!ReferenceEquals(previousTarget, null)
+                && !ReferenceEquals(previousTarget, go))
+            {
+                CloseTargetColorPalette();
+                if (previousTargetWasDestroyed)
+                {
+                    ClearInterpolablesForTarget(previousTarget);
+                    PruneDestroyedInterpolables();
+                }
+            }
 
             if (filter == null)
                 filter = PersistFilter.Value ? CurrentFilter : string.Empty;
 
             _windowView.PrepareForDisplay(filter);
             if (go == null)
+            {
+                ReleaseRetainedTargetContext();
+                Session.ClearTargetReferences();
+                if (previousTargetWasDestroyed)
+                    ClearInterpolablesForTarget(previousTarget);
+                PruneDestroyedInterpolables();
                 return;
+            }
 
             var renderers = GetRendererList(go).ToList();
             var projectors = EditService.GetProjectorList(data, go).ToList();
@@ -338,95 +414,76 @@ namespace MaterialEditorAPI
             CurrentFilter = filter;
 
             _presentation = _presenter.BuildRows(go, data, filter, renderers, projectors);
-            VirtualList.SetList(_presentation.Rows);
-            _windowView.SetPresentation(_presentation);
-        }
+            VirtualList.SetList(_presentation.Rows, false);
+            if (topRowAnchor != null)
+                VirtualList.RestoreTopRowAnchor(topRowAnchor, false);
 
-        private void ScheduleConditionRefresh(
-            GameObject go,
-            object data,
-            string filter)
-        {
-            if (!IsCurrentConditionRefreshContext(go, data, filter))
-                return;
-
-            _conditionRefreshGameObject = go;
-            _conditionRefreshData = data;
-            _conditionRefreshFilter = filter;
-            _conditionRefreshVersion++;
-
-            if (_conditionRefreshCoroutine != null)
-                return;
-            _conditionRefreshCoroutine =
-                StartCoroutine(ConditionRefreshWorker());
-        }
-
-        private IEnumerator ConditionRefreshWorker()
-        {
-            int scheduledVersion;
-            do
-            {
-                scheduledVersion = _conditionRefreshVersion;
-                yield return null;
-            }
-            while (scheduledVersion != _conditionRefreshVersion);
-
-            var go = _conditionRefreshGameObject;
-            var data = _conditionRefreshData;
-            var filter = _conditionRefreshFilter;
-            _conditionRefreshCoroutine = null;
-            _conditionRefreshGameObject = null;
-            _conditionRefreshData = null;
-            _conditionRefreshFilter = null;
-
-            if (!IsCurrentConditionRefreshContext(go, data, filter))
-                yield break;
-            PopulateList(go, data, filter);
-        }
-
-        private bool IsCurrentConditionRefreshContext(
-            GameObject go,
-            object data,
-            string filter)
-        {
-            return Visible
-                   && go != null
-                   && ReferenceEquals(go, CurrentGameObject)
-                   && ReferenceEquals(data, CurrentData)
-                   && string.Equals(
-                       filter,
-                       CurrentFilter,
-                       StringComparison.Ordinal);
-        }
-
-        private void CancelConditionRefresh()
-        {
-            _conditionRefreshVersion++;
-            _conditionRefreshGameObject = null;
-            _conditionRefreshData = null;
-            _conditionRefreshFilter = null;
-
-            var coroutine = _conditionRefreshCoroutine;
-            _conditionRefreshCoroutine = null;
-            if (coroutine != null)
-                StopCoroutine(coroutine);
+            // Install the new presentation first, then publish its final anchor
+            // once. Deferring the navigator update avoids a false no-categories
+            // transition and two responsive layout passes during one rebuild.
+            _windowView.SetPresentation(_presentation, true);
+            if (publishViewportAnchor)
+                VirtualList.PublishViewportAnchor();
         }
 
         private void NavigateToCategory(CategoryNavigationTarget target)
         {
             if (target == null)
                 return;
-            target.EnsureParentsExpanded();
-            PopulateList(CurrentGameObject, CurrentData, CurrentFilter);
-            StartCoroutine(ScrollToCategory(target.SectionId, target.Id));
+            if (target.EnsureParentsExpanded())
+            {
+                RebuildAndScrollToCategory(target.SectionId, target.Id);
+                return;
+            }
+            if (target.RowIndex >= 0)
+                VirtualList.ScrollToIndex(target.RowIndex);
+            _windowView?.CategoryNavigator?.CompleteNavigationDiagnostic(
+                target.Id);
         }
 
         private void ToggleCategory(CategoryNavigationTarget target)
         {
             if (target == null)
                 return;
+            var sectionId = target.SectionId;
+            var categoryId = target.Id;
             target.SetCollapsed(!target.Collapsed);
-            PopulateList(CurrentGameObject, CurrentData, CurrentFilter);
+            RebuildAndScrollToCategory(sectionId, categoryId);
+        }
+
+        private void SetRendererCollapsed(
+            RendererSectionPresentation section,
+            bool collapsed)
+        {
+            var presentation = _presentation;
+            if (presentation == null || VirtualList == null)
+                return;
+
+            var childRowsWereCreated = section != null
+                                       && section.ChildRowsCreated;
+            int replaceStartIndex;
+            int removeCount;
+            IList<RowModel> replacementRows;
+            if (!presentation.TrySetRendererCollapsed(
+                    section,
+                    collapsed,
+                    out replaceStartIndex,
+                    out removeCount,
+                    out replacementRows))
+                return;
+
+            if (!childRowsWereCreated && section.ChildRowsCreated)
+            {
+                MaterialEditorPerformance.Increment(
+                    MaterialEditorPerformanceMetric.RowModelCreation,
+                    section.CachedChildRowCount);
+            }
+            VirtualList.ReplaceRange(
+                replaceStartIndex,
+                removeCount,
+                replacementRows,
+                section.HeaderRowIndex);
+            _windowView?.RefreshSectionCollapseState(presentation);
         }
 
         private void ToggleAllCategories()
@@ -439,12 +496,36 @@ namespace MaterialEditorAPI
             PopulateList(CurrentGameObject, CurrentData, CurrentFilter);
         }
 
-        private IEnumerator ScrollToCategory(string sectionId, string categoryId)
+        private void ToggleAllSections()
         {
-            yield return null;
+            if (_presentation == null
+                || !_presentation.CanToggleSections)
+                return;
+
+            _presentation.SetAllSectionsCollapsed(
+                !_presentation.AllSectionsCollapsed);
+            PopulateList(CurrentGameObject, CurrentData, CurrentFilter);
+        }
+
+        private void RebuildAndScrollToCategory(
+            string sectionId,
+            string categoryId)
+        {
+            CancelPendingRefreshes();
+            PopulateListCore(
+                CurrentGameObject,
+                CurrentData,
+                CurrentFilter,
+                null,
+                false,
+                false);
             var target = _presentation?.FindCategory(sectionId, categoryId);
             if (target != null && target.RowIndex >= 0)
                 VirtualList.ScrollToIndex(target.RowIndex);
+            else
+                VirtualList.PublishViewportAnchor();
+            _windowView?.CategoryNavigator?.CompleteNavigationDiagnostic(
+                categoryId);
         }
 
         /// <summary>
@@ -461,17 +542,582 @@ namespace MaterialEditorAPI
         /// </summary>
         protected IEnumerator PopulateListCoroutine(GameObject go, object data, string filter = "")
         {
-            yield return null;
-            yield return null;
-            yield return null;
-            yield return null;
-            yield return null;
-            yield return null;
-            yield return null;
-            yield return null;
-            yield return null;
-            yield return null;
-            PopulateList(go, data, filter);
+            var version = ScheduleDeferredPopulate(go, data, filter);
+            yield return WaitForDeferredPopulate(version);
+        }
+
+        private void SchedulePopulateList(GameObject go, object data, string filter)
+        {
+            ScheduleDeferredPopulate(
+                go,
+                data,
+                ResolveFilterForCurrentTarget(go, data, filter));
+        }
+
+        private int ScheduleDeferredPopulate(GameObject go, object data, string filter)
+        {
+            CancelPresentationInvalidation();
+            var version = _deferredRefresh.Schedule(go, data, filter);
+            if (_deferredRefresh.TryStartWorker())
+            {
+                try
+                {
+                    _deferredRefreshCoroutine = StartCoroutine(DeferredPopulateWorker());
+                    if (_deferredRefreshCoroutine == null)
+                        _deferredRefresh.WorkerStopped();
+                }
+                catch
+                {
+                    _deferredRefresh.WorkerStopped();
+                    throw;
+                }
+            }
+            return version;
+        }
+
+        private IEnumerator WaitForDeferredPopulate(int version)
+        {
+            while (_deferredRefresh.IsCurrent(version))
+                yield return null;
+        }
+
+        private IEnumerator DeferredPopulateWorker()
+        {
+            while (_deferredRefresh.HasPending)
+            {
+                yield return null;
+
+                object target;
+                object data;
+                string filter;
+                if (!_deferredRefresh.AdvanceFrame(
+                        10,
+                        out target,
+                        out data,
+                        out filter))
+                    continue;
+
+                _deferredRefresh.WorkerStopped();
+                _deferredRefreshCoroutine = null;
+                PopulateListCore((GameObject)target, data, filter, null, false);
+                yield break;
+            }
+
+            _deferredRefresh.WorkerStopped();
+            _deferredRefreshCoroutine = null;
+        }
+
+        private void CancelDeferredPopulate()
+        {
+            _deferredRefresh.Cancel();
+            if (_deferredRefreshCoroutine == null)
+                return;
+            StopCoroutine(_deferredRefreshCoroutine);
+            _deferredRefreshCoroutine = null;
+        }
+
+        private string ResolveFilterForCurrentTarget(
+            GameObject go,
+            object data,
+            string filter)
+        {
+            return ReferenceEquals(go, CurrentGameObject)
+                   && ReferenceEquals(data, CurrentData)
+                ? CurrentFilter
+                : filter;
+        }
+
+        private void HandleFilterChanged(string filter)
+        {
+            CurrentFilter = filter;
+
+            // Search is newer than any pending shader refresh and therefore wins.
+            // Do not cancel this coordinator here: repeated keystrokes must share
+            // the same worker lease and accumulate into one end-of-frame batch.
+            CancelDeferredPopulate();
+            if (!Visible || CurrentGameObject == null)
+            {
+                CancelPresentationInvalidation();
+                return;
+            }
+
+            MaterialEditorPerformance.Increment(
+                MaterialEditorPerformanceMetric.RefreshRequests);
+            if (!_presentationInvalidation.RequestSearch())
+            {
+                MaterialEditorPerformance.Increment(
+                    MaterialEditorPerformanceMetric.RefreshCoalesced);
+            }
+            TryStartPresentationInvalidationWorker();
+        }
+
+        private void HandleConditionChanged(
+            MaterialConditionInvalidationHandle handle)
+        {
+            var presentation = _presentation;
+            if (!Visible
+                || CurrentGameObject == null
+                || presentation == null
+                || !presentation.Owns(handle))
+                return;
+
+            // A valid condition edit is newer than a pending shader rebuild.
+            // Search remains dominant inside the shared presentation batch.
+            CancelDeferredPopulate();
+            MaterialEditorPerformance.Increment(
+                MaterialEditorPerformanceMetric.RefreshRequests);
+            if (!_presentationInvalidation.RequestCondition(handle))
+            {
+                MaterialEditorPerformance.Increment(
+                    MaterialEditorPerformanceMetric.RefreshCoalesced);
+            }
+            TryStartPresentationInvalidationWorker();
+        }
+
+        private void TryStartPresentationInvalidationWorker()
+        {
+            PresentationInvalidationWorkerLease lease;
+            if (!_presentationInvalidation.TryAcquireWorker(out lease))
+                return;
+
+            _presentationInvalidationCoroutineLeaseId = lease.LeaseId;
+            Coroutine coroutine;
+            try
+            {
+                coroutine = StartCoroutine(PresentationInvalidationWorker(lease));
+            }
+            catch (Exception ex)
+            {
+                RecoverPresentationInvalidationWorkerStart(lease, ex);
+                return;
+            }
+
+            if (coroutine == null)
+            {
+                RecoverPresentationInvalidationWorkerStart(lease, null);
+                return;
+            }
+            _presentationInvalidationCoroutine = coroutine;
+        }
+
+        private IEnumerator PresentationInvalidationWorker(
+            PresentationInvalidationWorkerLease lease)
+        {
+            try
+            {
+                while (_presentationInvalidation.IsWorkerLeaseCurrent(lease))
+                {
+                    yield return PresentationEndOfFrame;
+
+                    PresentationInvalidationBatch<
+                        MaterialConditionInvalidationHandle> batch;
+                    if (!_presentationInvalidation.TryBeginFlush(
+                            lease,
+                            Time.frameCount,
+                            out batch))
+                        continue;
+
+                    var waitForNextFrame = false;
+                    try
+                    {
+                        if (_presentationInvalidation.IsGenerationCurrent(
+                                batch.Generation))
+                            ApplyPresentationInvalidationBatch(batch);
+                    }
+                    catch (Exception ex)
+                    {
+                        MaterialEditorPluginBase.Logger?.LogError(
+                            "Exception while applying a coalesced Material Editor "
+                            + "presentation refresh: " + ex);
+                    }
+                    finally
+                    {
+                        waitForNextFrame =
+                            _presentationInvalidation.CompleteFlush(lease);
+                    }
+
+                    if (!waitForNextFrame)
+                        yield break;
+                }
+            }
+            finally
+            {
+                _presentationInvalidation.AbandonWorker(lease);
+                ClearPresentationInvalidationCoroutine(lease);
+            }
+        }
+
+        private void RecoverPresentationInvalidationWorkerStart(
+            PresentationInvalidationWorkerLease lease,
+            Exception exception)
+        {
+            if (exception != null)
+            {
+                MaterialEditorPluginBase.Logger?.LogError(
+                    "Could not start the Material Editor presentation refresh "
+                    + "worker; draining its pending batch synchronously: "
+                    + exception);
+            }
+
+            try
+            {
+                const int recoveryFlushLimit = 16;
+                var flushCount = 0;
+                while (_presentationInvalidation.IsWorkerLeaseCurrent(lease)
+                       && flushCount < recoveryFlushLimit)
+                {
+                    PresentationInvalidationBatch<
+                        MaterialConditionInvalidationHandle> batch;
+                    if (!_presentationInvalidation.TryBeginRecoveryFlush(
+                            lease,
+                            out batch))
+                        break;
+
+                    var waitForNextBatch = false;
+                    try
+                    {
+                        if (_presentationInvalidation.IsGenerationCurrent(
+                                batch.Generation))
+                            ApplyPresentationInvalidationBatch(batch);
+                    }
+                    catch (Exception ex)
+                    {
+                        MaterialEditorPluginBase.Logger?.LogError(
+                            "Exception while applying the synchronous Material "
+                            + "Editor presentation refresh fallback: " + ex);
+                    }
+                    finally
+                    {
+                        waitForNextBatch =
+                            _presentationInvalidation.CompleteFlush(lease);
+                    }
+
+                    flushCount++;
+                    if (!waitForNextBatch)
+                        break;
+                }
+
+                if (_presentationInvalidation.IsWorkerLeaseCurrent(lease))
+                {
+                    _presentationInvalidation.AbandonWorker(lease);
+                    if (_presentationInvalidation.HasPending)
+                    {
+                        _presentationInvalidation.Cancel();
+                        MaterialEditorPluginBase.Logger?.LogError(
+                            "Material Editor presentation refresh recovery "
+                            + "exceeded its bounded synchronous flush limit.");
+                    }
+                }
+            }
+            finally
+            {
+                ClearPresentationInvalidationCoroutine(lease);
+            }
+        }
+
+        private void ApplyPresentationInvalidationBatch(
+            PresentationInvalidationBatch<
+                MaterialConditionInvalidationHandle> batch)
+        {
+            if (!Visible || CurrentGameObject == null)
+                return;
+            if ((batch.Reason & PresentationInvalidationReason.Search) != 0)
+            {
+                ApplySearchRefresh();
+                return;
+            }
+            if ((batch.Reason & PresentationInvalidationReason.Conditions) != 0)
+                ApplyConditionRefresh(batch.ConditionSources);
+        }
+
+        private void ApplyConditionRefresh(
+            IEnumerable<MaterialConditionInvalidationHandle> handles)
+        {
+            var presentation = _presentation;
+            if (presentation == null)
+                return;
+
+            var grouped = new Dictionary<
+                MaterialConditionDependencyGraph,
+                List<MaterialConditionInvalidationHandle>>();
+            foreach (var handle in handles)
+            {
+                if (!presentation.Owns(handle))
+                    continue;
+                List<MaterialConditionInvalidationHandle> graphHandles;
+                if (!grouped.TryGetValue(handle.Graph, out graphHandles))
+                {
+                    graphHandles =
+                        new List<MaterialConditionInvalidationHandle>();
+                    grouped.Add(handle.Graph, graphHandles);
+                }
+                graphHandles.Add(handle);
+            }
+            if (grouped.Count == 0)
+                return;
+
+            MaterialEditorPerformance.Increment(
+                MaterialEditorPerformanceMetric.RefreshExecuted);
+            var visibilityChanged = false;
+            foreach (var entry in grouped)
+            {
+                var result = entry.Key.EvaluateHandles(entry.Value);
+                visibilityChanged |= result.VisibilityChanged;
+            }
+
+            // Finish the complete batch before rebuilding so all coalesced
+            // ShowIf sources are evaluated against the same presentation.
+            if (visibilityChanged)
+            {
+                var topRowAnchor = VirtualList.CaptureTopRowAnchor();
+                PopulateListCore(
+                    CurrentGameObject,
+                    CurrentData,
+                    CurrentFilter,
+                    topRowAnchor,
+                    false);
+            }
+        }
+
+        private void ApplySearchRefresh()
+        {
+            MaterialEditorPerformance.Increment(
+                MaterialEditorPerformanceMetric.RefreshExecuted);
+            PopulateListCore(
+                CurrentGameObject,
+                CurrentData,
+                CurrentFilter,
+                null,
+                false);
+        }
+
+        private void CancelPresentationInvalidation()
+        {
+            _presentationInvalidation.Cancel();
+            var coroutine = _presentationInvalidationCoroutine;
+            _presentationInvalidationCoroutine = null;
+            _presentationInvalidationCoroutineLeaseId = 0;
+            if (coroutine != null)
+                StopCoroutine(coroutine);
+        }
+
+        private void ClearPresentationInvalidationCoroutine(
+            PresentationInvalidationWorkerLease lease)
+        {
+            if (_presentationInvalidationCoroutineLeaseId != lease.LeaseId)
+                return;
+            _presentationInvalidationCoroutine = null;
+            _presentationInvalidationCoroutineLeaseId = 0;
+        }
+
+        private void CancelPendingRefreshes()
+        {
+            CancelDeferredPopulate();
+            CancelPresentationInvalidation();
+        }
+
+        private void ReleaseTransientUiContent()
+        {
+            CancelPendingRefreshes();
+            DisposeTexChangeWatcher();
+            VirtualList?.ReleaseContent();
+            _selectionController?.ReleaseTransientContent();
+            _windowView?.ReleasePresentation();
+            _presentation = null;
+            _transientContentReleased = true;
+        }
+
+        private void ReleaseRetainedTargetContext()
+        {
+            ReleaseTransientUiContent();
+            _selectionController?.ReleaseTargetContent();
+            CloseTargetColorPalette();
+            _transientContentReleased = true;
+        }
+
+        private void RestoreTransientUiContent()
+        {
+            if (!_transientContentReleased)
+                return;
+
+            var gameObject = CurrentGameObject;
+            var data = CurrentData;
+            var filter = CurrentFilter;
+            if (gameObject == null)
+            {
+                var destroyedTarget = !ReferenceEquals(gameObject, null);
+                ReleaseRetainedTargetContext();
+                Session.ClearTargetReferences();
+                if (destroyedTarget)
+                    ClearInterpolablesForTarget(gameObject);
+                PruneDestroyedInterpolables();
+                return;
+            }
+
+            _transientContentReleased = false;
+            CancelPendingRefreshes();
+            PopulateListCore(gameObject, data, filter, null, true);
+        }
+
+        internal static bool IsGameObjectWithin(
+            GameObject candidate,
+            GameObject root)
+        {
+            if (ReferenceEquals(candidate, root))
+                return !ReferenceEquals(candidate, null);
+            if (ReferenceEquals(candidate, null)
+                || ReferenceEquals(root, null)
+                || candidate == null
+                || root == null)
+                return false;
+
+            try
+            {
+                return candidate.transform.IsChildOf(root.transform);
+            }
+            catch (MissingReferenceException)
+            {
+                return false;
+            }
+        }
+
+        internal static bool IsCurrentTargetWithin(GameObject root) =>
+            IsGameObjectWithin(Session.CurrentGameObject, root);
+
+        internal static void ReleaseCurrentTargetSelections()
+        {
+            try
+            {
+                Visible = false;
+                ActiveUi?._selectionController?.ReleaseTargetContent();
+                ActiveUi?.CloseTargetColorPalette();
+            }
+            finally
+            {
+                Session.CancelObjExport();
+                Session.ClearSelections();
+                PruneDestroyedInterpolables();
+            }
+        }
+
+        internal static void InvalidateCurrentTarget()
+        {
+            var target = Session.CurrentGameObject;
+            try
+            {
+                Visible = false;
+                ActiveUi?.ReleaseRetainedTargetContext();
+            }
+            finally
+            {
+                Session.ClearTargetReferences();
+                if (ReferenceEquals(target, null))
+                {
+                    selectedInterpolable = null;
+                    selectedProjectorInterpolable = null;
+                }
+                else
+                {
+                    ClearInterpolablesForTarget(target);
+                    PruneDestroyedInterpolables();
+                }
+            }
+        }
+
+        internal static void InvalidateAllTargetState()
+        {
+            try
+            {
+                Visible = false;
+                ActiveUi?.ReleaseRetainedTargetContext();
+            }
+            finally
+            {
+                Session.ClearTargetReferences();
+                selectedInterpolable = null;
+                selectedProjectorInterpolable = null;
+            }
+        }
+
+        internal static bool NotifyTargetDestroyed(GameObject root)
+        {
+            ClearInterpolablesForTarget(root);
+            PruneDestroyedInterpolables();
+            if (!IsCurrentTargetWithin(root))
+                return false;
+
+            InvalidateCurrentTarget();
+            return true;
+        }
+
+        internal static void PruneDestroyedInterpolables()
+        {
+            if (selectedInterpolable != null
+                && selectedInterpolable.GameObject == null)
+                selectedInterpolable = null;
+            if (selectedProjectorInterpolable != null
+                && selectedProjectorInterpolable.GameObject == null)
+                selectedProjectorInterpolable = null;
+        }
+
+        private static void ClearInterpolablesForTarget(GameObject root)
+        {
+            if (ReferenceEquals(root, null))
+                return;
+            if (selectedInterpolable != null
+                && IsGameObjectWithin(selectedInterpolable.GameObject, root))
+                selectedInterpolable = null;
+            if (selectedProjectorInterpolable != null
+                && IsGameObjectWithin(
+                    selectedProjectorInterpolable.GameObject,
+                    root))
+                selectedProjectorInterpolable = null;
+        }
+
+        private void CloseTargetColorPalette()
+        {
+            try
+            {
+                ColorPalette?.Close();
+            }
+            catch (Exception ex)
+            {
+                MaterialEditorPluginBase.Logger?.LogWarning(
+                    "Could not close the Material Editor color palette while "
+                    + "releasing a target: " + ex);
+            }
+        }
+
+        internal void ShutdownMaterialEditorUi()
+        {
+            if (!ReferenceEquals(ActiveUi, this))
+                return;
+
+            try
+            {
+                InvalidateAllTargetState();
+            }
+            finally
+            {
+                MaterialEditorExtensionRegistry.SetActiveEditService(null);
+                ActiveView = null;
+                ActiveUi = null;
+                MaterialEditorWindow = null;
+                MaterialEditorMainPanel = null;
+                DragPanel = null;
+                VirtualList = null;
+                _windowView = null;
+                _selectionController = null;
+                _presenter = null;
+                ColorPalette = null;
+            }
+        }
+
+        internal static void DisposeTexChangeWatcher()
+        {
+            var watcher = TexChangeWatcher;
+            TexChangeWatcher = null;
+            watcher?.Dispose();
         }
 
         private void ImportTexture(
@@ -486,6 +1132,7 @@ namespace MaterialEditorAPI
 #else
             string fileFilter = "Images (*.png;.jpg)|*.png;*.jpg|All files|*.*";
 #endif
+            var propertyHandle = MaterialPropertyIdCache.Get(propertyName);
             KKAPI.Utilities.OpenFileDialog.Show(
                 OnFileAccept,
                 "Open image",
@@ -495,19 +1142,18 @@ namespace MaterialEditorAPI
 
             void OnFileAccept(string[] files)
             {
-                // OpenFileDialog invokes its callback on a worker thread.
-                // Marshal all Unity and Material Editor access back to main.
-                ThreadingHelper.Instance.StartSyncInvoke(() =>
-                {
-                    if (this != null)
-                        StartCoroutine(ApplyFileSelectionOnMainThread(files));
-                });
+                ThreadingHelper.Instance.StartSyncInvoke(
+                    () =>
+                    {
+                        if (this != null)
+                            StartCoroutine(ApplyFileSelectionOnMainThread(files));
+                    });
             }
 
             IEnumerator ApplyFileSelectionOnMainThread(string[] files)
             {
-                // StartSyncInvoke is drained during BepInEx.Update. Yield once
-                // so file IO does not run in that drain.
+                // StartSyncInvoke is drained by BepInEx.Update. Yield once so
+                // disk reads run outside that drain.
                 yield return null;
 
                 if (material == null || gameObject == null)
@@ -521,21 +1167,49 @@ namespace MaterialEditorAPI
                             material,
                             propertyName,
                             gameObject);
-                    textureItem.Exists =
-                        material.GetTexture("_" + propertyName) != null;
+                    var currentTexture = MaterialPropertyAccess.GetTexture(
+                        material,
+                        propertyHandle);
+                    textureItem.Exists = currentTexture != null;
                     textureItem.RefreshState?.Invoke();
                     yield break;
                 }
 
                 string filePath = files[0];
-                EditService.SetMaterialTexture(data, material, propertyName, filePath, gameObject);
-                // Existing 2D imports are applied by the controller on its
-                // next update after the file dialog.
-                textureItem.Changed = true;
-                textureItem.Exists = true;
-                textureItem.RefreshState?.Invoke();
+                EditService.SetMaterialTexture(
+                    data,
+                    material,
+                    propertyName,
+                    filePath,
+                    gameObject,
+                    succeeded =>
+                    {
+                        if (this == null || material == null || gameObject == null)
+                            return;
 
-                TexChangeWatcher?.Dispose();
+                        // Character and Studio repositories apply Texture2D imports
+                        // on their next Update. Refresh only after that work reports
+                        // completion, and derive both flags from the real edit/material
+                        // state instead of assuming that decoding succeeded.
+                        textureItem.Changed =
+                            !EditService.GetMaterialTextureValueOriginal(
+                                data,
+                                material,
+                                propertyName,
+                                gameObject);
+                        textureItem.Exists = MaterialPropertyAccess.GetTexture(
+                            material,
+                            propertyHandle) != null;
+                        textureItem.RefreshState?.Invoke();
+
+                        if (!succeeded)
+                        {
+                            MaterialEditorPluginBase.Logger.LogWarning(
+                                $"Could not import texture '{filePath}' for {propertyName}.");
+                        }
+                    });
+
+                DisposeTexChangeWatcher();
                 if (!WatchTexChanges.Value)
                     yield break;
 
@@ -549,8 +1223,8 @@ namespace MaterialEditorAPI
                     if (WatchTexChanges.Value && File.Exists(filePath))
                         ScheduleTextureWatcherImport(data, material, propertyName, filePath, gameObject);
                 };
-                TexChangeWatcher.Deleted += (sender, args) => TexChangeWatcher?.Dispose();
-                TexChangeWatcher.Error += (sender, args) => TexChangeWatcher?.Dispose();
+                TexChangeWatcher.Deleted += (sender, args) => DisposeTexChangeWatcher();
+                TexChangeWatcher.Error += (sender, args) => DisposeTexChangeWatcher();
                 TexChangeWatcher.EnableRaisingEvents = true;
             }
         }
@@ -562,7 +1236,8 @@ namespace MaterialEditorAPI
             Material material,
             string propertyName)
         {
-            const string fileFilter = "PNG images (*.png)|*.png|All files|*.*";
+            const string fileFilter = "Cubemap panoramas (*.png;*.hdr)|*.png;*.hdr|PNG images (*.png)|*.png|Radiance HDR images (*.hdr)|*.hdr|All files|*.*";
+            var propertyHandle = MaterialPropertyIdCache.Get(propertyName);
             KKAPI.Utilities.OpenFileDialog.Show(
                 OnFileAccept,
                 "Open Cubemap source",
@@ -572,43 +1247,105 @@ namespace MaterialEditorAPI
 
             void OnFileAccept(string[] files)
             {
-                // OpenFileDialog invokes its callback on a worker thread.
-                // Marshal all Unity and Material Editor access back to main.
-                ThreadingHelper.Instance.StartSyncInvoke(() =>
-                {
-                    if (this != null)
-                        StartCoroutine(ApplyFileSelectionOnMainThread(files));
-                });
-            }
+                ThreadingHelper.Instance.StartSyncInvoke(
+                    () =>
+                    {
+                        if (this == null
+                            || material == null
+                            || gameObject == null
+                            || files == null
+                            || files.Length == 0
+                            || files[0].IsNullOrEmpty())
+                            return;
 
-            IEnumerator ApplyFileSelectionOnMainThread(string[] files)
-            {
-                // Avoid doing file IO and Cubemap conversion in the BepInEx
-                // Update drain used by StartSyncInvoke.
-                yield return null;
+                        var filePath = files[0];
+                        try
+                        {
+                            var runner = this.gameObject.AddComponent<
+                                MaterialEditorCubemapImportRunner>();
+                            runner.Begin(
+                                filePath,
+                                () => this != null
+                                      && material != null
+                                      && gameObject != null
+                                      && MaterialPropertyAccess.HasProperty(
+                                          material,
+                                          propertyHandle),
+                                (encodedData, contentKey, warmLease) =>
+                                {
+                                    // Keep the preheated cache entry alive until
+                                    // the repository has acquired its own lease.
+                                    if (warmLease == null)
+                                        return false;
+                                    if (EditService.SupportsMaterialCubemapDataImport(
+                                            data))
+                                    {
+                                        // A supported repository reports the
+                                        // real persistence/application result.
+                                        // Do not reinterpret failure as a reason
+                                        // to retry through the legacy file API.
+                                        return EditService.SetMaterialCubemap(
+                                            data,
+                                            material,
+                                            propertyName,
+                                            encodedData,
+                                            contentKey,
+                                            gameObject);
+                                    }
 
-                if (material == null || gameObject == null)
-                    yield break;
+                                    // External/legacy repositories only expose
+                                    // the original file-path API. Current Chara
+                                    // and Studio repositories use the byte seam,
+                                    // so they do not repeat disk IO here.
+                                    MaterialEditorPluginBase.Logger?.LogWarning(
+                                        "The active Material Editor repository does not support "
+                                        + "preloaded Cubemap data; using its legacy file import path.");
+                                    EditService.SetMaterialCubemap(
+                                        data,
+                                        material,
+                                        propertyName,
+                                        filePath,
+                                        gameObject);
+                                    return true;
+                                },
+                                message => MaterialEditorPluginBase.Logger?.LogInfo(
+                                    message),
+                                message => MaterialEditorPluginBase.Logger?.LogWarning(
+                                    message),
+                                message => MaterialEditorPluginBase.Logger?.LogError(
+                                    "Could not import Cubemap '"
+                                    + propertyName
+                                    + "': "
+                                    + message),
+                                succeeded =>
+                                {
+                                    if (this == null
+                                        || material == null
+                                        || gameObject == null)
+                                        return;
 
-                if (files != null && files.Length > 0 && !files[0].IsNullOrEmpty())
-                {
-                    EditService.SetMaterialCubemap(
-                        data,
-                        material,
-                        propertyName,
-                        files[0],
-                        gameObject);
-                }
-
-                cubemapItem.Changed =
-                    !EditService.GetMaterialCubemapValueOriginal(
-                        data,
-                        material,
-                        propertyName,
-                        gameObject);
-                cubemapItem.Exists =
-                    material.GetTexture("_" + propertyName) is Cubemap;
-                cubemapItem.RefreshState?.Invoke();
+                                    cubemapItem.Changed =
+                                        !EditService.GetMaterialCubemapValueOriginal(
+                                            data,
+                                            material,
+                                            propertyName,
+                                            gameObject);
+                                    cubemapItem.Exists =
+                                        MaterialPropertyAccess.GetTexture(
+                                            material,
+                                            propertyHandle) is Cubemap;
+                                    cubemapItem.RefreshState?.Invoke();
+                                });
+                        }
+                        catch (Exception exception)
+                        {
+                            MaterialEditorPluginBase.Logger?.LogError(
+                                "Could not start Cubemap import '"
+                                + propertyName
+                                + "': "
+                                + exception.Message);
+                        }
+                    });
             }
         }
 
@@ -634,7 +1371,9 @@ namespace MaterialEditorAPI
 
         internal virtual void ExportTexture(Material mat, string property)
         {
-            var tex = mat.GetTexture($"_{property}");
+            var tex = MaterialPropertyAccess.GetTexture(
+                mat,
+                MaterialPropertyIdCache.Get(property));
             if (tex == null) return;
             var matName = mat.NameFormatted();
             matName = string.Concat(matName.Split(Path.GetInvalidFileNameChars())).Trim();
@@ -647,7 +1386,9 @@ namespace MaterialEditorAPI
 
         internal void ExportCubemap(Material mat, string property)
         {
-            var cubemap = mat.GetTexture($"_{property}") as Cubemap;
+            var cubemap = MaterialPropertyAccess.GetTexture(
+                mat,
+                MaterialPropertyIdCache.Get(property)) as Cubemap;
             if (cubemap == null)
                 return;
 
@@ -778,4 +1519,5 @@ namespace MaterialEditorAPI
             }
         }
     }
+
 }

@@ -53,10 +53,31 @@ namespace MaterialEditorAPI
         {
             var controls = _controls.Renderer;
             controls.SetVisible(true);
-            ChangedStateBinding.SetLabel(controls.Label, item.LabelText);
+            System.Action refreshCollapsedGlyph = () =>
+                controls.CollapseButton.GetComponentInChildren<Text>().text =
+                    item.Collapsed
+                        ? FoldGlyphs.Collapsed
+                        : FoldGlyphs.Expanded;
+            refreshCollapsedGlyph();
+            UnityEngine.Events.UnityAction toggleCollapsed = () =>
+            {
+                item.CollapsedOnChange(!item.Collapsed);
+                refreshCollapsedGlyph();
+            };
+            listeners.Listen(controls.HeaderButton, toggleCollapsed);
+            listeners.Listen(controls.CollapseButton, toggleCollapsed);
             controls.Name.text = item.RendererName;
-            listeners.Listen(controls.ExportUvButton, () => item.ExportUv());
-            listeners.Listen(controls.ExportObjButton, () => item.ExportObj());
+            TooltipBinding.Bind(
+                controls.Name.gameObject,
+                item.TooltipText,
+                item.RendererName,
+                controls.Name);
+            listeners.Listen(
+                controls.ActionMenuButton,
+                () => _controls.Owner.OpenRendererActionMenu(
+                    controls.ActionMenuButton.transform as UnityEngine.RectTransform,
+                    item.ExportUv,
+                    item.ExportObj));
             listeners.Listen(
                 controls.SelectInterpolableButton,
                 () => item.SelectInterpolable());
@@ -65,7 +86,13 @@ namespace MaterialEditorAPI
                 controls.LabelClickTrigger,
                 item,
                 MaterialEditorLabelType.Renderer,
-                () => item.RendererName);
+                () => item.RendererName,
+                pointerEventData =>
+                {
+                    if (pointerEventData.button
+                        == UnityEngine.EventSystems.PointerEventData.InputButton.Left)
+                        toggleCollapsed();
+                });
         }
 
         private static void BindToggle(

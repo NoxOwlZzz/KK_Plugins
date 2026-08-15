@@ -6,10 +6,10 @@ namespace MaterialEditorAPI
 {
     internal static class FoldGlyphs
     {
-        internal const string Collapsed = "∨";
-        internal const string Expanded = "∧";
-        internal const string AllCollapsed = "∨∨";
-        internal const string AllExpanded = "∧∧";
+        internal const string Collapsed = MaterialEditorTheme.Glyphs.FoldCollapsed;
+        internal const string Expanded = MaterialEditorTheme.Glyphs.FoldExpanded;
+        internal const string AllCollapsed = MaterialEditorTheme.Glyphs.AllFolded;
+        internal const string AllExpanded = MaterialEditorTheme.Glyphs.AllExpanded;
     }
 
     // Compatibility adapter retained for the existing row construction code.
@@ -23,6 +23,36 @@ namespace MaterialEditorAPI
         internal static void ApplyTypography(GameObject root)
         {
             MaterialEditorStyles.ApplyTypography(root);
+        }
+    }
+
+    // Insets only the active child surface. Keeping the component on the
+    // pooled template lets every bind reapply (or clear) hierarchy depth.
+    internal sealed class RowPanelInset : MonoBehaviour
+    {
+        [SerializeField] private float _left;
+        [SerializeField] private float _right;
+        [SerializeField] private float _vertical;
+
+        internal void Configure(float left, float right, float vertical)
+        {
+            _left = left;
+            _right = right;
+            _vertical = vertical;
+            Apply();
+        }
+
+        internal void Apply()
+        {
+            var rect = transform as RectTransform;
+            if (rect == null)
+                return;
+
+            rect.anchorMin = Vector2.zero;
+            rect.anchorMax = Vector2.one;
+            rect.offsetMin = new Vector2(_left, _vertical);
+            rect.offsetMax = new Vector2(-_right, -_vertical);
+            rect.localScale = Vector3.one;
         }
     }
 

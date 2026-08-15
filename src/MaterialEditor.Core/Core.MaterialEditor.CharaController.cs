@@ -39,13 +39,12 @@ namespace KK_Plugins.MaterialEditor
         /// </summary>
         public const string TexDicSaveKey = nameof(TextureDictionary);
 
-        internal static readonly List<MaterialEditorCharaController> charaControllers = new List<MaterialEditorCharaController>();
-
         private readonly List<RendererProperty> RendererPropertyList = new List<RendererProperty>();
         private readonly List<ProjectorProperty> ProjectorPropertyList = new List<ProjectorProperty>();
         private readonly List<MaterialNameProperty> MaterialNamePropertyList = new List<MaterialNameProperty>();
         private readonly List<MaterialFloatProperty> MaterialFloatPropertyList = new List<MaterialFloatProperty>();
         private readonly List<MaterialColorProperty> MaterialColorPropertyList = new List<MaterialColorProperty>();
+        private readonly List<MaterialVectorProperty> MaterialVectorPropertyList = new List<MaterialVectorProperty>();
         private readonly List<MaterialKeywordProperty> MaterialKeywordPropertyList = new List<MaterialKeywordProperty>();
         internal readonly List<MaterialTextureProperty> MaterialTexturePropertyList = new List<MaterialTextureProperty>();
         internal readonly List<MaterialCubemapProperty> MaterialCubemapPropertyList = new List<MaterialCubemapProperty>();
@@ -54,7 +53,8 @@ namespace KK_Plugins.MaterialEditor
 
         internal readonly Dictionary<int, TextureContainer> TextureDictionary = new Dictionary<int, TextureContainer>();
 
-        private readonly Dictionary<int, MaterialEditorCubemapLease> CubemapLeases = new Dictionary<int, MaterialEditorCubemapLease>();
+        private readonly MaterialEditorCubemapLeaseStore CubemapLeases =
+            new MaterialEditorCubemapLeaseStore();
 
         private readonly Dictionary<MaterialTextureProperty, MEAnimationController> AnimationControllerMap = new Dictionary<MaterialTextureProperty, MEAnimationController>();
 
@@ -77,23 +77,8 @@ namespace KK_Plugins.MaterialEditor
         private int SlotToSet;
         private ObjectType ObjectTypeToSet;
         private GameObject GameObjectToSet;
+        private Action<bool> TextureImportCompleted;
         internal int? DuplicatingFrom = null;
-
-        /// <summary></summary>
-        protected override void Awake()
-        {
-            charaControllers.Add(this);
-            base.Awake();
-        }
-
-        /// <summary></summary>
-        protected override void OnDestroy()
-        {
-            ReleaseAllCubemapLeases();
-            DisposeTextureDictionary();
-            charaControllers.Remove(this);
-            base.OnDestroy();
-        }
 
         /// <summary>
         /// Handles saving data to character cards
@@ -101,13 +86,14 @@ namespace KK_Plugins.MaterialEditor
         /// <param name="currentGameMode"></param>
         protected override void OnCardBeingSaved(GameMode currentGameMode)
         {
+            RemoveLegacyMaterialVectorDuplicates();
 #if KK || KKS
             //Always run on save to also purge them for cards made before this purging was implemented
             PurgeUnusedCoordinates();
 #endif
             PurgeUnusedTextures();
 
-            if (RendererPropertyList.Count == 0 && MaterialFloatPropertyList.Count == 0 && MaterialKeywordPropertyList.Count == 0 && MaterialColorPropertyList.Count == 0 && MaterialTexturePropertyList.Count == 0 && MaterialCubemapPropertyList.Count == 0 && MaterialShaderList.Count == 0 && MaterialCopyList.Count == 0)
+            if (RendererPropertyList.Count == 0 && MaterialFloatPropertyList.Count == 0 && MaterialKeywordPropertyList.Count == 0 && MaterialColorPropertyList.Count == 0 && MaterialVectorPropertyList.Count == 0 && MaterialTexturePropertyList.Count == 0 && MaterialCubemapPropertyList.Count == 0 && MaterialShaderList.Count == 0 && MaterialCopyList.Count == 0)
             {
                 SetExtendedData(null);
             }
@@ -150,6 +136,11 @@ namespace KK_Plugins.MaterialEditor
                 else
                     data.data.Add(nameof(MaterialColorPropertyList), null);
 
+                if (MaterialVectorPropertyList.Count > 0)
+                    data.data.Add(nameof(MaterialVectorPropertyList), MessagePackSerializer.Serialize(MaterialVectorPropertyList));
+                else
+                    data.data.Add(nameof(MaterialVectorPropertyList), null);
+
                 if (MaterialTexturePropertyList.Count > 0)
                     data.data.Add(nameof(MaterialTexturePropertyList), MessagePackSerializer.Serialize(MaterialTexturePropertyList));
                 else
@@ -183,6 +174,9 @@ namespace KK_Plugins.MaterialEditor
         {
             if (!maintainState)
             {
+                if (MakerAPI.InsideAndLoaded)
+                    MaterialEditorUI.Visible = false;
+                ReleaseUiForCharacterContentsReplacement();
                 RemoveMaterialCopies(ChaControl.gameObject);
 
                 CharacterLoading = true;
@@ -190,6 +184,63 @@ namespace KK_Plugins.MaterialEditor
             }
 
             ChaControl.StartCoroutine(LoadData(true, true, true));
+        }
+
+        /// <summary>
+        /// Releases texture containers owned by this character controller.
+        /// </summary>
+        protected override void OnDestroy()
+        {
+            ChaControl targetControl = null;
+            GameObject targetRoot = null;
+            try
+            {
+                targetControl = ChaControl;
+                if (!ReferenceEquals(targetControl, null))
+                    targetRoot = targetControl.gameObject;
+            }
+            catch (MissingReferenceException)
+            {
+                // Fallback ownership checks below do not dereference ChaControl.
+            }
+#if !EC
+            if (StudioAPI.InsideStudio)
+                MEStudio.Instance?.ReleaseItemTypeDropdownTarget(targetControl);
+#endif
+            var targetInvalidated =
+                MaterialEditorUI.NotifyTargetDestroyed(targetRoot);
+            if (!targetInvalidated && CurrentUiTargetBelongsToThisController())
+                MaterialEditorUI.InvalidateCurrentTarget();
+            try
+            {
+                CubemapLeases.DisposeAll();
+                DisposeTextureDictionary();
+            }
+            finally
+            {
+                base.OnDestroy();
+            }
+        }
+
+        private bool CurrentUiTargetBelongsToThisController()
+        {
+            var retainedTarget = MaterialEditorUI.RetainedTargetGameObject;
+            if (ReferenceEquals(retainedTarget, null))
+                return false;
+            if (retainedTarget == null)
+                return true;
+
+            try
+            {
+                return ReferenceEquals(
+                    retainedTarget.GetComponentInParent(
+                        typeof(MaterialEditorCharaController)),
+                    this);
+            }
+            catch (MissingReferenceException)
+            {
+                return true;
+            }
         }
 
         internal new void Update()
@@ -309,10 +360,20 @@ namespace KK_Plugins.MaterialEditor
         /// </summary>
         private void SetMaterialTextureFromFileByUpdate()
         {
+            if (FileToSet == null)
+                return;
+
+            bool succeeded = false;
+            var completed = TextureImportCompleted;
             try
             {
-                if (FileToSet != null)
-                    SetMaterialTextureFromFile(SlotToSet, ObjectTypeToSet, MatToSet, PropertyToSet, FileToSet, GameObjectToSet);
+                succeeded = TrySetMaterialTextureFromFile(
+                    SlotToSet,
+                    ObjectTypeToSet,
+                    MatToSet,
+                    PropertyToSet,
+                    FileToSet,
+                    GameObjectToSet);
             }
             catch
             {
@@ -324,6 +385,8 @@ namespace KK_Plugins.MaterialEditor
                 PropertyToSet = null;
                 MatToSet = null;
                 GameObjectToSet = null;
+                TextureImportCompleted = null;
+                completed?.Invoke(succeeded);
             }
         }
 
@@ -511,87 +574,36 @@ namespace KK_Plugins.MaterialEditor
 
             foreach (var texID in unuseds)
             {
-                ReleaseCubemapLease(texID);
+                CubemapLeases.Release(texID);
                 TextureDictionary[texID].Dispose();
                 TextureDictionary.Remove(texID);
             }
+
             return unuseds.Count;
         }
 
         private bool TryGetCubemap(int texID, out Cubemap cubemap, out string error)
         {
-            cubemap = null;
-            error = null;
-
-            MaterialEditorCubemapLease lease;
-            if (CubemapLeases.TryGetValue(texID, out lease) && lease.Cubemap != null)
-            {
-                cubemap = lease.Cubemap;
-                return true;
-            }
-
             TextureContainer container;
             if (!TextureDictionary.TryGetValue(texID, out container))
             {
+                cubemap = null;
                 error = "The Cubemap texture data is missing.";
                 return false;
             }
-
-            if (!MaterialEditorCubemapCache.TryAcquire(container.Data, out lease, out error))
-                return false;
-
-            CubemapLeases[texID] = lease;
-            cubemap = lease.Cubemap;
-            return true;
-        }
-
-        private void CacheCubemapLease(int texID, MaterialEditorCubemapLease lease)
-        {
-            MaterialEditorCubemapLease existing;
-            if (CubemapLeases.TryGetValue(texID, out existing))
-            {
-                lease.Dispose();
-                return;
-            }
-            CubemapLeases[texID] = lease;
-        }
-
-        private void ReleaseCubemapLease(int texID)
-        {
-            MaterialEditorCubemapLease lease;
-            if (!CubemapLeases.TryGetValue(texID, out lease))
-                return;
-            CubemapLeases.Remove(texID);
-            lease.Dispose();
+            return CubemapLeases.TryAcquire(texID, container.Data, out cubemap, out error);
         }
 
         private void PurgeUnusedCubemapLeases()
         {
-            if (CubemapLeases.Count == 0)
-                return;
-
-            var used = new HashSet<int>(MaterialCubemapPropertyList
+            CubemapLeases.Purge(MaterialCubemapPropertyList
                 .Where(x => x.TexID.HasValue)
                 .Select(x => x.TexID.Value));
-            var unused = CubemapLeases.Keys.Where(x => !used.Contains(x)).ToArray();
-            for (var index = 0; index < unused.Length; index++)
-                ReleaseCubemapLease(unused[index]);
-        }
-
-        private void ReleaseAllCubemapLeases()
-        {
-            var leases = CubemapLeases.Values.ToArray();
-            CubemapLeases.Clear();
-            for (var index = 0; index < leases.Length; index++)
-                leases[index].Dispose();
         }
 
         private void DisposeTextureDictionary()
         {
-            var containers = TextureDictionary.Values.ToArray();
-            TextureDictionary.Clear();
-            for (var index = 0; index < containers.Length; index++)
-                containers[index].Dispose();
+            TextureSaveHandler.DisposeTextureContainers(TextureDictionary);
         }
 
 #if KK || KKS
@@ -606,6 +618,7 @@ namespace KK_Plugins.MaterialEditor
             MaterialNamePropertyList.RemoveAll(x => ChaControl.chaFile.coordinate.ElementAtOrDefault(x.CoordinateIndex) == null);
             MaterialFloatPropertyList.RemoveAll(x => ChaControl.chaFile.coordinate.ElementAtOrDefault(x.CoordinateIndex) == null);
             MaterialColorPropertyList.RemoveAll(x => ChaControl.chaFile.coordinate.ElementAtOrDefault(x.CoordinateIndex) == null);
+            MaterialVectorPropertyList.RemoveAll(x => ChaControl.chaFile.coordinate.ElementAtOrDefault(x.CoordinateIndex) == null);
             MaterialKeywordPropertyList.RemoveAll(x => ChaControl.chaFile.coordinate.ElementAtOrDefault(x.CoordinateIndex) == null);
             MaterialTexturePropertyList.RemoveAll(x => ChaControl.chaFile.coordinate.ElementAtOrDefault(x.CoordinateIndex) == null);
             MaterialCubemapPropertyList.RemoveAll(x => ChaControl.chaFile.coordinate.ElementAtOrDefault(x.CoordinateIndex) == null);
@@ -685,6 +698,16 @@ namespace KK_Plugins.MaterialEditor
                         || !materialPropertiesDict[x.MaterialName].Contains(x.Property)
                     )
                 );
+                removedCount += MaterialVectorPropertyList.RemoveAll(
+                    x => x.CoordinateIndex == CurrentCoordinateIndex
+                    && x.Slot == slot
+                    && x.ObjectType == objectType
+                    && (
+                        !materialNames.Contains(x.MaterialName)
+                        || !materialPropertiesDict.ContainsKey(x.MaterialName)
+                        || !materialPropertiesDict[x.MaterialName].Contains(x.Property)
+                    )
+                );
                 removedCount += MaterialKeywordPropertyList.RemoveAll(
                     x => x.CoordinateIndex == CurrentCoordinateIndex
                     && x.Slot == slot
@@ -749,7 +772,7 @@ namespace KK_Plugins.MaterialEditor
         /// </summary>
         private static void InitAnimationController()
         {
-            MEAnimationController.UpdateTexture = SetTextureForAnimation;
+            MEAnimationController.TryUpdateTexture = SetTextureForAnimation;
             MEAnimationController.GetTexID = GetTexIDWithAnimation;
         }
 
@@ -764,12 +787,12 @@ namespace KK_Plugins.MaterialEditor
         /// <summary>
         /// Set of textures for animation
         /// </summary>
-        private static void SetTextureForAnimation(MaterialEditorCharaController controller, GameObject go, MaterialTextureProperty property, int texID)
+        private static bool SetTextureForAnimation(MaterialEditorCharaController controller, GameObject go, MaterialTextureProperty property, int texID)
         {
             if (!controller.TextureDictionary.TryGetValue(texID, out var tex))
-                return;
+                return false;
 
-            SetTexture(go, property.MaterialName, property.Property, tex.Texture);
+            return SetTexture(go, property.MaterialName, property.Property, tex.Texture);
         }
 
         /// <summary>

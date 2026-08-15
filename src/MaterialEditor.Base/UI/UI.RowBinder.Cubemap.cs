@@ -1,4 +1,3 @@
-using UnityEngine;
 using UnityEngine.UI;
 using static UILib.Extensions;
 
@@ -25,7 +24,11 @@ namespace MaterialEditorAPI
             ListenerScope listeners)
         {
             _controls.SetVisible(true);
-            TooltipBinding.Bind(_controls.Label.gameObject, item.TooltipText);
+            TooltipBinding.Bind(
+                _controls.Label.gameObject,
+                item.TooltipText,
+                item.PropertyName,
+                _controls.Label);
 
             System.Action refreshState = () =>
                 ChangedStateBinding.Apply(
@@ -39,17 +42,19 @@ namespace MaterialEditorAPI
                 var text = _controls.ExportButton.GetComponentInChildren<Text>();
                 _controls.ExportButton.enabled = item.Exists;
                 text.text = item.Exists ? "Export Cubemap" : "No Cubemap";
-                text.color = item.Exists ? Color.black : Color.gray;
+                text.color = item.Exists
+                    ? MaterialEditorTheme.Colors.PrimaryText
+                    : MaterialEditorTheme.Colors.DisabledText;
             };
 
             _controls.ImportButton.GetComponentInChildren<Text>().text = "Import Cubemap";
             _controls.SelectInterpolableButton.gameObject.SetActive(false);
             TooltipBinding.Bind(
                 _controls.ImportButton.gameObject,
-                "Import a PNG as a Cubemap. Non-2:1 images are stretched automatically.");
+                "Import an equirectangular PNG or Radiance RGBE (.hdr) panorama as a Cubemap. Non-2:1 images are stretched automatically.");
             TooltipBinding.Bind(
                 _controls.ExportButton.gameObject,
-                "Export the assigned Cubemap as an equirectangular 2:1 PNG.");
+                "Export the assigned Cubemap as an equirectangular 2:1 PNG. HDR values above 1 are clipped in this SDR export.");
 
             refreshState();
             refreshExport();

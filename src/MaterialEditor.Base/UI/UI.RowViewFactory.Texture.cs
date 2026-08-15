@@ -1,5 +1,6 @@
 using UnityEngine;
 using UnityEngine.UI;
+using UILib;
 using static MaterialEditorAPI.MaterialEditorUI;
 
 namespace MaterialEditorAPI
@@ -9,6 +10,7 @@ namespace MaterialEditorAPI
         internal static void CreateRows(Transform parent)
         {
             CreateCategoryRow(parent);
+            CreateSubcategoryRow(parent);
             CreateTextureRow(parent);
             CreateOffsetScaleRow(parent);
         }
@@ -19,16 +21,26 @@ namespace MaterialEditorAPI
                 "PropertyCategoryPanel",
                 parent,
                 CategoryColor);
-            panel.GetComponent<HorizontalLayoutGroup>().spacing = 2f;
+            panel.GetComponent<HorizontalLayoutGroup>().spacing =
+                MaterialEditorTheme.Spacing.PropertyCategorySpacing;
 
-            var collapse = MaterialEditorControlFactory.CreateButton(
+            var headerButton = panel.gameObject.AddComponent<Button>();
+            panel.raycastTarget = true;
+            headerButton.targetGraphic = panel;
+            MaterialEditorStyles.ApplyPropertyCategoryButton(headerButton);
+
+            // Keep the legacy object name while making the glyph a passive
+            // indicator. The panel itself is now the only clickable surface.
+            var collapseIndicator = MaterialEditorControlFactory.CreateText(
                 "PropertyCategoryCollapseButton",
                 panel.transform,
-                FoldGlyphs.Expanded);
-            RowViewFactorySupport.SetWidth(collapse, SmallButtonWidth);
-            TooltipManager.AddTooltip(
-                collapse.gameObject,
-                "Expand or collapse this category");
+                FoldGlyphs.Expanded,
+                MaterialEditorTextRole.Button);
+            collapseIndicator.alignment = TextAnchor.MiddleCenter;
+            collapseIndicator.raycastTarget = false;
+            RowViewFactorySupport.SetWidth(
+                collapseIndicator,
+                MaterialEditorTheme.Metrics.FoldIndicatorWidth);
 
             var label = RowViewFactorySupport.CreateLabel(
                 "PropertyCategoryLabel",
@@ -36,7 +48,53 @@ namespace MaterialEditorAPI
                 string.Empty,
                 LabelWidth,
                 1f);
-            TooltipManager.AddTooltip(label.gameObject, "Category name");
+            label.fontStyle = FontStyle.Bold;
+            label.resizeTextForBestFit = false;
+            label.fontSize = MaterialEditorTheme.Typography.PrimaryFontSize;
+            label.horizontalOverflow = HorizontalWrapMode.Wrap;
+            label.verticalOverflow = VerticalWrapMode.Truncate;
+            label.raycastTarget = false;
+
+        }
+
+        private static void CreateSubcategoryRow(Transform parent)
+        {
+            var panel = RowViewFactorySupport.CreatePanel(
+                "PropertySubcategoryPanel",
+                parent,
+                SubcategoryColor);
+            panel.GetComponent<HorizontalLayoutGroup>().spacing =
+                MaterialEditorTheme.Spacing.PropertySubcategorySpacing;
+
+            var headerButton = panel.gameObject.AddComponent<Button>();
+            panel.raycastTarget = true;
+            headerButton.targetGraphic = panel;
+            MaterialEditorStyles.ApplyPropertySubcategoryButton(headerButton);
+
+            var collapseIndicator = MaterialEditorControlFactory.CreateText(
+                "PropertySubcategoryCollapseButton",
+                panel.transform,
+                FoldGlyphs.Expanded,
+                MaterialEditorTextRole.Button);
+            collapseIndicator.alignment = TextAnchor.MiddleCenter;
+            collapseIndicator.raycastTarget = false;
+            RowViewFactorySupport.SetWidth(
+                collapseIndicator,
+                MaterialEditorTheme.Metrics.FoldIndicatorWidth);
+
+            var label = RowViewFactorySupport.CreateLabel(
+                "PropertySubcategoryLabel",
+                panel.transform,
+                string.Empty,
+                LabelWidth,
+                1f);
+            label.fontStyle = FontStyle.Normal;
+            label.resizeTextForBestFit = false;
+            label.fontSize = MaterialEditorTheme.Typography.SecondaryFontSize;
+            label.horizontalOverflow = HorizontalWrapMode.Wrap;
+            label.verticalOverflow = VerticalWrapMode.Truncate;
+            label.raycastTarget = false;
+
         }
 
         private static void CreateTextureRow(Transform parent)
@@ -52,6 +110,7 @@ namespace MaterialEditorAPI
                 string.Empty,
                 LabelWidth,
                 1f);
+            RowViewFactorySupport.ConfigurePropertyLabel(label);
             label.gameObject.AddComponent<LabelClickTrigger>();
 
             RowViewFactorySupport.CreateInterpolableButton(
@@ -74,7 +133,7 @@ namespace MaterialEditorAPI
             var reset = MaterialEditorControlFactory.CreateButton(
                 "TextureResetButton",
                 panel.transform,
-                "Reset");
+                MaterialEditorTheme.Glyphs.Reset);
             RowViewFactorySupport.SetWidth(reset, ResetButtonWidth);
             TooltipManager.AddTooltip(
                 reset.gameObject,
@@ -95,7 +154,8 @@ namespace MaterialEditorAPI
                 string.Empty);
             label.gameObject.AddComponent<LabelClickTrigger>();
             label.alignment = TextAnchor.MiddleLeft;
-            label.color = Color.black;
+            label.color = MaterialEditorTheme.Colors.PrimaryText;
+            RowViewFactorySupport.ConfigurePropertyLabel(label);
 
             var emptySpace = MaterialEditorControlFactory.CreateText(
                 "EmptySpace",
@@ -129,6 +189,12 @@ namespace MaterialEditorAPI
                 offsetY.InputField,
                 new[] { offsetX.InputField });
 
+            var scaleGroupSpacer = MaterialEditorControlFactory.CreateText(
+                "OffsetScaleGroupSpacer",
+                panel.transform,
+                string.Empty);
+            scaleGroupSpacer.raycastTarget = false;
+
             var scaleXLabel = CreateCoordinateLabel(
                 "ScaleXText",
                 panel.transform,
@@ -150,7 +216,7 @@ namespace MaterialEditorAPI
             var reset = MaterialEditorControlFactory.CreateButton(
                 "OffsetScaleResetButton",
                 panel.transform,
-                "Reset");
+                MaterialEditorTheme.Glyphs.Reset);
             TooltipManager.AddTooltip(
                 reset.gameObject,
                 "Reset both the scale and offset properties to their original values");
@@ -170,7 +236,7 @@ namespace MaterialEditorAPI
         {
             var label = MaterialEditorControlFactory.CreateText(name, parent, text);
             label.alignment = TextAnchor.MiddleLeft;
-            label.color = Color.black;
+            label.color = MaterialEditorTheme.Colors.PrimaryText;
             return label;
         }
 

@@ -14,6 +14,19 @@ namespace MaterialEditorAPI
         internal Action<bool> CollapsedOnChange { get; set; }
     }
 
+    // Presentation-only contract for the second and final grouping level.
+    // It organizes rows without changing their shader-property semantics.
+    internal sealed class PropertySubcategoryRowModel : RowModel
+    {
+        internal PropertySubcategoryRowModel(string labelText)
+            : base(RowItemType.PropertySubcategory, labelText)
+        {
+        }
+
+        internal bool Collapsed { get; set; }
+        internal Action<bool> CollapsedOnChange { get; set; }
+    }
+
     internal sealed class TexturePropertyRowModel : RowModel
     {
         internal TexturePropertyRowModel(string labelText)

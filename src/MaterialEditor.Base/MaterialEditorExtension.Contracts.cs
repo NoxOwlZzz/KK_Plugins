@@ -23,7 +23,15 @@ namespace MaterialEditorAPI
         /// <summary>Stable facade for Material Editor edit and storage operations.</summary>
         EditServiceFacade = 16,
         /// <summary>English property tooltip metadata supplied by descriptors and shader catalogs.</summary>
-        PropertyTooltips = 32
+        PropertyTooltips = 32,
+        /// <summary>Float-backed enum property editors.</summary>
+        EnumPropertyEditors = 128,
+        /// <summary>Two-, three-, and four-component vector property editors.</summary>
+        VectorPropertyEditors = 256,
+        /// <summary>Conditional property visibility.</summary>
+        ConditionalPropertyVisibility = 512,
+        /// <summary>Float-backed toggle property editors.</summary>
+        ToggleFloatPropertyEditors = 1024
     }
 
     /// <summary>
@@ -135,6 +143,10 @@ namespace MaterialEditorAPI
             EditorId = editorId;
             PropertyName = id;
             Category = string.Empty;
+            Group = string.Empty;
+            EnumOptions = new List<MaterialEditorEnumOption>();
+            OffValue = 0f;
+            OnValue = 1f;
         }
 
         /// <summary>Stable identifier unique within the registering provider.</summary>
@@ -149,6 +161,18 @@ namespace MaterialEditorAPI
         public string Category { get; set; }
         /// <summary>Sort order within the extension category.</summary>
         public int Order { get; set; }
+        /// <summary>Optional logical group within the category.</summary>
+        public string Group { get; set; }
+        /// <summary>Optional condition controlling whether the property is visible.</summary>
+        public MaterialEditorPropertyCondition VisibilityCondition { get; set; }
+        /// <summary>Options used by the built-in enum editor.</summary>
+        public IList<MaterialEditorEnumOption> EnumOptions { get; set; }
+        /// <summary>Number of vector components to display, from two through four.</summary>
+        public int? VectorComponentCount { get; set; }
+        /// <summary>Numeric value represented by the off state of a float-backed toggle.</summary>
+        public float OffValue { get; set; }
+        /// <summary>Numeric value represented by the on state of a float-backed toggle.</summary>
+        public float OnValue { get; set; }
         /// <summary>Optional provider-owned metadata returned unchanged to the editor factory.</summary>
         public object Tag { get; set; }
         /// <summary>Optional lower bound used by the built-in float editor.</summary>
@@ -175,6 +199,16 @@ namespace MaterialEditorAPI
         public const string Texture = "materialeditor.texture";
         /// <summary>Native Cubemap import/export.</summary>
         public const string Cubemap = "materialeditor.cubemap";
+        /// <summary>Float-backed enum dropdown.</summary>
+        public const string Enum = "materialeditor.enum";
+        /// <summary>Two-component vector input.</summary>
+        public const string Vector2 = "materialeditor.vector2";
+        /// <summary>Three-component vector input.</summary>
+        public const string Vector3 = "materialeditor.vector3";
+        /// <summary>Four-component vector input.</summary>
+        public const string Vector4 = "materialeditor.vector4";
+        /// <summary>Float-backed toggle.</summary>
+        public const string Toggle = "materialeditor.toggle";
     }
 
     /// <summary>
@@ -214,6 +248,130 @@ namespace MaterialEditorAPI
         /// <summary>Slider maximum.</summary>
         public float Maximum { get; set; }
         /// <summary>Called after the user changes the value.</summary>
+        public Action<float> ValueChanged { get; }
+        /// <summary>Called when the value returns to its original state.</summary>
+        public Action Reset { get; }
+        /// <summary>Optional Timeline interpolation selection action.</summary>
+        public Action SelectInterpolable { get; set; }
+    }
+
+    /// <summary>Semantic float-backed enum property editor.</summary>
+    public sealed class MaterialEditorEnumPropertyEditor : MaterialEditorPropertyEditor
+    {
+        /// <summary>Create an enum editor definition.</summary>
+        public MaterialEditorEnumPropertyEditor(
+            float value,
+            float originalValue,
+            IEnumerable<MaterialEditorEnumOption> options,
+            Action<float> valueChanged,
+            Action reset)
+        {
+            if (options == null)
+                throw new ArgumentNullException(nameof(options));
+
+            Options = new List<MaterialEditorEnumOption>();
+            foreach (var option in options)
+                if (option != null)
+                    Options.Add(option);
+            if (Options.Count == 0)
+                throw new ArgumentException("At least one enum option is required.", nameof(options));
+
+            Value = value;
+            OriginalValue = originalValue;
+            ValueChanged = valueChanged ?? throw new ArgumentNullException(nameof(valueChanged));
+            Reset = reset ?? throw new ArgumentNullException(nameof(reset));
+        }
+
+        /// <summary>Current numeric value.</summary>
+        public float Value { get; }
+        /// <summary>Original numeric value.</summary>
+        public float OriginalValue { get; }
+        /// <summary>Whether multiple extension targets currently have different values.</summary>
+        public bool IsMixed { get; set; }
+        /// <summary>Available enum options.</summary>
+        public IList<MaterialEditorEnumOption> Options { get; }
+        /// <summary>Called after the user selects a value.</summary>
+        public Action<float> ValueChanged { get; }
+        /// <summary>Called when the value returns to its original state.</summary>
+        public Action Reset { get; }
+        /// <summary>Optional Timeline interpolation selection action.</summary>
+        public Action SelectInterpolable { get; set; }
+    }
+
+    /// <summary>Semantic vector property editor.</summary>
+    public sealed class MaterialEditorVectorPropertyEditor : MaterialEditorPropertyEditor
+    {
+        /// <summary>Create a vector editor definition.</summary>
+        public MaterialEditorVectorPropertyEditor(
+            Vector4 value,
+            Vector4 originalValue,
+            int componentCount,
+            Action<Vector4> valueChanged,
+            Action reset)
+        {
+            if (componentCount < 2 || componentCount > 4)
+                throw new ArgumentOutOfRangeException(nameof(componentCount));
+
+            Value = value;
+            OriginalValue = originalValue;
+            ComponentCount = componentCount;
+            MixedComponents = new bool[4];
+            ValueChanged = valueChanged ?? throw new ArgumentNullException(nameof(valueChanged));
+            Reset = reset ?? throw new ArgumentNullException(nameof(reset));
+        }
+
+        /// <summary>Current four-component backing value.</summary>
+        public Vector4 Value { get; }
+        /// <summary>Original four-component backing value.</summary>
+        public Vector4 OriginalValue { get; }
+        /// <summary>Number of components shown by the editor.</summary>
+        public int ComponentCount { get; }
+        /// <summary>Per-component mixed state for multi-target extension editors.</summary>
+        public IList<bool> MixedComponents { get; set; }
+        /// <summary>
+        /// Optional per-component callback for multi-target editors. When set,
+        /// changing one component does not require overwriting mixed components.
+        /// </summary>
+        public Action<int, float> ComponentChanged { get; set; }
+        /// <summary>Called after the user changes the vector.</summary>
+        public Action<Vector4> ValueChanged { get; }
+        /// <summary>Called when the vector returns to its original state.</summary>
+        public Action Reset { get; }
+        /// <summary>Optional Timeline interpolation selection action.</summary>
+        public Action SelectInterpolable { get; set; }
+    }
+
+    /// <summary>Semantic float-backed toggle property editor.</summary>
+    public sealed class MaterialEditorTogglePropertyEditor : MaterialEditorPropertyEditor
+    {
+        /// <summary>Create a float-backed toggle editor definition.</summary>
+        public MaterialEditorTogglePropertyEditor(
+            float value,
+            float originalValue,
+            float offValue,
+            float onValue,
+            Action<float> valueChanged,
+            Action reset)
+        {
+            Value = value;
+            OriginalValue = originalValue;
+            OffValue = offValue;
+            OnValue = onValue;
+            ValueChanged = valueChanged ?? throw new ArgumentNullException(nameof(valueChanged));
+            Reset = reset ?? throw new ArgumentNullException(nameof(reset));
+        }
+
+        /// <summary>Current numeric value.</summary>
+        public float Value { get; }
+        /// <summary>Original numeric value.</summary>
+        public float OriginalValue { get; }
+        /// <summary>Whether multiple extension targets currently have different values.</summary>
+        public bool IsMixed { get; set; }
+        /// <summary>Numeric off value.</summary>
+        public float OffValue { get; }
+        /// <summary>Numeric on value.</summary>
+        public float OnValue { get; }
+        /// <summary>Called after the user toggles the value.</summary>
         public Action<float> ValueChanged { get; }
         /// <summary>Called when the value returns to its original state.</summary>
         public Action Reset { get; }

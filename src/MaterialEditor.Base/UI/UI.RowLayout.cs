@@ -42,6 +42,19 @@ namespace MaterialEditorAPI
                 LayoutRebuilder.MarkLayoutForRebuild(parentRect);
         }
 
+        internal void SetFixedWidth(float width)
+        {
+            if (_minWidth == width
+                && _preferredWidth == width
+                && _flexibleWidth == 0f)
+                return;
+
+            _minWidth = width;
+            _preferredWidth = width;
+            _flexibleWidth = 0f;
+            RestoreLayout();
+        }
+
         public void CalculateLayoutInputHorizontal()
         {
         }
@@ -177,6 +190,10 @@ namespace MaterialEditorAPI
                     RowColumnRole.Editor,
                     MaterialEditorLayout.OffsetScaleInputWidth),
                 RowColumnSpec.Fixed(
+                    "OffsetScaleGroupSpacer",
+                    RowColumnRole.Auxiliary,
+                    MaterialEditorTheme.Metrics.OffsetScaleGroupSpacing),
+                RowColumnSpec.Fixed(
                     "ScaleXText",
                     RowColumnRole.Editor,
                     MaterialEditorLayout.OffsetScaleLabelXWidth),
@@ -260,6 +277,79 @@ namespace MaterialEditorAPI
                     MaterialEditorLayout.FloatInputWidth),
                 RowColumnSpec.Fixed(
                     "FloatResetButton",
+                    RowColumnRole.Reset,
+                    MaterialEditorLayout.ResetButtonWidth)),
+            new RowLayoutSpec(
+                "EnumPanel",
+                RowColumnSpec.Flexible("EnumLabel", RowColumnRole.Label),
+                RowColumnSpec.Fixed(
+                    "SelectInterpolableEnumButton",
+                    RowColumnRole.Timeline,
+                    MaterialEditorLayout.InterpolableButtonWidth),
+                RowColumnSpec.Fixed(
+                    "EnumDropdown",
+                    RowColumnRole.Editor,
+                    MaterialEditorLayout.ContentWidth),
+                RowColumnSpec.Fixed(
+                    "EnumResetButton",
+                    RowColumnRole.Reset,
+                    MaterialEditorLayout.ResetButtonWidth)),
+            new RowLayoutSpec(
+                "VectorPanel",
+                RowColumnSpec.Flexible("VectorLabel", RowColumnRole.Label),
+                RowColumnSpec.Fixed(
+                    "SelectInterpolableVectorButton",
+                    RowColumnRole.Timeline,
+                    MaterialEditorLayout.InterpolableButtonWidth),
+                RowColumnSpec.Fixed(
+                    "VectorXText",
+                    RowColumnRole.Editor,
+                    MaterialEditorLayout.VectorComponentLabelWidth),
+                RowColumnSpec.Fixed(
+                    "VectorXInput",
+                    RowColumnRole.Editor,
+                    MaterialEditorLayout.VectorComponentInputWidth),
+                RowColumnSpec.Fixed(
+                    "VectorYText",
+                    RowColumnRole.Editor,
+                    MaterialEditorLayout.VectorComponentLabelWidth),
+                RowColumnSpec.Fixed(
+                    "VectorYInput",
+                    RowColumnRole.Editor,
+                    MaterialEditorLayout.VectorComponentInputWidth),
+                RowColumnSpec.Fixed(
+                    "VectorZText",
+                    RowColumnRole.Editor,
+                    MaterialEditorLayout.VectorComponentLabelWidth),
+                RowColumnSpec.Fixed(
+                    "VectorZInput",
+                    RowColumnRole.Editor,
+                    MaterialEditorLayout.VectorComponentInputWidth),
+                RowColumnSpec.Fixed(
+                    "VectorWText",
+                    RowColumnRole.Editor,
+                    MaterialEditorLayout.VectorComponentLabelWidth),
+                RowColumnSpec.Fixed(
+                    "VectorWInput",
+                    RowColumnRole.Editor,
+                    MaterialEditorLayout.VectorComponentInputWidth),
+                RowColumnSpec.Fixed(
+                    "VectorResetButton",
+                    RowColumnRole.Reset,
+                    MaterialEditorLayout.ResetButtonWidth)),
+            new RowLayoutSpec(
+                "FloatTogglePanel",
+                RowColumnSpec.Flexible("FloatToggleLabel", RowColumnRole.Label),
+                RowColumnSpec.Fixed(
+                    "SelectInterpolableFloatToggleButton",
+                    RowColumnRole.Timeline,
+                    MaterialEditorLayout.InterpolableButtonWidth),
+                RowColumnSpec.Fixed(
+                    "FloatToggleToggle",
+                    RowColumnRole.Editor,
+                    MaterialEditorLayout.KeywordToggleWidth),
+                RowColumnSpec.Fixed(
+                    "FloatToggleResetButton",
                     RowColumnRole.Reset,
                     MaterialEditorLayout.ResetButtonWidth))
         };

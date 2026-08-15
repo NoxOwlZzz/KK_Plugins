@@ -1,5 +1,4 @@
 ﻿using BepInEx;
-using BepInEx.Bootstrap;
 using BepInEx.Configuration;
 using BepInEx.Logging;
 using System;
@@ -58,6 +57,8 @@ namespace MaterialEditorAPI
         /// Sorted dictionary of XML shader properties
         /// </summary>
         public static SortedDictionary<string, Dictionary<string, ShaderPropertyData>> XMLShaderProperties = new SortedDictionary<string, Dictionary<string, ShaderPropertyData>>();
+        internal static readonly ShaderPropertyFallbackMergeState
+            ShaderPropertyFallbacks = new ShaderPropertyFallbackMergeState();
 
         /// <summary>
         /// Configuration entry for ME window scale
@@ -83,6 +84,17 @@ namespace MaterialEditorAPI
         /// Prevent dragging the ME window outside of the game window
         /// </summary>
         public static ConfigEntry<bool> PreventDragout { get; set; }
+        /// <summary>
+        /// Defines which visible part of the Material Editor window remains
+        /// recoverable while dragging. The public Boolean entry above remains
+        /// available as a live compatibility mirror.
+        /// </summary>
+        internal static ConfigEntry<MaterialEditorWindowDragMode> WindowDragMode
+        {
+            get;
+            private set;
+        }
+        private static bool _synchronizingWindowDragSettings;
         /// <summary>
         /// Configuration entry for watching for file changes and reloading textures on change
         /// </summary>
@@ -127,6 +139,14 @@ namespace MaterialEditorAPI
         /// Whether to sort shader properties by their category
         /// </summary>
         public static ConfigEntry<bool> SortPropertiesByCategory { get; set; }
+        /// <summary>Enable development timing and threshold logging.</summary>
+        internal static ConfigEntry<bool> PerformanceDiagnostics { get; private set; }
+        /// <summary>Enable internal operation counters without threshold logging.</summary>
+        internal static ConfigEntry<bool> PerformanceCountersEnabled { get; private set; }
+        /// <summary>Minimum duration reported by development timing logs.</summary>
+        internal static ConfigEntry<float> PerformanceLogThresholdMs { get; private set; }
+        /// <summary>Write an internal counter summary when the editor window closes.</summary>
+        internal static ConfigEntry<bool> PerformanceSummaryOnClose { get; private set; }
         /// <summary>
         /// Controls the max value of the slider for this projector property
         /// </summary>
@@ -152,9 +172,57 @@ namespace MaterialEditorAPI
         /// </summary>
         public static ConfigEntry<bool> ConvertNormalmapsOnExport { get; set; }
         /// <summary>
-        /// Local textures will be exported to / imported from this folder. If empty, defaults to {LocalTexturePathDefault}
+        /// Compatibility path used to read legacy local texture data. If empty, defaults to {LocalTexturePathDefault}
         /// </summary>
         internal static ConfigEntry<string> ConfigLocalTexturePath { get; set; }
+
+        private static void HandleLegacyWindowDragSettingChanged(
+            object sender,
+            EventArgs eventArgs)
+        {
+            if (_synchronizingWindowDragSettings || WindowDragMode == null)
+                return;
+
+            _synchronizingWindowDragSettings = true;
+            try
+            {
+                WindowDragMode.Value =
+                    MaterialEditorWindowBoundsPolicy.FromLegacy(
+                        PreventDragout.Value);
+            }
+            finally
+            {
+                _synchronizingWindowDragSettings = false;
+            }
+        }
+
+        private static void HandleWindowDragModeChanged(
+            object sender,
+            EventArgs eventArgs)
+        {
+            SynchronizeLegacyWindowDragSetting();
+            MaterialEditorUI.UISettingChanged(sender, eventArgs);
+        }
+
+        private static void SynchronizeLegacyWindowDragSetting()
+        {
+            if (_synchronizingWindowDragSettings
+                || PreventDragout == null
+                || WindowDragMode == null)
+                return;
+
+            _synchronizingWindowDragSettings = true;
+            try
+            {
+                PreventDragout.Value =
+                    MaterialEditorWindowBoundsPolicy.ToLegacyBoolean(
+                        WindowDragMode.Value);
+            }
+            finally
+            {
+                _synchronizingWindowDragSettings = false;
+            }
+        }
 
         /// <summary>
         /// Init logic, do not call
@@ -165,12 +233,28 @@ namespace MaterialEditorAPI
             Logger = base.Logger;
             Directory.CreateDirectory(ExportPath);
 
-            UIScale = Config.Bind("Config", "UI Scale", 1.75f, new ConfigDescription("Controls the size of the window.", new AcceptableValueRange<float>(1f, 3f), new ConfigurationManagerAttributes { Order = 7 }));
-            UIWidth = Config.Bind("Config", "UI Width", 0.33f, new ConfigDescription("Controls the size of the window.", new AcceptableValueRange<float>(0f, 1f), new ConfigurationManagerAttributes { Order = 6, ShowRangeAsPercent = false }));
-            UIHeight = Config.Bind("Config", "UI Height", 0.3f, new ConfigDescription("Controls the size of the window.", new AcceptableValueRange<float>(0f, 1f), new ConfigurationManagerAttributes { Order = 5, ShowRangeAsPercent = false }));
-            UIListWidth = Config.Bind("Config", "UI List Width", 180f, new ConfigDescription("Controls width of the renderer/materials lists to the side of the window", new AcceptableValueRange<float>(100f, 500f), new ConfigurationManagerAttributes { Order = 4, ShowRangeAsPercent = false }));
+            UIScale = Config.Bind("Config", "UI Scale", MaterialEditorTheme.Metrics.UiScaleDefault, new ConfigDescription("Controls the size of the window.", new AcceptableValueRange<float>(MaterialEditorTheme.Metrics.UiScaleMinimum, MaterialEditorTheme.Metrics.UiScaleMaximum), new ConfigurationManagerAttributes { Order = 7 }));
+            UIWidth = Config.Bind("Config", "UI Width", MaterialEditorTheme.Metrics.WindowWidthDefault, new ConfigDescription("Controls the size of the window.", new AcceptableValueRange<float>(MaterialEditorTheme.Metrics.WindowWidthMinimum, MaterialEditorTheme.Metrics.WindowWidthMaximum), new ConfigurationManagerAttributes { Order = 6, ShowRangeAsPercent = false }));
+            UIHeight = Config.Bind("Config", "UI Height", MaterialEditorTheme.Metrics.WindowHeightDefault, new ConfigDescription("Controls the size of the window.", new AcceptableValueRange<float>(MaterialEditorTheme.Metrics.WindowHeightMinimum, MaterialEditorTheme.Metrics.WindowHeightMaximum), new ConfigurationManagerAttributes { Order = 5, ShowRangeAsPercent = false }));
+            UIListWidth = Config.Bind("Config", "UI List Width", MaterialEditorTheme.Metrics.SidePanelDefaultWidth, new ConfigDescription("Controls width of the renderer/materials lists to the side of the window", new AcceptableValueRange<float>(MaterialEditorTheme.Metrics.SidePanelMinimumWidth, MaterialEditorTheme.Metrics.SidePanelMaximumWidth), new ConfigurationManagerAttributes { Order = 4, ShowRangeAsPercent = false }));
             DragSensitivity = Config.Bind("Config", "Drag Sensitivity", 30f, new ConfigDescription("Controls the sensitivity of dragging labels to edit float values", new AcceptableValueRange<float>(1f, 100f), new ConfigurationManagerAttributes { Order = 3, ShowRangeAsPercent = false }));
-            PreventDragout = Config.Bind("Config", "Prevent Window Dragout", true, "Prevent dragging the ME window outside of the game window (Requires restart to apply!)");
+            PreventDragout = Config.Bind(
+                "Config",
+                "Prevent Window Dragout",
+                true,
+                new ConfigDescription(
+                    "Legacy compatibility setting mirrored with Window Drag Limits. False selects NoLimits; true selects KeepHeaderInside.",
+                    null,
+                    new ConfigurationManagerAttributes { Browsable = false }));
+            WindowDragMode = Config.Bind(
+                "Config",
+                "Window Drag Limits",
+                MaterialEditorWindowBoundsPolicy.FromLegacy(
+                    PreventDragout.Value),
+                "Controls which visible part of the Material Editor window must remain inside the game window while dragging.");
+            PreventDragout.SettingChanged += HandleLegacyWindowDragSettingChanged;
+            WindowDragMode.SettingChanged += HandleWindowDragModeChanged;
+            SynchronizeLegacyWindowDragSetting();
             WatchTexChanges = Config.Bind("Config", "Watch File Changes", true, new ConfigDescription("Watch for file changes and reload textures on change. Can be toggled in the UI.", null, new ConfigurationManagerAttributes { Order = 2 }));
             ShaderOptimization = Config.Bind("Config", "Shader Optimization", true, new ConfigDescription("Replaces every loaded shader with the MaterialEditor copy of the shader. Reduces the number of copies of shaders loaded which reduces RAM usage and improves performance.", null, new ConfigurationManagerAttributes { Order = 1 }));
             ExportBakedMesh = Config.Bind("Config", "Export Baked Mesh", false, new ConfigDescription("When enabled, skinned meshes will be exported in their current state with all customization applied as well as in the current pose.", null, new ConfigurationManagerAttributes { Order = 1 }));
@@ -186,6 +270,29 @@ namespace MaterialEditorAPI
             SortPropertiesByType = Config.Bind("Config", "Sort Properties by Type", true, "Whether to sort shader properties by their types.");
             SortPropertiesByName = Config.Bind("Config", "Sort Properties by Name", true, "Whether to sort shader properties by their names.");
             SortPropertiesByCategory = Config.Bind("Config", "Sort Properties by Category", true, "Whether to sort shader properties by their category.");
+            PerformanceDiagnostics = Config.Bind(
+                "Performance",
+                "PerformanceDiagnostics",
+                false,
+                "Enable internal Material Editor timing diagnostics and Unity Profiler samples.");
+            PerformanceCountersEnabled = Config.Bind(
+                "Performance",
+                "PerformanceCountersEnabled",
+                false,
+                "Enable internal Material Editor operation counters.");
+            PerformanceLogThresholdMs = Config.Bind(
+                "Performance",
+                "PerformanceLogThresholdMs",
+                5f,
+                new ConfigDescription(
+                    "Minimum elapsed milliseconds for a performance diagnostic log entry.",
+                    new AcceptableValueRange<float>(0f, 60000f)));
+            PerformanceSummaryOnClose = Config.Bind(
+                "Performance",
+                "PerformanceSummaryOnClose",
+                false,
+                "Write an internal performance counter summary when the Material Editor window closes.");
+            ConfigurePerformanceDiagnostics();
             ConvertNormalmapsOnExport = Config.Bind("Config", "Convert Normalmaps On Export", true, new ConfigDescription("When enabled, normalmaps get converted from DXT5 compressed (red) normals back to normal OpenGL (blue/purple) normals"));
 
             // Everything in these games is 10x the size of KK/KKS
@@ -211,10 +318,76 @@ namespace MaterialEditorAPI
             SortPropertiesByType.SettingChanged += (object sender, EventArgs e) => PropertyOrganizer.Refresh();
             SortPropertiesByName.SettingChanged += (object sender, EventArgs e) => PropertyOrganizer.Refresh();
             SortPropertiesByCategory.SettingChanged += (object sender, EventArgs e) => PropertyOrganizer.Refresh();
+            PerformanceDiagnostics.SettingChanged += PerformanceSettingsChanged;
+            PerformanceCountersEnabled.SettingChanged += PerformanceSettingsChanged;
+            PerformanceLogThresholdMs.SettingChanged += PerformanceSettingsChanged;
             SetExportPath();
 
             ResourceRedirection.RegisterAssetLoadedHook(HookBehaviour.OneCallbackPerResourceLoaded, AssetLoadedHook);
             LoadXML();
+        }
+
+        private static void PerformanceSettingsChanged(object sender, EventArgs eventArgs)
+        {
+            ConfigurePerformanceDiagnostics();
+        }
+
+        private static void ConfigurePerformanceDiagnostics()
+        {
+            var diagnosticsEnabled = PerformanceDiagnostics != null
+                                     && PerformanceDiagnostics.Value;
+            var countersEnabled = PerformanceCountersEnabled != null
+                                  && PerformanceCountersEnabled.Value;
+            var threshold = PerformanceLogThresholdMs == null
+                ? 5d
+                : PerformanceLogThresholdMs.Value;
+            MaterialEditorPerformance.Configure(
+                diagnosticsEnabled,
+                countersEnabled,
+                threshold,
+                diagnosticsEnabled
+                    ? (Action<MaterialEditorPerformanceMetric, double>)LogSlowPerformanceSample
+                    : null,
+                diagnosticsEnabled ? MaterialEditorUnityProfiler.Instance : null);
+        }
+
+        private static void LogSlowPerformanceSample(
+            MaterialEditorPerformanceMetric metric,
+            double elapsedMilliseconds)
+        {
+            Logger?.LogMessage(
+                "[MaterialEditor performance] "
+                + MaterialEditorPerformance.GetMetricName(metric)
+                + ": "
+                + elapsedMilliseconds.ToString("F3", CultureInfo.InvariantCulture)
+                + " ms");
+        }
+
+        internal static void LogPerformanceSummaryOnWindowClose()
+        {
+            if (PerformanceSummaryOnClose == null
+                || !PerformanceSummaryOnClose.Value
+                || !MaterialEditorPerformance.Enabled)
+                return;
+
+            var snapshot = MaterialEditorPerformance.CaptureSnapshot();
+            foreach (MaterialEditorPerformanceMetric metric in Enum.GetValues(
+                         typeof(MaterialEditorPerformanceMetric)))
+            {
+                if (metric == MaterialEditorPerformanceMetric.Count)
+                    continue;
+                var count = snapshot.GetCount(metric);
+                if (count == 0L)
+                    continue;
+                Logger?.LogMessage(
+                    "[MaterialEditor performance summary] "
+                    + MaterialEditorPerformance.GetMetricName(metric)
+                    + " count="
+                    + count.ToString(CultureInfo.InvariantCulture)
+                    + " elapsedMs="
+                    + snapshot.GetElapsedMilliseconds(metric)
+                        .ToString("F3", CultureInfo.InvariantCulture));
+            }
         }
 
         /// <summary>
@@ -261,67 +434,83 @@ namespace MaterialEditorAPI
 
         private static void LoadXML()
         {
-            XMLShaderProperties["default"] = new Dictionary<string, ShaderPropertyData>();
+            var performanceSample = MaterialEditorPerformance.Start(
+                MaterialEditorPerformanceMetric.ManifestParsing);
+            try
+            {
+                XMLShaderProperties["default"] = new Dictionary<string, ShaderPropertyData>();
+                ShaderPropertyFallbacks.Reset();
 
-            using (Stream stream = Assembly.GetExecutingAssembly().GetManifestResourceStream($"{nameof(MaterialEditorAPI)}.Resources.default.xml"))
-                if (stream != null)
-                    using (XmlReader reader = XmlReader.Create(stream))
-                    {
-                        XmlDocument doc = new XmlDocument();
-                        doc.Load(stream);
-                        XmlElement materialEditorElement = doc.DocumentElement;
-                        Action<string> metadataWarning = message =>
-                            Logger?.LogWarning(
-                                "Material Editor default metadata: " + message);
-                        var schemaVersion = ShaderPropertyMetadataParser.ReadSchemaVersion(
-                            materialEditorElement,
-                            metadataWarning);
-
-                        var shaderElements = materialEditorElement.GetElementsByTagName("Shader");
-                        foreach (var shaderElementObj in shaderElements)
+                using (Stream stream = Assembly.GetExecutingAssembly().GetManifestResourceStream($"{nameof(MaterialEditorAPI)}.Resources.default.xml"))
+                    if (stream != null)
+                        using (XmlReader reader = XmlReader.Create(stream))
                         {
-                            if (shaderElementObj != null)
+                            XmlDocument doc = new XmlDocument();
+                            doc.Load(stream);
+                            XmlElement materialEditorElement = doc.DocumentElement;
+                            Action<string> metadataWarning = message =>
+                                Logger?.LogWarning("Material Editor default metadata: " + message);
+                            var schemaVersion = ShaderPropertyMetadataParser.ReadSchemaVersion(
+                                materialEditorElement,
+                                metadataWarning);
+
+                            var shaderElements = materialEditorElement.GetElementsByTagName("Shader");
+                            foreach (var shaderElementObj in shaderElements)
                             {
-                                var shaderElement = (XmlElement)shaderElementObj;
+                                if (shaderElementObj != null)
                                 {
-                                    string shaderName = shaderElement.GetAttribute("Name");
-
-                                    XMLShaderProperties[shaderName] = new Dictionary<string, ShaderPropertyData>();
-
-                                    var shaderPropertyElements = shaderElement.GetElementsByTagName("Property");
-                                    var declarationOrder = 0;
-                                    foreach (var shaderPropertyElementObj in shaderPropertyElements)
+                                    var shaderElement = (XmlElement)shaderElementObj;
                                     {
-                                        if (shaderPropertyElementObj != null)
-                                        {
-                                            var shaderPropertyElement = (XmlElement)shaderPropertyElementObj;
-                                            {
-                                                ShaderPropertyData shaderPropertyData;
-                                                if (!ShaderPropertyData.TryParse(
-                                                        shaderPropertyElement,
-                                                        metadataWarning,
-                                                        out shaderPropertyData,
-                                                        schemaVersion))
-                                                {
-                                                    declarationOrder++;
-                                                    continue;
-                                                }
+                                        string shaderName = shaderElement.GetAttribute("Name");
 
-                                                shaderPropertyData.DeclarationOrder = declarationOrder++;
-                                                XMLShaderProperties["default"][shaderPropertyData.Name] = shaderPropertyData;
+                                        XMLShaderProperties[shaderName] = new Dictionary<string, ShaderPropertyData>();
+
+                                        var shaderPropertyElements = shaderElement.GetElementsByTagName("Property");
+                                        var declarationOrder = 0;
+                                        foreach (var shaderPropertyElementObj in shaderPropertyElements)
+                                        {
+                                            if (shaderPropertyElementObj != null)
+                                            {
+                                                var shaderPropertyElement = (XmlElement)shaderPropertyElementObj;
+                                                {
+                                                    ShaderPropertyData shaderPropertyData;
+                                                    if (!ShaderPropertyData.TryParse(
+                                                            shaderPropertyElement,
+                                                            metadataWarning,
+                                                            out shaderPropertyData,
+                                                            schemaVersion))
+                                                    {
+                                                        declarationOrder++;
+                                                        continue;
+                                                    }
+
+                                                    shaderPropertyData.DeclarationOrder = declarationOrder++;
+                                                    ShaderPropertyFallbacks.MergeInto(
+                                                        XMLShaderProperties["default"],
+                                                        shaderPropertyData,
+                                                        "MaterialEditor.API default",
+                                                        message => Logger?.LogWarning(
+                                                            "Material Editor fallback: " + message));
+                                                }
                                             }
                                         }
                                     }
                                 }
                             }
                         }
-                    }
+            }
+            finally
+            {
+                MaterialEditorPerformance.Stop(
+                    MaterialEditorPerformanceMetric.ManifestParsing,
+                    performanceSample);
+            }
         }
 
         internal virtual void WatchTexChanges_SettingChanged(object sender, EventArgs e)
         {
             if (!WatchTexChanges.Value)
-                MaterialEditorUI.TexChangeWatcher?.Dispose();
+                MaterialEditorUI.DisposeTexChangeWatcher();
         }
 
         internal virtual void ShaderOptimization_SettingChanged(object sender, EventArgs e) { }
@@ -360,8 +549,24 @@ namespace MaterialEditorAPI
         internal static void SaveTexR(RenderTexture renderTexture, string path)
         {
             var tex = GetT2D(renderTexture);
-            File.WriteAllBytes(path, tex.EncodeToPNG());
+            File.WriteAllBytes(path, EncodeTextureToPng(tex));
             DestroyImmediate(tex);
+        }
+
+        internal static byte[] EncodeTextureToPng(Texture2D texture)
+        {
+            var performanceSample = MaterialEditorPerformance.Start(
+                MaterialEditorPerformanceMetric.TextureEncoding);
+            try
+            {
+                return texture.EncodeToPNG();
+            }
+            finally
+            {
+                MaterialEditorPerformance.Stop(
+                    MaterialEditorPerformanceMetric.TextureEncoding,
+                    performanceSample);
+            }
         }
 
         internal static void SaveTex(Texture tex, string path, RenderTextureFormat rtf = RenderTextureFormat.Default, RenderTextureReadWrite cs = RenderTextureReadWrite.Default)
@@ -481,13 +686,62 @@ namespace MaterialEditorAPI
             /// Category of the shader property.
             /// </summary>
             public string Category;
+            // The flat attribute is retained when a nested declaration is
+            // cloned into the global legacy fallback catalog.
+            internal string CategoryBeforeHierarchy;
+            // Stable presentation hierarchy read from optional schema-2
+            // Category/Subcategory parents. Category remains the legacy flat
+            // grouping/display value for older manifests and consumers.
+            internal string CategoryId;
+            internal string CategoryDisplayName;
+            internal bool HasExplicitCategoryDisplayName;
+            internal string SubcategoryId;
+            internal string SubcategoryDisplayName;
+            internal bool HasExplicitSubcategoryDisplayName;
+            internal int? CategoryOrder;
             internal int DeclarationOrder;
-            internal string DisplayName;
-            internal string EditorId;
-            internal MaterialEditorPropertyUiLevel UiLevel;
-            internal MaterialEditorPropertyCondition ShowIf;
-            internal List<MaterialEditorEnumOption> EnumOptions;
+            /// <summary>
+            /// Optional label shown by Material Editor. Defaults to <see cref="Name"/>.
+            /// </summary>
+            public string DisplayName;
+            internal bool HasExplicitDisplayName;
+            /// <summary>
+            /// Optional explicit ordering value from schema 2 metadata.
+            /// </summary>
+            public int? Order;
+            /// <summary>
+            /// Optional semantic editor identifier. A null value uses the editor implied by <see cref="Type"/>.
+            /// </summary>
+            public string EditorId;
+            /// <summary>
+            /// Optional inline English tooltip.
+            /// </summary>
+            public string TooltipText;
+            /// <summary>
+            /// Optional logical group identifier.
+            /// </summary>
+            public string Group;
+            /// <summary>
+            /// Optional condition controlling whether the property is shown.
+            /// </summary>
+            public MaterialEditorPropertyCondition ShowIf;
+            /// <summary>
+            /// Options used by an enum property editor.
+            /// </summary>
+            public List<MaterialEditorEnumOption> EnumOptions;
+            /// <summary>
+            /// Number of components shown by a vector editor, when specified.
+            /// </summary>
+            public int? VectorComponentCount;
             internal bool Invert;
+            /// <summary>
+            /// Numeric value written for the off state of a float-backed toggle.
+            /// </summary>
+            public float OffValue;
+            /// <summary>
+            /// Numeric value written for the on state of a float-backed toggle.
+            /// </summary>
+            public float OnValue;
 
             /// <summary>
             /// Initializes a new instance of the <see cref="ShaderPropertyData"/> class.
@@ -514,8 +768,9 @@ namespace MaterialEditorAPI
                 Name = name;
                 Type = type;
                 DisplayName = name;
-                UiLevel = MaterialEditorPropertyUiLevel.Basic;
                 EnumOptions = new List<MaterialEditorEnumOption>();
+                OffValue = 0f;
+                OnValue = 1f;
                 DefaultValue = defaultValue.IsNullOrEmpty() ? null : defaultValue;
                 DefaultValueAssetBundle = defaultValueAB.IsNullOrEmpty() ? null : defaultValueAB;
 
@@ -582,6 +837,18 @@ namespace MaterialEditorAPI
                         + declaredPropertyType + "' and was ignored.");
                     return false;
                 }
+                if (schemaVersion >= 2
+                    && string.Equals(
+                        declaredPropertyType == null
+                            ? string.Empty
+                            : declaredPropertyType.Trim(),
+                        "Dropdown",
+                        StringComparison.OrdinalIgnoreCase))
+                {
+                    warning?.Invoke(
+                        "Shader property '" + propertyName
+                        + "' uses the legacy Type 'Dropdown'; use Type 'Enum' with the Enums attribute in new manifests.");
+                }
 
                 string min = null;
                 string max = null;
@@ -619,22 +886,39 @@ namespace MaterialEditorAPI
                     propertyElement.GetAttribute("Hidden"),
                     propertyElement.GetAttribute("Category"));
 
-                if (schemaVersion != 2)
-                    return true;
-
-                var metadata = ShaderPropertyMetadataParser.Parse(
-                    propertyElement,
-                    warning);
-                var hasExplicitEditor =
-                    !propertyElement.GetAttribute("Editor").IsNullOrWhiteSpace();
+                var metadata = schemaVersion >= 2
+                    ? ShaderPropertyMetadataParser.Parse(
+                        propertyElement,
+                        warning)
+                    : new ShaderPropertyUiMetadata();
+                var isCanonicalBoolean = schemaVersion >= 2
+                    && string.Equals(
+                        declaredPropertyType == null
+                            ? string.Empty
+                            : declaredPropertyType.Trim(),
+                        "Boolean",
+                        StringComparison.OrdinalIgnoreCase);
+                if (isCanonicalBoolean)
+                {
+                    if (propertyElement.HasAttribute("OffValue")
+                        || propertyElement.HasAttribute("OnValue"))
+                    {
+                        warning?.Invoke(
+                            "Shader property '" + propertyName
+                            + "' uses fixed Boolean values 0 and 1; legacy OffValue/OnValue attributes were ignored. Use Invert=\"true\" to swap them.");
+                    }
+                    metadata.OffValue = metadata.Invert ? 1f : 0f;
+                    metadata.OnValue = metadata.Invert ? 0f : 1f;
+                }
+                var hasExplicitEditor = schemaVersion >= 2
+                    && !propertyElement.GetAttribute("Editor").IsNullOrWhiteSpace();
                 if (!hasExplicitEditor
                     && metadata.EditorId.IsNullOrEmpty()
                     && !aliasEditorId.IsNullOrEmpty())
                 {
                     metadata.EditorId = aliasEditorId;
                 }
-
-                if (!IsEditorCompatibleWithPropertyType(
+                if (!ShaderPropertyEditorPolicy.IsCompatible(
                         metadata.EditorId,
                         propertyType))
                 {
@@ -644,40 +928,165 @@ namespace MaterialEditorAPI
                         + declaredPropertyType + "' (normalized backing Type '"
                         + propertyType + "'); its type editor will be used.");
                     metadata.EditorId = null;
+                    metadata.VectorComponentCount = null;
                 }
-
-                if (metadata.EditorId == ShaderPropertyEditorIds.Enum
+                if (metadata.EditorId == MaterialEditorPropertyEditorIds.Enum
                     && metadata.EnumOptions.Count == 0)
                 {
                     warning?.Invoke(
                         "Shader property '" + propertyName + "' declares Type '"
                         + declaredPropertyType
-                        + "' as an enum without a valid Enums attribute; "
+                        + "' as an enum without a valid Enums attribute or legacy Option elements; "
                         + "the Float editor will be used.");
                     metadata.EditorId = null;
                 }
-
                 propertyData.DisplayName = metadata.DisplayName.IsNullOrEmpty()
                     ? propertyName
                     : metadata.DisplayName;
+                propertyData.HasExplicitDisplayName = schemaVersion >= 2
+                    && !metadata.DisplayName.IsNullOrEmpty();
+                propertyData.Order = metadata.Order;
+                propertyData.CategoryOrder = metadata.CategoryOrder;
                 propertyData.EditorId = metadata.EditorId;
-                propertyData.UiLevel = metadata.UiLevel;
+                propertyData.TooltipText = metadata.TooltipText;
+                propertyData.Group = metadata.Group;
                 propertyData.ShowIf = metadata.ShowIf;
                 propertyData.EnumOptions.AddRange(metadata.EnumOptions);
+                propertyData.VectorComponentCount = metadata.VectorComponentCount;
                 propertyData.Invert = metadata.Invert;
+                propertyData.OffValue = metadata.OffValue;
+                propertyData.OnValue = metadata.OnValue;
+                if (schemaVersion >= 2)
+                {
+                    ApplyHierarchyMetadata(
+                        propertyElement,
+                        propertyData,
+                        warning);
+                }
                 return true;
             }
 
-            private static bool IsEditorCompatibleWithPropertyType(
-                string editorId,
-                ShaderPropertyType propertyType)
+            internal ShaderPropertyData WithoutHierarchyForDefaultFallback()
             {
-                if (editorId.IsNullOrEmpty())
-                    return true;
+                if (string.IsNullOrEmpty(CategoryId)
+                    && string.IsNullOrEmpty(SubcategoryId))
+                    return this;
 
-                return (editorId != ShaderPropertyEditorIds.Enum
-                        && editorId != ShaderPropertyEditorIds.Boolean)
-                       || propertyType == ShaderPropertyType.Float;
+                var fallback = (ShaderPropertyData)MemberwiseClone();
+                fallback.CategoryId = null;
+                fallback.CategoryDisplayName = null;
+                fallback.HasExplicitCategoryDisplayName = false;
+                fallback.SubcategoryId = null;
+                fallback.SubcategoryDisplayName = null;
+                fallback.HasExplicitSubcategoryDisplayName = false;
+                fallback.Category = CategoryBeforeHierarchy;
+                fallback.CategoryBeforeHierarchy = null;
+                return fallback;
+            }
+
+            internal ShaderPropertyData WithoutConditionsForUiFallback()
+            {
+                if (ShowIf == null)
+                    return this;
+
+                var fallback = (ShaderPropertyData)MemberwiseClone();
+                fallback.ShowIf = null;
+                return fallback;
+            }
+
+            private static void ApplyHierarchyMetadata(
+                XmlElement propertyElement,
+                ShaderPropertyData propertyData,
+                Action<string> warning)
+            {
+                var parent = propertyElement.ParentNode as XmlElement;
+                XmlElement subcategoryElement = null;
+                XmlElement categoryElement = null;
+
+                if (HasElementName(parent, "Subcategory"))
+                {
+                    subcategoryElement = parent;
+                    parent = parent.ParentNode as XmlElement;
+                }
+
+                if (HasElementName(parent, "Category"))
+                    categoryElement = parent;
+
+                if (subcategoryElement != null && categoryElement == null)
+                {
+                    warning?.Invoke(
+                        "Shader property '" + propertyData.Name
+                        + "' is inside a Subcategory without a parent Category; "
+                        + "the Subcategory metadata was ignored.");
+                    return;
+                }
+
+                if (categoryElement == null)
+                    return;
+
+                var categoryId = ReadHierarchyAttribute(categoryElement, "Id");
+                if (categoryId == null)
+                {
+                    warning?.Invoke(
+                        "Shader property '" + propertyData.Name
+                        + "' is inside a Category without an Id; the nested "
+                        + "Category metadata was ignored.");
+                    return;
+                }
+
+                var declaredCategoryDisplayName =
+                    ReadHierarchyAttribute(categoryElement, "DisplayName");
+                var categoryDisplayName = declaredCategoryDisplayName
+                                          ?? categoryId;
+                propertyData.CategoryBeforeHierarchy = propertyData.Category;
+                propertyData.CategoryId = categoryId;
+                propertyData.CategoryDisplayName = categoryDisplayName;
+                propertyData.HasExplicitCategoryDisplayName =
+                    declaredCategoryDisplayName != null;
+                propertyData.Category = categoryDisplayName;
+
+                if (subcategoryElement == null)
+                    return;
+
+                var subcategoryId =
+                    ReadHierarchyAttribute(subcategoryElement, "Id");
+                if (subcategoryId == null)
+                {
+                    warning?.Invoke(
+                        "Shader property '" + propertyData.Name
+                        + "' is inside a Subcategory without an Id; the "
+                        + "Subcategory metadata was ignored.");
+                    return;
+                }
+
+                propertyData.SubcategoryId = subcategoryId;
+                var declaredSubcategoryDisplayName =
+                    ReadHierarchyAttribute(subcategoryElement, "DisplayName");
+                propertyData.SubcategoryDisplayName =
+                    declaredSubcategoryDisplayName ?? subcategoryId;
+                propertyData.HasExplicitSubcategoryDisplayName =
+                    declaredSubcategoryDisplayName != null;
+            }
+
+            private static bool HasElementName(
+                XmlElement element,
+                string expectedName)
+            {
+                return element != null
+                       && string.Equals(
+                           element.LocalName,
+                           expectedName,
+                           StringComparison.Ordinal);
+            }
+
+            private static string ReadHierarchyAttribute(
+                XmlElement element,
+                string attributeName)
+            {
+                if (element == null || !element.HasAttribute(attributeName))
+                    return null;
+                var value = element.GetAttribute(attributeName).Trim();
+                return value.Length == 0 ? null : value;
             }
 
             private static bool TryParsePropertyType(
@@ -691,26 +1100,42 @@ namespace MaterialEditorAPI
                 if (value.IsNullOrWhiteSpace())
                     return false;
 
-                var normalizedType = value.Trim();
-                string aliasType;
-                if (ShaderPropertyMetadataParser.TryResolvePropertyTypeAlias(
-                        normalizedType,
-                        schemaVersion,
-                        out aliasType,
-                        out aliasEditorId))
+                var trimmedValue = value.Trim();
+                if (schemaVersion >= 2)
                 {
-                    normalizedType = aliasType;
+                    if (string.Equals(
+                            trimmedValue,
+                            "Boolean",
+                            StringComparison.OrdinalIgnoreCase))
+                    {
+                        propertyType = ShaderPropertyType.Float;
+                        aliasEditorId = MaterialEditorPropertyEditorIds.Toggle;
+                        return true;
+                    }
+
+                    if (string.Equals(
+                            trimmedValue,
+                            "Dropdown",
+                            StringComparison.OrdinalIgnoreCase)
+                        || string.Equals(
+                            trimmedValue,
+                            "Enum",
+                            StringComparison.OrdinalIgnoreCase))
+                    {
+                        propertyType = ShaderPropertyType.Float;
+                        aliasEditorId = MaterialEditorPropertyEditorIds.Enum;
+                        return true;
+                    }
                 }
 
                 try
                 {
                     var parsed = (ShaderPropertyType)Enum.Parse(
                         typeof(ShaderPropertyType),
-                        normalizedType,
+                        trimmedValue,
                         true);
                     if (!Enum.IsDefined(typeof(ShaderPropertyType), parsed))
                         return false;
-
                     propertyType = parsed;
                     return true;
                 }

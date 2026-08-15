@@ -60,30 +60,37 @@ namespace KK_Plugins.MaterialEditor
         public static MEStudio Instance;
 
         internal static Dropdown ItemTypeDropDown;
-        private const float CharacterHeaderTitleOffset = -16f;
+        private ChaControl _itemTypeTarget;
 
         private void Start()
         {
             Instance = this;
-            SceneManager.sceneLoaded += (s, lsm) => InitStudioUI(s.name);
+            SceneManager.sceneLoaded += SceneManagerSceneLoaded;
             StudioSaveLoadApi.RegisterExtraBehaviour<SceneController>(MaterialEditorPlugin.PluginGUID);
 #if !PH
             TimelineCompatibilityHelper.PopulateTimeline();
 #endif
         }
 
+        private void SceneManagerSceneLoaded(UnityEngine.SceneManagement.Scene scene, LoadSceneMode mode)
+        {
+            InitStudioUI(scene.name);
+        }
+
         private void InitStudioUI(string sceneName)
         {
             if (sceneName != "Studio") return;
-            SceneManager.sceneLoaded -= (s, lsm) => InitStudioUI(s.name);
+            SceneManager.sceneLoaded -= SceneManagerSceneLoaded;
 
             InitUI();
 
-            ItemTypeDropDown = UIUtility.CreateDropdown("ItemType", DragPanel.transform);
-            ItemTypeDropDown.transform.SetRect(1f, 0f, 1f, 1f, -242f, 1f, -61f, -1f);
+            ItemTypeDropDown = MaterialEditorControlFactory.CreateDropdown(
+                "ItemType",
+                HeaderContextSlot);
+            ItemTypeDropDown.transform.SetRect();
             ItemTypeDropDown.captionText.transform.SetRect(0.05f, 0f, 1f, 1f, 5f, 2f, -15f, -2f);
             ItemTypeDropDown.captionText.alignment = TextAnchor.MiddleLeft;
-            ItemTypeDropDown.gameObject.SetActive(false);
+            SetItemTypeDropdownVisible(false);
             AutoScrollToSelectionWithDropdown.Setup(ItemTypeDropDown);
 
 #if PH
@@ -137,18 +144,15 @@ namespace KK_Plugins.MaterialEditor
                 if (Studio.Studio.Instance.dicInfo.TryGetValue(selectNodes[i], out ObjectCtrlInfo objectCtrlInfo))
                     if (objectCtrlInfo is OCIItem ociItem)
                     {
+                        ReleaseItemTypeDropdownTarget();
                         PopulateList(ociItem.objectItem, GetObjectID(objectCtrlInfo));
-                        ItemTypeDropDown.gameObject.SetActive(false);
-                        SetHeaderTitleHorizontalOffset(0f);
                     }
                     else if (objectCtrlInfo is OCIChar ociChar)
                     {
                         PopulateList(ociChar.charInfo.gameObject, new ObjectData(0, MaterialEditorCharaController.ObjectType.Character));
                         var chaControl = ociChar.GetChaControl();
                         PopulateItemTypeDropdown(chaControl);
-                        ItemTypeDropDown.gameObject.SetActive(true);
-                        SetHeaderTitleHorizontalOffset(
-                            CharacterHeaderTitleOffset);
+                        SetItemTypeDropdownVisible(true);
                     }
         }
 
@@ -158,6 +162,7 @@ namespace KK_Plugins.MaterialEditor
         protected void PopulateItemTypeDropdown(ChaControl chaControl)
         {
             ItemTypeDropDown.onValueChanged.RemoveAllListeners();
+            _itemTypeTarget = chaControl;
             ItemTypeDropDown.onValueChanged.AddListener(value => ChangeItemType(value, chaControl));
             ItemTypeDropDown.options.Clear();
             ItemTypeDropDown.options.Add(new Dropdown.OptionData("Body"));
@@ -193,6 +198,52 @@ namespace KK_Plugins.MaterialEditor
 #endif
                     ItemTypeDropDown.options.Add(new Dropdown.OptionData(optionName));
                 }
+        }
+
+        internal void ReleaseItemTypeDropdownTarget(
+            GameObject destroyedRoot = null)
+        {
+            if (!ReferenceEquals(destroyedRoot, null)
+                && _itemTypeTarget != null
+                && !MaterialEditorUI.IsGameObjectWithin(
+                    _itemTypeTarget.gameObject,
+                    destroyedRoot))
+                return;
+
+            var dropdown = ItemTypeDropDown;
+            if (dropdown != null)
+            {
+                dropdown.onValueChanged.RemoveAllListeners();
+                dropdown.options.Clear();
+            }
+            SetItemTypeDropdownVisible(false);
+            _itemTypeTarget = null;
+        }
+
+        private void SetItemTypeDropdownVisible(bool visible)
+        {
+            if (ItemTypeDropDown != null)
+                ItemTypeDropDown.gameObject.SetActive(visible);
+            SetHeaderContextControlVisible(visible);
+        }
+
+        internal void ReleaseItemTypeDropdownTarget(ChaControl destroyedTarget)
+        {
+            if (ReferenceEquals(destroyedTarget, null)
+                || !ReferenceEquals(_itemTypeTarget, destroyedTarget))
+                return;
+            ReleaseItemTypeDropdownTarget();
+        }
+
+        private void OnDestroy()
+        {
+            SceneManager.sceneLoaded -= SceneManagerSceneLoaded;
+            if (!ReferenceEquals(Instance, this))
+                return;
+            ReleaseItemTypeDropdownTarget();
+            ShutdownMaterialEditorUi();
+            ItemTypeDropDown = null;
+            Instance = null;
         }
 
         private void ChangeItemType(int selectedItem, ChaControl chaControl)
@@ -406,7 +457,7 @@ namespace KK_Plugins.MaterialEditor
                         texData = SceneController.TextureDictionary[textureProperty.TexID.Value].Data;
                 }
             }
-            string ext = ImageTypeIdentifier.Identify(texData, "XXX");
+            string ext = TextureSaveHandler.IdentifyImageExtension(texData, "XXX");
             if (texData != null && ext != "XXX")
                 base.ExportTextureOriginal(mat, property, ext, texData);
             else

@@ -7,10 +7,10 @@ namespace MaterialEditorAPI
     [RequireComponent(typeof(CanvasRenderer))]
     internal sealed class ShaderHintUnderline : MaskableGraphic
     {
-        private const float DashWidth = 3f;
-        private const float DashGap = 2f;
-        private const float LineThicknessPixels = 2f;
-        private const float UnderlineRise = 2f;
+        private const float DashWidth = MaterialEditorTheme.Metrics.ShaderHintDashWidth;
+        private const float DashGap = MaterialEditorTheme.Metrics.ShaderHintDashGap;
+        private const float LineThicknessPixels = MaterialEditorTheme.Metrics.ShaderHintLineThickness;
+        private const float UnderlineRise = MaterialEditorTheme.Metrics.ShaderHintUnderlineRise;
         private const float MinimumSegmentSize = 0.01f;
         private const float MinimumGlyphSize = 0.01f;
         private const float MinimumBodyHeightRatio = 0.5f;
@@ -170,7 +170,9 @@ namespace MaterialEditorAPI
                 return;
             }
 
-            var yMax = bodyBottom + UnderlineRise;
+            // uGUI's local Y axis grows upward. Keep the indicator below the
+            // visible glyph body; adding this offset makes it cross the text.
+            var yMax = bodyBottom - UnderlineRise;
             var yMin = yMax - GetLineThickness();
             AddDashes(vertexHelper, left, right, yMin, yMax);
         }

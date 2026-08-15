@@ -355,6 +355,71 @@ namespace KK_Plugins.MaterialEditor
         }
 
         /// <summary>
+        /// Data storage class for vector properties
+        /// </summary>
+        [Serializable]
+        [MessagePackObject]
+        public class MaterialVectorProperty
+        {
+            /// <summary>
+            /// Type of the object
+            /// </summary>
+            [Key("ObjectType")]
+            public ObjectType ObjectType;
+            /// <summary>
+            /// Coordinate index, always 0 except in Koikatsu
+            /// </summary>
+            [Key("CoordinateIndex")]
+            public int CoordinateIndex;
+            /// <summary>
+            /// Slot of the accessory, hair, or clothing
+            /// </summary>
+            [Key("Slot")]
+            public int Slot;
+            /// <summary>
+            /// Name of the material
+            /// </summary>
+            [Key("MaterialName")]
+            public string MaterialName;
+            /// <summary>
+            /// Name of the property
+            /// </summary>
+            [Key("Property")]
+            public string Property;
+            /// <summary>
+            /// Value
+            /// </summary>
+            [Key("Value")]
+            public Vector4 Value;
+            /// <summary>
+            /// Original value
+            /// </summary>
+            [Key("ValueOriginal")]
+            public Vector4 ValueOriginal;
+
+            /// <summary>
+            /// Data storage class for vector properties
+            /// </summary>
+            /// <param name="objectType">Type of the object</param>
+            /// <param name="coordinateIndex">Coordinate index, always 0 except in Koikatsu</param>
+            /// <param name="slot">Slot of the accessory, hair, or clothing</param>
+            /// <param name="materialName">Name of the material</param>
+            /// <param name="property">Name of the property</param>
+            /// <param name="value">Value</param>
+            /// <param name="valueOriginal">Original value</param>
+            public MaterialVectorProperty(ObjectType objectType, int coordinateIndex, int slot, string materialName, string property, Vector4 value, Vector4 valueOriginal)
+            {
+                ObjectType = objectType;
+                CoordinateIndex = coordinateIndex;
+                Slot = slot;
+                MaterialName = materialName.FormatShadingObjectName();
+                Property = property;
+                Value = value;
+                ValueOriginal = valueOriginal;
+            }
+        }
+
+        /// <summary>
         /// Data storage class for texture properties
         /// </summary>
         [Serializable]
@@ -502,9 +567,11 @@ namespace KK_Plugins.MaterialEditor
             [IgnoreMember]
             internal Dictionary<Material, Cubemap> CubemapOriginalMaterials;
             [IgnoreMember]
-            internal List<Cubemap> CubemapOriginalValues;
+            internal List<MaterialCubemapOriginalBinding> CubemapOriginalBindings;
             [IgnoreMember]
-            internal bool CubemapOriginalValuesNeedRemap;
+            internal bool CubemapOriginalBindingsNeedRemap;
+            [IgnoreMember]
+            internal bool CubemapOriginalSnapshotWarningLogged;
 
             /// <summary>
             /// Creates a persisted native Cubemap property edit.
@@ -541,10 +608,10 @@ namespace KK_Plugins.MaterialEditor
 
                 if (sourceGameObject != null)
                     source.SynchronizeCubemapOriginalSnapshot(sourceGameObject);
-                if (source.CubemapOriginalValues != null)
-                    CubemapOriginalValues = new List<Cubemap>(source.CubemapOriginalValues);
-                CubemapOriginalValuesNeedRemap = CubemapOriginalValues != null
-                    && CubemapOriginalValues.Count > 0;
+                CubemapOriginalBindings = MaterialCubemapOriginalSnapshot.CloneStableValues(
+                    source.CubemapOriginalBindings);
+                CubemapOriginalBindingsNeedRemap = CubemapOriginalBindings != null
+                    && CubemapOriginalBindings.Count > 0;
             }
 
             internal void InheritCubemapOriginalSnapshotSameMaterials(
@@ -559,58 +626,85 @@ namespace KK_Plugins.MaterialEditor
                     source.SynchronizeCubemapOriginalSnapshot(sourceGameObject);
                 CubemapOriginalMaterials = MaterialCubemapOriginalSnapshot.CloneByMaterialReference(
                     source.CubemapOriginalMaterials);
-                if (source.CubemapOriginalValues != null)
-                    CubemapOriginalValues = new List<Cubemap>(source.CubemapOriginalValues);
+                CubemapOriginalBindings = MaterialCubemapOriginalSnapshot.CloneStableValues(
+                    source.CubemapOriginalBindings);
             }
 
-            internal void SynchronizeCubemapOriginalSnapshot(GameObject gameObject)
+            internal bool SynchronizeCubemapOriginalSnapshot(GameObject gameObject)
             {
                 if (gameObject == null)
-                    return;
+                    return false;
 
-                if (CubemapOriginalValuesNeedRemap)
+                if (CubemapOriginalBindingsNeedRemap)
                 {
                     Dictionary<Material, Cubemap> remapped;
+                    string remapFailure;
                     if (MaterialCubemapOriginalSnapshot.TryRemapToCurrentMaterials(
                         gameObject,
                         MaterialName,
                         Property,
-                        CubemapOriginalValues,
-                        out remapped))
+                        CubemapOriginalBindings,
+                        out remapped,
+                        out remapFailure))
+                    {
                         CubemapOriginalMaterials = remapped;
+                        CubemapOriginalBindingsNeedRemap = false;
+                        CubemapOriginalSnapshotWarningLogged = false;
+                    }
                     else
                     {
-                        CubemapOriginalMaterials = null;
-                        MaterialEditorPluginBase.Logger.LogWarning(
-                            "Could not map the inherited Cubemap original snapshot for " + MaterialName
-                            + "/" + Property + "; capturing the destination materials instead.");
+                        if (!CubemapOriginalSnapshotWarningLogged)
+                        {
+                            CubemapOriginalSnapshotWarningLogged = true;
+                            MaterialEditorPluginBase.Logger.LogWarning(
+                                "Could not map the inherited Cubemap original snapshot for " + MaterialName
+                                + "/" + Property + "; the Cubemap override was skipped so Reset remains safe. "
+                                + remapFailure);
+                        }
+                        return false;
                     }
-                    CubemapOriginalValuesNeedRemap = false;
                 }
 
-                CubemapOriginalMaterials = MaterialCubemapOriginalSnapshot.SynchronizeByMaterialReference(
+                var synchronizedMaterials = MaterialCubemapOriginalSnapshot.SynchronizeByMaterialReference(
                     gameObject,
                     MaterialName,
                     Property,
                     CubemapOriginalMaterials);
-                CubemapOriginalValues = MaterialCubemapOriginalSnapshot.GetOrderedValues(
+                var synchronizedBindings = MaterialCubemapOriginalSnapshot.GetStableValues(
                     gameObject,
                     MaterialName,
                     Property,
-                    CubemapOriginalMaterials);
+                    synchronizedMaterials);
+                if (synchronizedBindings == null)
+                {
+                    if (!CubemapOriginalSnapshotWarningLogged)
+                    {
+                        CubemapOriginalSnapshotWarningLogged = true;
+                        MaterialEditorPluginBase.Logger.LogWarning(
+                            "Could not create an unambiguous Cubemap original snapshot for "
+                            + MaterialName + "/" + Property
+                            + "; the Cubemap override was skipped so Reset remains safe.");
+                    }
+                    return false;
+                }
+
+                CubemapOriginalMaterials = synchronizedMaterials;
+                CubemapOriginalBindings = synchronizedBindings;
+                CubemapOriginalSnapshotWarningLogged = false;
+                return true;
             }
 
             internal void ClearCubemapOriginalSnapshot()
             {
                 CubemapOriginalMaterials = null;
-                CubemapOriginalValues = null;
-                CubemapOriginalValuesNeedRemap = false;
+                CubemapOriginalBindings = null;
+                CubemapOriginalBindingsNeedRemap = false;
+                CubemapOriginalSnapshotWarningLogged = false;
             }
 
             /// <summary>
             /// Checks whether this edit has no usable persisted Cubemap value.
             /// </summary>
-            /// <returns>True when the edit can be removed.</returns>
             public bool NullCheck()
             {
                 return TexID == null || Property == null || MaterialName == null;

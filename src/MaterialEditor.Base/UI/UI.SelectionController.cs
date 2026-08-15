@@ -12,6 +12,7 @@ namespace MaterialEditorAPI
         private readonly MaterialEditorWindowView _view;
         private readonly MaterialEditService _editService;
         private readonly Action<GameObject, object, string> _refresh;
+        private bool _selectionEntriesReleased;
 
         internal MaterialEditorSelectionController(
             MaterialEditorSessionState session,
@@ -25,6 +26,11 @@ namespace MaterialEditorAPI
             _refresh = refresh;
         }
 
+        internal void InitializeViewState()
+        {
+            ApplyRightPanelState();
+        }
+
         internal void ToggleSidePanels()
         {
             if (_session.RenameListVisible)
@@ -34,72 +40,113 @@ namespace MaterialEditorAPI
             }
 
             _session.ListsVisible = !_session.ListsVisible;
-            _view.SetSelectionListsVisible(_session.ListsVisible);
-            _view.SetViewListGlyph(_session.ListsVisible ? "<" : ">");
+            ApplyRightPanelState();
+        }
+
+        internal void HideSidePanels()
+        {
+            var renameWasVisible = _session.RenameListVisible;
+            if (!_session.ListsVisible && !renameWasVisible)
+                return;
+
+            _session.ListsVisible = false;
+            _session.RenameListVisible = false;
+            ApplyRightPanelState();
+            if (renameWasVisible)
+                ReleaseRenameContext();
         }
 
         internal void CloseRenamePanel()
         {
-            if (!_session.RenameListVisible)
-                return;
-
-            _view.SetRenameListVisible(false);
-            _view.SetViewListGlyph(">");
-            _session.RenameListVisible = false;
+            if (_session.RenameListVisible)
+            {
+                _session.RenameListVisible = false;
+                ApplyRightPanelState();
+            }
+            ReleaseRenameContext();
         }
 
         internal void ShowRenamePanel(GameObject gameObject, Material material, object data)
         {
-            if (_session.ListsVisible)
-            {
-                _view.SetSelectionListsVisible(false);
-                _session.ListsVisible = false;
-            }
-
-            _view.SetViewListGlyph("<");
-            _view.SetRenameListVisible(true);
-            PopulateRenameList(gameObject, material, data);
             _session.RenameListVisible = true;
+            ApplyRightPanelState();
+            PopulateRenameList(gameObject, material, data);
         }
 
         internal void PopulateRendererList(GameObject gameObject, object data, IEnumerable<Renderer> renderers)
         {
-            if (gameObject == _session.CurrentGameObject)
+            var rendererList = renderers as IList<Renderer> ?? renderers.ToList();
+            var sameTarget = gameObject == _session.CurrentGameObject;
+            var restoreReleasedEntries = sameTarget && _selectionEntriesReleased;
+            if (sameTarget && !restoreReleasedEntries)
                 return;
 
-            _session.SelectedRenderers.Clear();
-            _view.RendererList.ClearList();
+            if (restoreReleasedEntries)
+                MaterialEditorSessionState.PruneUnavailableUnityObjects(
+                    _session.SelectedRenderers,
+                    rendererList);
 
-            foreach (var renderer in renderers)
+            if (!restoreReleasedEntries)
             {
-                var capturedRenderer = renderer;
-                _view.RendererList.AddEntry(capturedRenderer.NameFormatted(), selected =>
-                {
-                    UpdateSelection(_session.SelectedRenderers, capturedRenderer, selected);
-                    MaterialEditorExtensionRegistry.RaiseSelection(
-                        _editService,
-                        MaterialEditorSelectionType.Renderer,
-                        selected
-                            ? MaterialEditorSelectionAction.Selected
-                            : MaterialEditorSelectionAction.Deselected,
-                        capturedRenderer.NameFormatted(),
-                        gameObject,
-                        data,
-                        capturedRenderer,
-                        null,
-                        null);
-                    _refresh(gameObject, data, _session.Filter);
-                    PopulateMaterialList(gameObject, data, renderers);
-                });
+                _session.SelectedRenderers.Clear();
+                _view.RendererList.ClearList();
             }
 
-            PopulateMaterialList(gameObject, data, renderers);
+            foreach (var renderer in rendererList)
+            {
+                var capturedRenderer = renderer;
+                _view.RendererList.AddEntry(
+                    capturedRenderer.NameFormatted(),
+                    restoreReleasedEntries
+                    && _session.SelectedRenderers.Contains(capturedRenderer),
+                    selected =>
+                    {
+                        UpdateSelection(_session.SelectedRenderers, capturedRenderer, selected);
+                        MaterialEditorExtensionRegistry.RaiseSelection(
+                            _editService,
+                            MaterialEditorSelectionType.Renderer,
+                            selected
+                                ? MaterialEditorSelectionAction.Selected
+                                : MaterialEditorSelectionAction.Deselected,
+                            capturedRenderer.NameFormatted(),
+                            gameObject,
+                            data,
+                            capturedRenderer,
+                            null,
+                            null);
+                        _refresh(gameObject, data, _session.Filter);
+                        PopulateMaterialList(gameObject, data, rendererList);
+                    });
+            }
+
+            PopulateMaterialList(
+                gameObject,
+                data,
+                rendererList,
+                restoreReleasedEntries);
+            _selectionEntriesReleased = false;
         }
 
         internal void PopulateMaterialList(GameObject gameObject, object data, IEnumerable<Renderer> renderers)
         {
-            _session.SelectedMaterials.Clear();
-            _view.MaterialList.ClearList();
+            PopulateMaterialList(gameObject, data, renderers, false);
+        }
+
+        private void PopulateMaterialList(
+            GameObject gameObject,
+            object data,
+            IEnumerable<Renderer> renderers,
+            bool restoreReleasedEntries)
+        {
+            if (!restoreReleasedEntries)
+            {
+                _session.SelectedMaterials.Clear();
+                _view.MaterialList.ClearList();
+            }
+
+            List<Material> availableMaterials = null;
+            if (restoreReleasedEntries && _session.SelectedMaterials.Count > 0)
+                availableMaterials = new List<Material>();
 
             foreach (var renderer in renderers.Where(renderer =>
                          _session.SelectedRenderers.Count == 0
@@ -107,26 +154,81 @@ namespace MaterialEditorAPI
             {
                 foreach (var material in GetMaterials(gameObject, renderer))
                 {
+                    if (availableMaterials != null)
+                        availableMaterials.Add(material);
                     var capturedMaterial = material;
-                    _view.MaterialList.AddEntry(capturedMaterial.NameFormatted(), selected =>
-                    {
-                        UpdateSelection(_session.SelectedMaterials, capturedMaterial, selected);
-                        MaterialEditorExtensionRegistry.RaiseSelection(
-                            _editService,
-                            MaterialEditorSelectionType.Material,
-                            selected
-                                ? MaterialEditorSelectionAction.Selected
-                                : MaterialEditorSelectionAction.Deselected,
-                            capturedMaterial.NameFormatted(),
-                            gameObject,
-                            data,
-                            renderer,
-                            capturedMaterial,
-                            null);
-                        _refresh(gameObject, data, _session.Filter);
-                    });
+                    _view.MaterialList.AddEntry(
+                        capturedMaterial.NameFormatted(),
+                        restoreReleasedEntries
+                        && _session.SelectedMaterials.Contains(capturedMaterial),
+                        selected =>
+                        {
+                            UpdateSelection(_session.SelectedMaterials, capturedMaterial, selected);
+                            MaterialEditorExtensionRegistry.RaiseSelection(
+                                _editService,
+                                MaterialEditorSelectionType.Material,
+                                selected
+                                    ? MaterialEditorSelectionAction.Selected
+                                    : MaterialEditorSelectionAction.Deselected,
+                                capturedMaterial.NameFormatted(),
+                                gameObject,
+                                data,
+                                renderer,
+                                capturedMaterial,
+                                null);
+                            _refresh(gameObject, data, _session.Filter);
+                        });
                 }
             }
+
+            if (availableMaterials != null)
+                MaterialEditorSessionState.PruneUnavailableUnityObjects(
+                    _session.SelectedMaterials,
+                    availableMaterials);
+        }
+
+        internal void ReleaseTransientContent()
+        {
+            _view.RendererList.ReleaseEntries();
+            _view.MaterialList.ReleaseEntries();
+            _selectionEntriesReleased = true;
+
+            // A visible rename panel is intentionally retained: rebuilding it would
+            // require retaining or guessing its material context. Hidden rename
+            // content is safe to discard because ShowRenamePanel always rebuilds it.
+            if (_session.RenameListVisible)
+                return;
+            ReleaseRenameContext();
+        }
+
+        internal void ReleaseTargetContent()
+        {
+            _view.RendererList.ReleaseEntries();
+            _view.MaterialList.ReleaseEntries();
+            _selectionEntriesReleased = true;
+
+            if (_session.RenameListVisible)
+            {
+                _session.RenameListVisible = false;
+                ApplyRightPanelState();
+            }
+            ReleaseRenameContext();
+            _session.ClearSelections();
+        }
+
+        private void ReleaseRenameContext()
+        {
+            _view.RenameButton.onClick.RemoveAllListeners();
+            _view.RenameButton.interactable = false;
+            _view.RenameList.ReleaseEntries();
+            _session.SelectedMaterialRenderers.Clear();
+        }
+
+        private void ApplyRightPanelState()
+        {
+            _view.SetRightPanelState(
+                _session.ListsVisible,
+                _session.RenameListVisible);
         }
 
         private void PopulateRenameList(GameObject gameObject, Material material, object data)

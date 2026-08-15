@@ -76,17 +76,37 @@ namespace MaterialEditorAPI
 
             width = ReadBigEndianInt32(data, 16);
             height = ReadBigEndianInt32(data, 20);
+            return TryValidateEquirectangularDimensions(
+                width,
+                height,
+                "PNG",
+                out warning,
+                out error);
+        }
+
+        internal static bool TryValidateEquirectangularDimensions(
+            int width,
+            int height,
+            string sourceName,
+            out string warning,
+            out string error)
+        {
+            warning = null;
+            error = null;
+            var displayName = string.IsNullOrEmpty(sourceName)
+                ? "Cubemap source"
+                : sourceName + " Cubemap source";
             if (width <= 0 || height <= 0)
             {
-                error = "The selected PNG has invalid dimensions.";
+                error = "The selected " + displayName + " has invalid dimensions.";
                 return false;
             }
             if (width > MaximumSourceDimension
                 || height > MaximumSourceDimension
                 || (long)width * height > MaximumSourcePixels)
             {
-                error = "Cubemap import supports PNG source images with at most "
-                        + MaximumSourcePixels
+                error = "Cubemap import supports " + displayName
+                        + " images with at most " + MaximumSourcePixels
                         + " decoded pixels and no dimension above "
                         + MaximumSourceDimension
                         + " pixels, to keep runtime conversion memory bounded.";
@@ -123,13 +143,13 @@ namespace MaterialEditorAPI
             error = null;
             if (fileLength < 0)
             {
-                error = "The selected PNG has an invalid file length.";
+                error = "The selected Cubemap source has an invalid file length.";
                 return false;
             }
             if (fileLength <= MaximumSourceFileBytes)
                 return true;
 
-            error = "Cubemap import supports PNG files up to 64 MiB to keep runtime memory bounded.";
+            error = "Cubemap import supports source files up to 64 MiB to keep runtime memory bounded.";
             return false;
         }
 

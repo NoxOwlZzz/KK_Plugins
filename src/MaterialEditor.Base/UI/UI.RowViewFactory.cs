@@ -11,7 +11,10 @@ namespace MaterialEditorAPI
         {
             var contentList = MaterialEditorControlFactory.CreatePanel("ListEntry", parent);
             contentList.gameObject.AddComponent<LayoutElement>().preferredHeight = PanelHeight;
-            contentList.gameObject.AddComponent<Mask>();
+            var mask = contentList.gameObject.AddComponent<Mask>();
+            // The root clips the active child panel but must not paint a
+            // full-width band behind an indented Subcategory child.
+            mask.showMaskGraphic = false;
             contentList.color = RowColor;
 
             RendererRowViewFactory.CreateRows(contentList.transform);
@@ -19,35 +22,11 @@ namespace MaterialEditorAPI
             TextureRowViewFactory.CreateRows(contentList.transform);
             ColorRowViewFactory.CreateRows(contentList.transform);
             FloatKeywordRowViewFactory.CreateRows(contentList.transform);
+            EnumVectorToggleRowViewFactory.CreateRows(contentList.transform);
 
             RowStyle.Apply(contentList.gameObject);
             RowLayoutCatalog.Apply(contentList.gameObject);
-            CreateAdvancedPropertyAccent(contentList.transform);
             return contentList.gameObject;
-        }
-
-        private static void CreateAdvancedPropertyAccent(Transform parent)
-        {
-            var accent = MaterialEditorControlFactory.CreatePanel(
-                "AdvancedPropertyAccent",
-                parent);
-            accent.color = MaterialEditorStyles.AdvancedPropertyAccentColor;
-            accent.raycastTarget = false;
-            accent.transform.SetRect(
-                0f,
-                0f,
-                0f,
-                1f,
-                0f,
-                MaterialEditorLayout.AdvancedPropertyAccentVerticalInset,
-                MaterialEditorLayout.AdvancedPropertyAccentWidth,
-                -MaterialEditorLayout.AdvancedPropertyAccentVerticalInset);
-
-            var canvasGroup = accent.gameObject.AddComponent<CanvasGroup>();
-            canvasGroup.interactable = false;
-            canvasGroup.blocksRaycasts = false;
-            accent.transform.SetAsLastSibling();
-            accent.gameObject.SetActive(false);
         }
     }
 }

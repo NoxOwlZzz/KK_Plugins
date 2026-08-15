@@ -13,6 +13,8 @@ namespace MaterialEditorAPI
 
         internal void Initialize(RowBinder binder)
         {
+            MaterialEditorPerformance.Increment(
+                MaterialEditorPerformanceMetric.RowViewCreation);
             _binder = binder ?? GetComponent<RowBinder>();
 
             RowLayoutCatalog.Restore(gameObject);
@@ -25,6 +27,17 @@ namespace MaterialEditorAPI
         internal void Bind(RowModel model, bool force)
         {
             Binder.Bind(model, force);
+        }
+
+        internal void SuspendListeners()
+        {
+            Binder.SuspendListeners();
+        }
+
+        internal void Release()
+        {
+            Binder.Release();
+            SetVisible(false);
         }
 
         internal void SetVisible(bool visible)

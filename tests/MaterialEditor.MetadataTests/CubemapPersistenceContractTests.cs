@@ -3,16 +3,45 @@ internal static class CubemapPersistenceContractTests
     internal static void Run()
     {
         var root = FindRepositoryRoot();
-        var conversion = Read(root, "src", "MaterialEditor.Base", "CubemapConversion.cs");
+        var contentKey = Read(root, "src", "MaterialEditor.Base", "CubemapContentKey.cs");
+        var backgroundRead = Read(root, "src", "MaterialEditor.Base", "CubemapBackgroundRead.cs");
+        var cache = Read(root, "src", "MaterialEditor.Base", "CubemapCache.cs");
+        var conversionFacade = Read(root, "src", "MaterialEditor.Base", "CubemapConversion.cs");
+        var import = Read(root, "src", "MaterialEditor.Base", "CubemapImport.cs");
+        var export = Read(root, "src", "MaterialEditor.Base", "CubemapExport.cs");
+        var gpuReadback = Read(root, "src", "MaterialEditor.Base", "CubemapGpuReadback.cs");
+        var memoryBudget = Read(root, "src", "MaterialEditor.Base", "CubemapMemoryBudget.cs");
+        var identity = Read(root, "src", "MaterialEditor.Base", "CubemapMaterialIdentity.cs");
+        var conversion = string.Join(
+            "\n",
+            contentKey,
+            cache,
+            conversionFacade,
+            import,
+            export,
+            gpuReadback,
+            memoryBudget);
         var snapshot = Read(root, "src", "MaterialEditor.Base", "CubemapOriginalSnapshot.cs");
         var copyContainer = Read(root, "src", "MaterialEditor.Base", "CopyContainer.cs");
         var materialApi = Read(root, "src", "MaterialEditor.Base", "MaterialAPI.cs");
+        var repositoryCapabilities = Read(
+            root,
+            "src",
+            "MaterialEditor.Base",
+            "IMaterialEditRepository.cs");
+        var editService = Read(root, "src", "MaterialEditor.Base", "MaterialEditService.cs");
         var pluginBase = Read(root, "src", "MaterialEditor.Base", "PluginBase.cs");
         var unshippedApi = Read(root, "src", "MaterialEditor.API", "PublicAPI.Unshipped.txt");
         var shippedApi = Read(root, "src", "MaterialEditor.API", "PublicAPI.Shipped.txt");
         var baseProject = Read(root, "src", "MaterialEditor.Base", "MaterialEditor.Base.projitems");
         var propertyDescriptor = Read(root, "src", "MaterialEditor.Base", "UI", "UI.PropertyDescriptor.cs");
         var ui = Read(root, "src", "MaterialEditor.Base", "UI", "UI.cs");
+        var importCoordinator = Read(
+            root,
+            "src",
+            "MaterialEditor.Base",
+            "UI",
+            "UI.CubemapImportCoordinator.cs");
         var rowModel = Read(root, "src", "MaterialEditor.Base", "UI", "UI.RowModel.cs");
         var textureModel = Read(root, "src", "MaterialEditor.Base", "UI", "UI.RowModel.Texture.cs");
         var cubemapModel = Read(root, "src", "MaterialEditor.Base", "UI", "UI.RowModel.Cubemap.cs");
@@ -67,8 +96,24 @@ internal static class CubemapPersistenceContractTests
             textureBinder,
             cubemapBinder,
             repositoryContract);
-        OriginalSnapshotsAreCubemapSpecific(snapshot, charaModel, sceneModel, charaCubemap, sceneCubemap);
+        OriginalSnapshotsAreCubemapSpecific(
+            snapshot,
+            identity,
+            charaModel,
+            sceneModel,
+            charaCubemap,
+            sceneCubemap);
         SharedMechanicsStayTypeAgnostic(conversion, charaController, sceneController);
+        IncrementalUiImportUsesBoundedMainThreadWork(
+            backgroundRead,
+            importCoordinator,
+            ui,
+            repositoryCapabilities,
+            editService,
+            charaRepository,
+            sceneRepository,
+            charaCubemap,
+            sceneCubemap);
         ProjectFilesIncludeDedicatedSources(baseProject, charaProject, sceneProject);
 
         var production = ReadProductionSources(root);
@@ -86,12 +131,12 @@ internal static class CubemapPersistenceContractTests
         string shippedApi,
         string unshippedApi)
     {
-        Contains(materialApi, "Cubemap = 4", "public Cubemap enum value is additive");
+        Contains(materialApi, "Cubemap = 5", "public Cubemap enum value is appended after Vector");
         Contains(materialApi, "public static bool SetCubemap(", "native Cubemap setter is type-specific");
         Contains(pluginBase, "Enum.Parse(", "manifest property types use the real enum");
         Contains(pluginBase, "Enum.IsDefined(typeof(ShaderPropertyType), parsed)", "undefined future types are rejected");
         DoesNotContain(shippedApi, "Cubemap", "shipped API baseline remains untouched");
-        Contains(unshippedApi, "MaterialAPI.ShaderPropertyType.Cubemap = 4", "Cubemap enum API is additive");
+        Contains(unshippedApi, "MaterialAPI.ShaderPropertyType.Cubemap = 5", "Cubemap enum API is additive");
         Contains(unshippedApi, "MaterialEditorPropertyEditorIds.Cubemap", "Cubemap editor has a distinct ID");
         Contains(unshippedApi, "CopyContainer.MaterialCubemapProperty", "Cubemap copy API is distinct");
         Contains(unshippedApi, "MaterialAPI.SetCubemap", "Cubemap material API is distinct");
@@ -101,7 +146,7 @@ internal static class CubemapPersistenceContractTests
     {
         Contains(source, "List<MaterialCubemapProperty> MaterialCubemapPropertyList", "Cubemap copy list");
         Contains(source, "public class MaterialCubemapProperty", "Cubemap copy payload");
-        Contains(source, "MaterialCubemapPropertyList.Count == 0", "Cubemap participates in IsEmpty");
+        Contains(source, "!HasAny(MaterialCubemapPropertyList)", "Cubemap participates in IsEmpty");
         Contains(source, "MaterialCubemapPropertyList = new List<MaterialCubemapProperty>();", "Cubemap participates in ClearAll");
 
         var texture = Slice(source, "public class MaterialTextureProperty", "public class MaterialCubemapProperty");
@@ -132,7 +177,9 @@ internal static class CubemapPersistenceContractTests
         var cubemap = Slice(source, "public class MaterialCubemapProperty", "public class MaterialShader");
         Contains(cubemap, "[Key(\"TexID\")]", name + " Cubemap persists source ID");
         Contains(cubemap, "Dictionary<Material, Cubemap> CubemapOriginalMaterials", name + " Cubemap snapshot is strongly typed");
-        Contains(cubemap, "List<Cubemap> CubemapOriginalValues", name + " Cubemap duplicate snapshot is strongly typed");
+        Contains(cubemap, "List<MaterialCubemapOriginalBinding> CubemapOriginalBindings", name + " Cubemap duplicate snapshot has stable binding identities");
+        Contains(cubemap, "CubemapOriginalBindingsNeedRemap", name + " Cubemap duplicate snapshot tracks remap state");
+        Contains(cubemap, "return TexID == null || Property == null || MaterialName == null;", name + " Cubemap validity semantics match both environments");
         DoesNotContain(cubemap, "Offset", name + " Cubemap model has no offset");
         DoesNotContain(cubemap, "Scale", name + " Cubemap model has no scale");
         DoesNotContain(cubemap, "MEAnimationDefine", name + " Cubemap model has no animation");
@@ -211,7 +258,10 @@ internal static class CubemapPersistenceContractTests
         string cubemapBinder,
         string repositoryContract)
     {
-        Contains(descriptor, "return MaterialEditorPropertyEditorIds.Cubemap", "Cubemap has a dedicated editor ID");
+        Contains(
+            descriptor,
+            "ShaderPropertyEditorPolicy.GetDefaultEditorId",
+            "built-in property types use the canonical editor mapping");
         Contains(descriptor, "CreateCubemapRow(descriptor)", "Cubemap has a dedicated row factory path");
         Contains(descriptor, "new CubemapPropertyRowModel", "Cubemap has a dedicated row model");
         Contains(rowModel, "CubemapProperty", "Cubemap has a dedicated row item type");
@@ -219,6 +269,12 @@ internal static class CubemapPersistenceContractTests
         DoesNotContain(textureModel, "Cubemap", "Texture row model stays Texture2D-only");
         DoesNotContain(textureBinder, "Cubemap", "Texture binder stays Texture2D-only");
         Contains(cubemapBinder, "class CubemapRowTypeBinder", "Cubemap binder is distinct");
+        Contains(ui, "*.png;*.hdr", "Cubemap picker exposes PNG and HDR inputs");
+        Contains(cubemapBinder, "Radiance RGBE (.hdr)", "Cubemap import tooltip identifies Radiance HDR");
+        Contains(
+            cubemapBinder,
+            "HDR values above 1 are clipped in this SDR export.",
+            "Cubemap PNG export explicitly describes its SDR clipping");
         Contains(cubemapBinder, "SelectInterpolableButton.gameObject.SetActive(false)", "Cubemap exposes no Timeline control");
         Contains(ui, "private void ImportCubemap(", "Cubemap import action is distinct");
         Contains(ui, "internal void ExportCubemap(", "Cubemap export action is distinct");
@@ -236,22 +292,88 @@ internal static class CubemapPersistenceContractTests
 
     private static void OriginalSnapshotsAreCubemapSpecific(
         string snapshot,
+        string identity,
         string charaModel,
         string sceneModel,
         string charaCubemap,
         string sceneCubemap)
     {
         Contains(snapshot, "Dictionary<Material, Cubemap>", "Cubemap snapshots are strongly typed");
-        Contains(snapshot, "object.ReferenceEquals(left, right)", "snapshots compare real material references");
+        Contains(snapshot, "ReferenceEquals(left, right)", "snapshots compare real material references");
         Contains(snapshot, "RuntimeHelpers.GetHashCode(material)", "snapshots do not use reusable instance IDs");
         Contains(snapshot, "TryRemapToCurrentMaterials", "duplicate snapshots remap deterministically");
-        Contains(snapshot, "materials.Count != orderedValues.Count", "ambiguous duplicate remaps are rejected");
-        Contains(snapshot, "materials[index].SetTexture(fullPropertyName, original)", "reset restores exact Cubemap including null");
+        Contains(snapshot, "MaterialCubemapIdentityMatcher.TryMatch", "duplicate snapshots require exact stable identity matches");
+        Contains(snapshot, "One material reference maps to conflicting Cubemap originals", "conflicting duplicate remaps fail safely");
+        Contains(snapshot, "material.SetTexture(fullPropertyName, original)", "reset restores exact Cubemap including null");
         DoesNotContain(snapshot, "GetInstanceID()", "snapshots never depend on reusable instance IDs");
+        DoesNotContain(snapshot, "GetSiblingIndex()", "binding paths are stable when unrelated siblings move");
+        DoesNotContain(snapshot, "orderedValues[index]", "duplicate snapshots never remap by traversal index");
+        Contains(identity, "RelativePath", "binding identity includes renderer-relative path");
+        Contains(identity, "ComponentIndex", "binding identity includes component index");
+        Contains(identity, "MaterialSlot", "binding identity includes material slot");
+        Contains(identity, "MaterialName", "binding identity includes formatted material name");
+        Contains(identity, "PropertyName", "binding identity includes property name");
+        Contains(identity, "saved.Count != current.Count", "binding count changes fail safely");
+        Contains(identity, "identity is ambiguous", "ambiguous identities fail safely");
         Contains(charaModel, "InheritCubemapOriginalSnapshot", "character duplicate snapshot inheritance");
         Contains(sceneModel, "InheritCubemapOriginalSnapshot", "scene duplicate snapshot inheritance");
         DoesNotContain(charaCubemap, "OriginalsMatchCurrentMaterials", "character does not recapture overridden originals");
         DoesNotContain(sceneCubemap, "OriginalsMatchCurrentMaterials", "scene does not recapture overridden originals");
+        AssertFailClosedSnapshotRemap(charaModel, charaCubemap, "character");
+        AssertFailClosedSnapshotRemap(sceneModel, sceneCubemap, "scene");
+        AssertAtomicCubemapSetter(charaCubemap, "character");
+        AssertAtomicCubemapSetter(sceneCubemap, "scene");
+    }
+
+    private static void AssertFailClosedSnapshotRemap(
+        string modelSource,
+        string controllerSource,
+        string name)
+    {
+        var cubemapModel = Slice(
+            modelSource,
+            "public class MaterialCubemapProperty",
+            "public class MaterialShader");
+        var remap = Slice(
+            cubemapModel,
+            "if (CubemapOriginalBindingsNeedRemap)",
+            "var synchronizedMaterials");
+        Contains(remap, "return false;", name + " remap mismatch rejects the override");
+        DoesNotContain(
+            remap,
+            "CubemapOriginalMaterials = null;",
+            name + " remap mismatch retains the known snapshot");
+        DoesNotContain(
+            remap,
+            "capturing the destination materials instead",
+            name + " remap mismatch never recaptures an active override as original");
+        Contains(
+            cubemapModel,
+            "CubemapOriginalSnapshotWarningLogged",
+            name + " remap warning is deduplicated");
+        AtLeast(
+            2,
+            Count(
+                controllerSource,
+                "if (!cubemapProperty.SynchronizeCubemapOriginalSnapshot("),
+            name + " setter and Reset both fail closed without a safe original mapping");
+    }
+
+    private static void AssertAtomicCubemapSetter(string source, string name)
+    {
+        Contains(source, "previousAppliedValues =", name + " captures the active Cubemap before apply");
+        Contains(source, "previousTexID = cubemapProperty.TexID;", name + " snapshots the previous TexID");
+        Contains(source, "previousOriginalMaterials = cubemapProperty.CubemapOriginalMaterials;", name + " snapshots Reset materials");
+        Contains(source, "previousOriginalBindings = cubemapProperty.CubemapOriginalBindings;", name + " snapshots stable Reset bindings");
+        Contains(source, "catch (Exception exception)", name + " treats setter exceptions as failed transactions");
+        Contains(source, "RollbackMaterialCubemapSet(", name + " has a shared rollback path for false and exceptions");
+        Contains(source, "cubemapProperty.TexID = previousTexID;", name + " rollback restores the prior TexID");
+        Contains(source, "|| cubemapProperty.CubemapOriginalSnapshotWarningLogged;", name + " rollback preserves warning deduplication");
+        Contains(source, "MaterialCubemapPropertyList.Remove(cubemapProperty);", name + " rollback removes a newly-created edit");
+        Contains(source, "CubemapLeases.Release(texID);", name + " rollback releases a newly-created lease");
+        Contains(source, "TextureDictionary.Remove(texID);", name + " rollback removes newly-created source bytes");
+        Contains(source, "the previous override was preserved", name + " failure reports transactional semantics");
+        Contains(source, "PurgeUnusedTextures();", name + " Reset purges the released Cubemap bytes");
     }
 
     private static void SharedMechanicsStayTypeAgnostic(
@@ -260,15 +382,162 @@ internal static class CubemapPersistenceContractTests
         string sceneController)
     {
         Contains(conversion, "SHA256.Create()", "content-addressed Cubemap cache");
-        Contains(conversion, "entry.References++", "shared Cubemap refcount acquire");
+        Contains(conversion, "existing.References++", "shared Cubemap refcount acquire");
         Contains(conversion, "entry.References--", "shared Cubemap refcount release");
-        Contains(conversion, "result.Apply(true, true)", "import discards CPU face copies");
+        Contains(conversion, "Apply(true, true)", "import discards CPU face copies");
         Contains(conversion, "CameraClearFlags.Skybox", "non-readable GPU readback path");
         Contains(conversion, "Unity returned no PNG data", "empty encoder output reports an error");
+        Contains(conversion, "TryBeginAcquire", "cache exposes an incremental miss seam");
+        Contains(conversion, "ProcessRows(int maxRows", "panorama projection can be budgeted per frame");
+        Contains(conversion, "PublishConverted", "converted candidates use a double-check publication step");
+        Contains(conversion, "duplicate = converted", "concurrent cache misses select a single cached Cubemap");
+        Contains(conversion, "Object.Destroy(duplicate)", "the losing cache candidate is destroyed after publication");
+        Contains(conversion, "MaterialEditorCubemapMemoryBudget.TryValidateImport", "imports enforce an explicit peak-memory budget");
+        Contains(conversion, "MaterialEditorCubemapMemoryBudget.TryValidateExport", "exports enforce an explicit peak-memory budget");
+        Contains(conversion, "TryReserveConversion", "imports and exports share one aggregate temporary-memory admission gate");
+        Contains(conversion, "ReleaseMemoryReservation", "completed and cancelled imports release aggregate budget ownership");
         DoesNotContain(conversion, "void Update(", "no Cubemap conversion in Update");
         DoesNotContain(conversion, "void OnGUI(", "no Cubemap conversion in OnGUI");
+        Contains(charaController, "MaterialEditorCubemapLeaseStore", "character uses the shared Cubemap lease lifecycle helper");
+        Contains(sceneController, "MaterialEditorCubemapLeaseStore", "scene uses the shared Cubemap lease lifecycle helper");
         Contains(charaController, "TextureDictionary.Keys", "character keeps one neutral byte store");
         Contains(sceneController, "TextureDictionary.Keys", "scene keeps one neutral byte store");
+    }
+
+    private static void IncrementalUiImportUsesBoundedMainThreadWork(
+        string backgroundRead,
+        string coordinator,
+        string ui,
+        string repositoryCapabilities,
+        string editService,
+        string charaRepository,
+        string sceneRepository,
+        string charaCubemap,
+        string sceneCubemap)
+    {
+        Contains(
+            backgroundRead,
+            "ThreadPool.QueueUserWorkItem",
+            "Cubemap file IO is queued off the main thread");
+        Contains(
+            backgroundRead,
+            "File.ReadAllBytes(_filePath)",
+            "Cubemap source bytes are read by the worker");
+        Contains(
+            backgroundRead,
+            "MaterialEditorCubemapContentKey.TryCompute",
+            "Cubemap SHA-256 is computed by the worker");
+        Contains(
+            coordinator,
+            "internal const int RowsPerFrame = 16;",
+            "Cubemap projection has a documented fixed frame budget");
+        Contains(
+            coordinator,
+            "_acquire.ProcessRows(RowsPerFrame",
+            "Cubemap projection advances by bounded row batches");
+        Contains(
+            coordinator,
+            "MaterialEditorCubemapCache.TryBeginAcquire(",
+            "main-thread coordinator uses incremental cache acquisition");
+        Contains(
+            coordinator,
+            "_contentKey,",
+            "main-thread acquisition reuses the worker-computed key");
+        Contains(
+            coordinator,
+            "private void OnDestroy()",
+            "Cubemap runner owns destruction cleanup");
+        Contains(
+            coordinator,
+            "Unity's LoadImage/GetPixels32",
+            "coordinator does not misrepresent Unity thread affinity");
+
+        var importAction = Slice(
+            ui,
+            "private void ImportCubemap(",
+            "private void ScheduleTextureWatcherImport(");
+        Contains(
+            importAction,
+            "MaterialEditorCubemapImportRunner",
+            "Cubemap UI delegates orchestration to the lifecycle runner");
+        Contains(
+            importAction,
+            "encodedData,",
+            "Cubemap UI sends preloaded bytes to the edit service");
+        Contains(
+            importAction,
+            "contentKey,",
+            "Cubemap UI sends the worker key to the edit service");
+        Contains(
+            repositoryCapabilities,
+            "MaterialEditorCubemapContentKey contentKey",
+            "optional Cubemap byte repository preserves the worker key");
+        Contains(
+            repositoryCapabilities,
+            "bool SetMaterialCubemap(",
+            "optional Cubemap byte repository reports real application success");
+        Contains(
+            editService,
+            "MaterialEditorCubemapContentKey contentKey",
+            "Cubemap edit service preserves the worker key");
+        Contains(
+            editService,
+            "return dataRepository.SetMaterialCubemap(",
+            "Cubemap edit service forwards real repository success");
+        Contains(
+            editService,
+            "SupportsMaterialCubemapDataImport",
+            "Cubemap edit service separates capability detection from application failure");
+        Contains(
+            charaRepository,
+            "MaterialEditorCubemapContentKey contentKey",
+            "character Cubemap repository preserves the worker key");
+        Contains(
+            sceneRepository,
+            "MaterialEditorCubemapContentKey contentKey",
+            "Studio Cubemap repository preserves the worker key");
+        Contains(
+            charaCubemap,
+            "contentKey == null",
+            "character controller selects keyed cache acquisition when available");
+        Contains(
+            charaCubemap,
+            "internal bool SetMaterialCubemap(",
+            "character keyed controller path reports actual application success");
+        Contains(
+            charaCubemap,
+            "if (SetCubemapWithProperty(go, cubemapProperty))",
+            "character keyed controller success comes from real material assignment");
+        Contains(
+            sceneCubemap,
+            "contentKey == null",
+            "Studio controller selects keyed cache acquisition when available");
+        Contains(
+            sceneCubemap,
+            "internal bool SetMaterialCubemap(",
+            "Studio keyed controller path reports actual application success");
+        Contains(
+            sceneCubemap,
+            "if (SetCubemapWithProperty(gameObject, cubemapProperty))",
+            "Studio keyed controller success comes from real material assignment");
+        Contains(charaCubemap, "lease = null;", "character transfers lease ownership explicitly");
+        Contains(sceneCubemap, "lease = null;", "Studio transfers lease ownership explicitly");
+        Contains(
+            importAction,
+            "legacy file import path",
+            "legacy repositories retain an explicit compatibility fallback");
+        Contains(
+            importAction,
+            "SupportsMaterialCubemapDataImport",
+            "legacy fallback is gated by repository capability");
+        Contains(
+            importAction,
+            "return EditService.SetMaterialCubemap(",
+            "supported repositories propagate their real apply result");
+        DoesNotContain(
+            importAction,
+            "IEnumerator ApplyFileSelectionOnMainThread",
+            "Cubemap UI no longer owns the conversion coroutine");
     }
 
     private static void ProjectFilesIncludeDedicatedSources(
@@ -277,6 +546,17 @@ internal static class CubemapPersistenceContractTests
         string sceneProject)
     {
         Contains(baseProject, "CubemapOriginalSnapshot.cs", "Base includes Cubemap snapshot source");
+        Contains(baseProject, "CubemapContentKey.cs", "Base includes the worker-safe content-key source");
+        Contains(baseProject, "CubemapBackgroundRead.cs", "Base includes the background Cubemap reader");
+        Contains(baseProject, "CubemapMaterialIdentity.cs", "Base includes stable Cubemap binding identities");
+        Contains(baseProject, "CubemapMemoryBudget.cs", "Base includes Cubemap peak-memory estimates");
+        Contains(baseProject, "CubemapCache.cs", "Base includes Cubemap cache ownership");
+        Contains(baseProject, "CubemapImport.cs", "Base includes incremental Cubemap import");
+        Contains(baseProject, "CubemapExport.cs", "Base includes Cubemap export");
+        Contains(baseProject, "CubemapGpuReadback.cs", "Base includes GPU fallback readback");
+        Contains(baseProject, "CubemapSource.cs", "Base includes Cubemap source inspection");
+        Contains(baseProject, "RadianceHdrDecoder.cs", "Base includes the Radiance HDR decoder");
+        Contains(baseProject, "UI.CubemapImportCoordinator.cs", "Base includes the incremental UI import coordinator");
         Contains(baseProject, "UI.RowModel.Cubemap.cs", "Base includes Cubemap row model");
         Contains(baseProject, "UI.RowBinder.Cubemap.cs", "Base includes Cubemap binder");
         Contains(charaProject, "CharaController.Edits.Cubemap.cs", "character includes Cubemap operations");

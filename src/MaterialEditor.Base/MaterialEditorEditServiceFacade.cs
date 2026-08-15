@@ -65,12 +65,24 @@ namespace MaterialEditorAPI
             _service.RemoveProjectorProperty(Data, projector, property, GameObject);
 
         /// <summary>Copy all persisted edits from a material.</summary>
-        public void CopyMaterialEdits(Material material) =>
+        public void CopyMaterialEdits(Material material)
+        {
             _service.MaterialCopyEdits(Data, material, GameObject);
+            MaterialEditorClipboardState.NotifyChanged();
+        }
+
+        internal void CopyMaterialEdits(Material material, Projector projector)
+        {
+            _service.MaterialCopyEdits(Data, material, projector, GameObject);
+            MaterialEditorClipboardState.NotifyChanged();
+        }
 
         /// <summary>Paste copied edits onto a material.</summary>
         public void PasteMaterialEdits(Material material) =>
             _service.MaterialPasteEdits(Data, material, GameObject);
+
+        internal void PasteMaterialEdits(Material material, Projector projector) =>
+            _service.MaterialPasteEdits(Data, material, projector, GameObject);
 
         /// <summary>Copy a material or remove a Material Editor copy.</summary>
         public void CopyOrRemoveMaterial(Material material) =>
@@ -171,6 +183,18 @@ namespace MaterialEditorAPI
         /// <summary>Remove the persisted material color override.</summary>
         public void ResetColor(Material material, string propertyName) =>
             _service.RemoveMaterialColorProperty(Data, material, propertyName, GameObject);
+
+        /// <summary>Get the original material vector property.</summary>
+        public Vector4? GetOriginalVector(Material material, string propertyName) =>
+            _service.GetMaterialVectorPropertyValueOriginal(Data, material, propertyName, GameObject);
+
+        /// <summary>Set and persist a material vector property.</summary>
+        public void SetVector(Material material, string propertyName, Vector4 value) =>
+            _service.SetMaterialVectorProperty(Data, material, propertyName, value, GameObject);
+
+        /// <summary>Remove the persisted material vector override.</summary>
+        public void ResetVector(Material material, string propertyName) =>
+            _service.RemoveMaterialVectorProperty(Data, material, propertyName, GameObject);
 
         /// <summary>Get the original material float property.</summary>
         public float? GetOriginalFloat(Material material, string propertyName) =>

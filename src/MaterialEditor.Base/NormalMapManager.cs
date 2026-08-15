@@ -16,10 +16,24 @@ namespace MaterialEditorAPI
         /// Dictionary of textures and textures converted to normal maps.
         /// </summary>
         private readonly WeakKeyDictionary<Texture, WeakReference> _convertedNormalMap = new WeakKeyDictionary<Texture, WeakReference>();
+        private const int NormalMapSweepIntervalFrames = 60;
+        private int _normalMapSweepCountdown;
 
         void Update()
         {
-            //Sweep dead values
+            if (_convertedNormalMap.Count == 0)
+            {
+                _normalMapSweepCountdown = 0;
+                return;
+            }
+
+            if (_normalMapSweepCountdown > 0)
+            {
+                _normalMapSweepCountdown--;
+                return;
+            }
+
+            _normalMapSweepCountdown = NormalMapSweepIntervalFrames - 1;
             _convertedNormalMap.SweepDeadValuesLittle();
         }
 
@@ -225,6 +239,8 @@ namespace MaterialEditorAPI
         private readonly Dictionary<object, TValue> _dict = new Dictionary<object, TValue>(new WeakKeyComperer<object>());
         private readonly List<WeakKey<TKey>> _weakKeys = new List<WeakKey<TKey>>();
         private int _sweepOffset = 0;
+
+        public int Count => _dict.Count;
 
         /// <summary>
         /// Sweeps dead values deleted by the GC from the dictionary.

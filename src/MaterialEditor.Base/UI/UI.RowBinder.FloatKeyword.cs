@@ -1,9 +1,4 @@
-using System;
-using System.Collections.Generic;
-using System.Globalization;
-using UnityEngine;
-using UnityEngine.UI;
-using static UILib.Extensions;
+﻿using static UILib.Extensions;
 
 namespace MaterialEditorAPI
 {
@@ -26,12 +21,6 @@ namespace MaterialEditorAPI
                 case RowModel.RowItemType.KeywordProperty:
                     BindKeyword((KeywordPropertyRowModel)item, listeners);
                     break;
-                case RowModel.RowItemType.EnumProperty:
-                    BindEnum((EnumPropertyRowModel)item, listeners);
-                    break;
-                case RowModel.RowItemType.FloatToggleProperty:
-                    BindFloatToggle((FloatTogglePropertyRowModel)item, listeners);
-                    break;
             }
         }
 
@@ -39,19 +28,30 @@ namespace MaterialEditorAPI
         {
             var controls = _controls.Float;
             controls.SetVisible(true);
-            TooltipBinding.Bind(controls.Label.gameObject, item.TooltipText);
+            TooltipBinding.Bind(
+                controls.Label.gameObject,
+                item.TooltipText,
+                item.PropertyName,
+                controls.Label);
+            if (controls.Slider.gameObject.activeSelf != item.HasRange)
+                controls.Slider.gameObject.SetActive(item.HasRange);
+            controls.InputLayout.SetFixedWidth(
+                item.HasRange
+                    ? MaterialEditorLayout.FloatInputWidth
+                    : MaterialEditorLayout.ContentWidth);
 
-            Action refresh = () =>
+            System.Action refresh = () =>
                 ChangedStateBinding.Apply(
                     controls.Label,
                     item.LabelText,
                     item.Value != item.OriginalValue,
                     controls.ResetButton,
                     controls.Panel);
-            Action<float> applyValue = value =>
+            System.Action<float> applyValue = value =>
             {
                 item.Value = value;
-                controls.Slider.Set(item.Value, false);
+                if (item.HasRange)
+                    controls.Slider.Set(item.Value, false);
                 controls.Input.SetValue(item.Value);
                 if (item.Value == item.OriginalValue)
                     item.ValueOnReset();
@@ -66,19 +66,23 @@ namespace MaterialEditorAPI
                 controls.Input,
                 () => item.Value,
                 applyValue);
-            SliderBinding.Bind(
-                listeners,
-                controls.Slider,
-                item.SliderMinimum,
-                item.SliderMaximum,
-                item.Value,
-                applyValue);
+            if (item.HasRange)
+            {
+                SliderBinding.Bind(
+                    listeners,
+                    controls.Slider,
+                    item.SliderMinimum,
+                    item.SliderMaximum,
+                    item.Value,
+                    applyValue);
+            }
             refresh();
 
             listeners.Listen(controls.ResetButton, () =>
             {
                 item.Value = item.OriginalValue;
-                controls.Slider.Set(item.Value, false);
+                if (item.HasRange)
+                    controls.Slider.Set(item.Value, false);
                 controls.Input.SetValue(item.Value);
                 item.ValueOnReset();
                 refresh();
@@ -99,208 +103,36 @@ namespace MaterialEditorAPI
         {
             var controls = _controls.Keyword;
             controls.SetVisible(true);
-            TooltipBinding.Bind(controls.Label.gameObject, item.TooltipText);
-            ToggleBinding.Bind(
-                listeners,
-                controls,
-                item,
-                () => item.Value,
-                () => item.OriginalValue,
-                value => item.Value = value,
-                item.ValueOnChange,
-                item.ValueOnReset);
-            LabelClickBinding.Bind(
-                listeners,
-                controls.LabelClickTrigger,
-                item,
-                MaterialEditorLabelType.KeywordProperty,
-                () => item.PropertyName);
-        }
-
-        private void BindEnum(EnumPropertyRowModel item, ListenerScope listeners)
-        {
-            var controls = _controls.Enum;
-            controls.SetVisible(true);
-            TooltipBinding.Bind(controls.Label.gameObject, item.TooltipText);
-
-            List<float> optionValues = null;
-            var mixedIndex = -1;
-            var isMixed = false;
-            Action rebuild = () =>
-            {
-                controls.Dropdown.options.Clear();
-                optionValues = new List<float>();
-                var selectedIndex = -1;
-                mixedIndex = -1;
-                var selection =
-                    MaterialEditorFloatBackedValuePolicy.ResolveEnumSelection(
-                        item.Options,
-                        item.CurrentValues ?? new[] { item.Value });
-                isMixed = selection.State == MaterialEditorEnumValueState.Mixed;
-
-                if (isMixed)
-                {
-                    mixedIndex = optionValues.Count;
-                    selectedIndex = mixedIndex;
-                    optionValues.Add(item.Value);
-                    controls.Dropdown.options.Add(new Dropdown.OptionData("Mixed"));
-                }
-
-                if (item.Options != null)
-                {
-                    for (var optionIndex = 0;
-                         optionIndex < item.Options.Count;
-                         optionIndex++)
-                    {
-                        var option = item.Options[optionIndex];
-                        if (selection.State == MaterialEditorEnumValueState.Matched
-                            && selection.OptionIndex == optionIndex)
-                        {
-                            selectedIndex = optionValues.Count;
-                        }
-                        optionValues.Add(option.Value);
-                        controls.Dropdown.options.Add(
-                            new Dropdown.OptionData(option.DisplayName));
-                    }
-                }
-
-                // Preserve values authored outside the declared option set.
-                if (selection.State == MaterialEditorEnumValueState.Unmatched)
-                {
-                    selectedIndex = optionValues.Count;
-                    optionValues.Add(selection.CurrentValue);
-                    controls.Dropdown.options.Add(
-                        new Dropdown.OptionData(
-                            "Current ("
-                            + selection.CurrentValue.ToString(
-                                CultureInfo.InvariantCulture)
-                            + ")"));
-                }
-
-                controls.Dropdown.Set(selectedIndex);
-            };
-            Action refresh = () =>
-                ChangedStateBinding.Apply(
-                    controls.Label,
-                    isMixed ? item.LabelText + " (Mixed)" : item.LabelText,
-                    item.Value != item.OriginalValue,
-                    controls.ResetButton,
-                    controls.Panel);
-
-            rebuild();
-            refresh();
-            listeners.Listen(controls.Dropdown, index =>
-            {
-                if (optionValues == null
-                    || index < 0
-                    || index >= optionValues.Count
-                    || index == mixedIndex)
-                    return;
-
-                var value = optionValues[index];
-                if (!isMixed && value == item.Value)
-                    return;
-
-                var wasMixed = isMixed;
-                item.Value = value;
-                item.CurrentValues = new[] { value };
-                if (wasMixed)
-                {
-                    // An explicit choice must be applied to every same-named
-                    // material and remain persisted even when it equals the
-                    // representative material's original value.
-                    MaterialEditorFloatBackedValuePolicy.PersistExplicitEnumSelection(
-                        item.ValueOnReset,
-                        item.ValueOnChange,
-                        item.Value);
-                }
-                else if (MaterialEditorFloatBackedValuePolicy.ShouldRemoveEnumOverride(
-                             wasMixed,
-                             item.Value,
-                             item.OriginalValue))
-                    item.ValueOnReset();
-                else
-                    item.ValueOnChange(item.Value);
-                rebuild();
-                refresh();
-                item.PresentationRefresh?.Invoke();
-            });
-            listeners.Listen(controls.ResetButton, () =>
-            {
-                item.Value = item.OriginalValue;
-                item.CurrentValues = new[] { item.OriginalValue };
-                item.ValueOnReset();
-                rebuild();
-                refresh();
-                item.PresentationRefresh?.Invoke();
-            });
-            listeners.Listen(
-                controls.SelectInterpolableButton,
-                () => item.SelectInterpolable());
-            LabelClickBinding.Bind(
-                listeners,
-                controls.LabelClickTrigger,
-                item,
-                MaterialEditorLabelType.FloatProperty,
-                () => item.PropertyName);
-        }
-
-        private void BindFloatToggle(
-            FloatTogglePropertyRowModel item,
-            ListenerScope listeners)
-        {
-            var controls = _controls.FloatToggle;
-            controls.SetVisible(true);
-            TooltipBinding.Bind(controls.Label.gameObject, item.TooltipText);
-
-            Action refresh = () =>
-            {
-                controls.Toggle.Set(
-                    MaterialEditorFloatBackedValuePolicy.GetBooleanDisplayValue(
-                        item.Value,
-                        item.Invert),
-                    false);
+            TooltipBinding.Bind(
+                controls.Label.gameObject,
+                item.TooltipText,
+                item.PropertyName,
+                controls.Label);
+            System.Action refresh = () =>
                 ChangedStateBinding.Apply(
                     controls.Label,
                     item.LabelText,
                     item.Value != item.OriginalValue,
                     controls.ResetButton,
                     controls.Panel);
-            };
-
+            controls.Toggle.Set(item.Value, false);
             refresh();
-            listeners.Listen(controls.Toggle, enabled =>
+            listeners.Listen(controls.Toggle, value =>
             {
-                var value =
-                    MaterialEditorFloatBackedValuePolicy.GetBooleanStoredValue(
-                        enabled,
-                        item.Invert);
-                if (value == item.Value)
-                    return;
-
-                item.Value = value;
-                if (item.Value == item.OriginalValue)
-                    item.ValueOnReset();
-                else
-                    item.ValueOnChange(item.Value);
+                BooleanPropertyRowModelBinding.ApplyUserValue(item, value);
                 refresh();
-                item.PresentationRefresh?.Invoke();
             });
             listeners.Listen(controls.ResetButton, () =>
             {
-                item.Value = item.OriginalValue;
-                item.ValueOnReset();
+                BooleanPropertyRowModelBinding.Reset(item);
+                controls.Toggle.Set(item.Value, false);
                 refresh();
-                item.PresentationRefresh?.Invoke();
             });
-            listeners.Listen(
-                controls.SelectInterpolableButton,
-                () => item.SelectInterpolable());
             LabelClickBinding.Bind(
                 listeners,
                 controls.LabelClickTrigger,
                 item,
-                MaterialEditorLabelType.FloatProperty,
+                MaterialEditorLabelType.KeywordProperty,
                 () => item.PropertyName);
         }
     }

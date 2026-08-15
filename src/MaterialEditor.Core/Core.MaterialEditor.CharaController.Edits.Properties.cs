@@ -236,5 +236,113 @@ namespace KK_Plugins.MaterialEditor
             MaterialColorPropertyList.RemoveAll(x => x.ObjectType == objectType && x.CoordinateIndex == GetCoordinateIndex(objectType) && x.Slot == slot && x.Property == propertyName && x.MaterialName == material.NameFormatted());
         }
 
+        /// <summary>
+        /// Add a vector property to be saved and loaded with the card and optionally also update the materials.
+        /// </summary>
+        public void SetMaterialVectorProperty(int slot, ObjectType objectType, Material material, string propertyName, Vector4 value, GameObject go, bool setProperty = true)
+        {
+            var vectorProperty = MigrateLegacyMaterialVectorProperty(slot, objectType, material.NameFormatted(), propertyName, go);
+            if (vectorProperty == null)
+            {
+                Vector4 valueOriginal = material.GetVector($"_{propertyName}");
+                if (value != valueOriginal)
+                    MaterialVectorPropertyList.Add(new MaterialVectorProperty(objectType, GetCoordinateIndex(objectType), slot, material.NameFormatted(), propertyName, value, valueOriginal));
+            }
+            else
+            {
+                if (value == vectorProperty.ValueOriginal)
+                    RemoveMaterialVectorProperty(slot, objectType, material, propertyName, go, false);
+                else
+                    vectorProperty.Value = value;
+            }
+            if (setProperty)
+                SetVector(go, material.NameFormatted(), propertyName, value);
+        }
+
+        /// <summary>
+        /// Get the saved material vector value or null if none is saved.
+        /// </summary>
+        public Vector4? GetMaterialVectorPropertyValue(int slot, ObjectType objectType, Material material, string propertyName, GameObject go)
+        {
+            return MigrateLegacyMaterialVectorProperty(slot, objectType, material.NameFormatted(), propertyName, go)?.Value;
+        }
+
+        /// <summary>
+        /// Get the saved material vector property's original value or null if none is saved.
+        /// </summary>
+        public Vector4? GetMaterialVectorPropertyValueOriginal(int slot, ObjectType objectType, Material material, string propertyName, GameObject go)
+        {
+            return MigrateLegacyMaterialVectorProperty(slot, objectType, material.NameFormatted(), propertyName, go)?.ValueOriginal;
+        }
+
+        /// <summary>
+        /// Remove the saved material vector value and optionally restore the original value.
+        /// </summary>
+        public void RemoveMaterialVectorProperty(int slot, ObjectType objectType, Material material, string propertyName, GameObject go, bool setProperty = true)
+        {
+            if (setProperty)
+            {
+                var original = GetMaterialVectorPropertyValueOriginal(slot, objectType, material, propertyName, go);
+                if (original != null)
+                    SetVector(go, material.NameFormatted(), propertyName, original.Value);
+            }
+            MaterialVectorPropertyList.RemoveAll(x => x.ObjectType == objectType && x.CoordinateIndex == GetCoordinateIndex(objectType) && x.Slot == slot && x.Property == propertyName && x.MaterialName == material.NameFormatted());
+            MaterialColorPropertyList.RemoveAll(x => x.ObjectType == objectType && x.CoordinateIndex == GetCoordinateIndex(objectType) && x.Slot == slot && x.Property == propertyName && x.MaterialName == material.NameFormatted() && IsVectorProperty(go, x.MaterialName, x.Property));
+        }
+
+        /// <summary>
+        /// Convert a legacy color-backed vector override to the native vector list in memory.
+        /// Native vector data wins if a transitional save contains both keys.
+        /// </summary>
+        private MaterialVectorProperty MigrateLegacyMaterialVectorProperty(int slot, ObjectType objectType, string materialName, string propertyName, GameObject go)
+        {
+            int coordinateIndex = GetCoordinateIndex(objectType);
+            var vectorProperty = MaterialVectorPropertyList.FirstOrDefault(x => x.ObjectType == objectType && x.CoordinateIndex == coordinateIndex && x.Slot == slot && x.Property == propertyName && x.MaterialName == materialName);
+            if (!IsVectorProperty(go, materialName, propertyName))
+                return vectorProperty;
+
+            var legacyColorProperty = MaterialColorPropertyList.FirstOrDefault(x => x.ObjectType == objectType && x.CoordinateIndex == coordinateIndex && x.Slot == slot && x.Property == propertyName && x.MaterialName == materialName);
+            if (vectorProperty != null)
+            {
+                if (legacyColorProperty != null)
+                    MaterialColorPropertyList.Remove(legacyColorProperty);
+                if (vectorProperty.Value == vectorProperty.ValueOriginal)
+                {
+                    MaterialVectorPropertyList.Remove(vectorProperty);
+                    return null;
+                }
+                return vectorProperty;
+            }
+            if (legacyColorProperty == null)
+                return null;
+
+            var legacyValue = new Vector4(legacyColorProperty.Value.r, legacyColorProperty.Value.g, legacyColorProperty.Value.b, legacyColorProperty.Value.a);
+            var legacyValueOriginal = new Vector4(legacyColorProperty.ValueOriginal.r, legacyColorProperty.ValueOriginal.g, legacyColorProperty.ValueOriginal.b, legacyColorProperty.ValueOriginal.a);
+            if (legacyValue != legacyValueOriginal)
+            {
+                vectorProperty = new MaterialVectorProperty(
+                    legacyColorProperty.ObjectType,
+                    legacyColorProperty.CoordinateIndex,
+                    legacyColorProperty.Slot,
+                    legacyColorProperty.MaterialName,
+                    legacyColorProperty.Property,
+                    legacyValue,
+                    legacyValueOriginal);
+                MaterialVectorPropertyList.Add(vectorProperty);
+            }
+
+            MaterialColorPropertyList.Remove(legacyColorProperty);
+            return vectorProperty;
+        }
+
+        private void RemoveLegacyMaterialVectorDuplicates()
+        {
+            MaterialVectorPropertyList.RemoveAll(vector => vector.Value == vector.ValueOriginal);
+            // Legacy Color entries are removed by MigrateLegacyMaterialVectorProperty
+            // only after the active shader manifest confirms that the property is a
+            // Vector. Keeping Color entries here prevents a stale Vector entry from
+            // discarding a newer Color edit when a manifest is downgraded or changed.
+        }
+
     }
 }

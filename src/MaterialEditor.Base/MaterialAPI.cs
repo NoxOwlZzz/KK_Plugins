@@ -245,12 +245,14 @@ namespace MaterialEditorAPI
             bool didSet = false;
 
             var list = GetObjectMaterials(gameObject, materialName);
+            if (list.Count == 0) return false;
+            var property = MaterialPropertyIdCache.Get(propertyName);
             for (var i = 0; i < list.Count; i++)
             {
                 var material = list[i];
-                if (material.HasProperty($"_{propertyName}"))
+                if (MaterialPropertyAccess.HasProperty(material, property))
                 {
-                    material.SetFloat($"_{propertyName}", value);
+                    MaterialPropertyAccess.SetFloat(material, property, value);
                     didSet = true;
                 }
             }
@@ -308,12 +310,72 @@ namespace MaterialEditorAPI
             bool didSet = false;
 
             var materials = GetObjectMaterials(gameObject, materialName);
+            if (materials.Count == 0) return false;
+            var property = MaterialPropertyIdCache.Get(propertyName);
             for (var i = 0; i < materials.Count; i++)
             {
                 var material = materials[i];
-                if (material.HasProperty($"_{propertyName}"))
+                if (MaterialPropertyAccess.HasProperty(material, property))
                 {
-                    material.SetColor($"_{propertyName}", value);
+                    MaterialPropertyAccess.SetColor(material, property, value);
+                    didSet = true;
+                }
+            }
+            return didSet;
+        }
+
+        /// <summary>
+        /// Determine whether the active shader schema classifies a material property as a vector.
+        /// </summary>
+        internal static bool IsVectorProperty(GameObject gameObject, string materialName, string propertyName)
+        {
+            bool hasShaderSpecificDefinition = false;
+            var materials = GetObjectMaterials(gameObject, materialName);
+            for (var i = 0; i < materials.Count; i++)
+            {
+                var material = materials[i];
+                if (material.shader == null)
+                    continue;
+
+                var shaderName = material.shader.NameFormatted();
+                if (!MaterialEditorPluginBase.XMLShaderProperties.TryGetValue(shaderName, out var properties)
+                    || !properties.TryGetValue(propertyName, out var property))
+                    continue;
+
+                hasShaderSpecificDefinition = true;
+                if (property.Type == ShaderPropertyType.Vector)
+                    return true;
+            }
+
+            if (hasShaderSpecificDefinition)
+                return false;
+
+            return MaterialEditorPluginBase.XMLShaderProperties.TryGetValue("default", out var defaultProperties)
+                && defaultProperties.TryGetValue(propertyName, out var defaultProperty)
+                && defaultProperty.Type == ShaderPropertyType.Vector;
+        }
+
+        /// <summary>
+        /// Set the value of the specified material vector property
+        /// </summary>
+        /// <param name="gameObject">GameObject to search for the material</param>
+        /// <param name="materialName">Name of the material being set</param>
+        /// <param name="propertyName">Property of the material being set</param>
+        /// <param name="value">Value to be set</param>
+        /// <returns>True if the material was found and the value set</returns>
+        public static bool SetVector(GameObject gameObject, string materialName, string propertyName, Vector4 value)
+        {
+            bool didSet = false;
+
+            var materials = GetObjectMaterials(gameObject, materialName);
+            if (materials.Count == 0) return false;
+            var property = MaterialPropertyIdCache.Get(propertyName);
+            for (var i = 0; i < materials.Count; i++)
+            {
+                var material = materials[i];
+                if (MaterialPropertyAccess.HasProperty(material, property))
+                {
+                    MaterialPropertyAccess.SetVector(material, property, value);
                     didSet = true;
                 }
             }
@@ -684,12 +746,14 @@ namespace MaterialEditorAPI
             if (value == null) return didSet;
 
             var materials = GetObjectMaterials(gameObject, materialName);
+            if (materials.Count == 0) return false;
+            var property = MaterialPropertyIdCache.Get(propertyName);
             for (var i = 0; i < materials.Count; i++)
             {
                 var material = materials[i];
-                if (!material.HasProperty($"_{propertyName}")) continue; // Todo, should check if it is a texture
+                if (!MaterialPropertyAccess.HasProperty(material, property)) continue; // Todo, should check if it is a texture
 
-                var oldTex = material.GetTexture($"_{propertyName}");
+                var oldTex = MaterialPropertyAccess.GetTexture(material, property);
                 if (oldTex != null)
                 {
                     value.anisoLevel = oldTex.anisoLevel;
@@ -714,7 +778,7 @@ namespace MaterialEditorAPI
                     if (texturePropertyData.WrapMode.HasValue) value.wrapMode = texturePropertyData.WrapMode.Value;
                 }
 
-                material.SetTexture($"_{propertyName}", value);
+                MaterialPropertyAccess.SetTexture(material, property, value);
                 didSet = true;
             }
             return didSet;
@@ -735,13 +799,15 @@ namespace MaterialEditorAPI
 
             var didSet = false;
             var materials = GetObjectMaterials(gameObject, materialName);
+            var property = MaterialPropertyIdCache.Get(propertyName);
             for (var index = 0; index < materials.Count; index++)
             {
                 var material = materials[index];
-                var fullPropertyName = "_" + propertyName;
-                if (!material.HasProperty(fullPropertyName))
+                if (material == null
+                    || material.NameFormatted() != materialName
+                    || !MaterialPropertyAccess.HasProperty(material, property))
                     continue;
-                material.SetTexture(fullPropertyName, value);
+                MaterialPropertyAccess.SetTexture(material, property, value);
                 didSet = true;
             }
             return didSet;
@@ -761,12 +827,17 @@ namespace MaterialEditorAPI
             if (value == null) return didSet;
 
             var materials = GetObjectMaterials(gameObject, materialName);
+            if (materials.Count == 0) return false;
+            var property = MaterialPropertyIdCache.Get(propertyName);
             for (var i = 0; i < materials.Count; i++)
             {
                 var material = materials[i];
-                if (material.HasProperty($"_{propertyName}"))
+                if (MaterialPropertyAccess.HasProperty(material, property))
                 {
-                    material.SetTextureOffset($"_{propertyName}", (Vector2)value);
+                    MaterialPropertyAccess.SetTextureOffset(
+                        material,
+                        property,
+                        (Vector2)value);
                     didSet = true;
                 }
             }
@@ -787,12 +858,17 @@ namespace MaterialEditorAPI
             if (value == null) return didSet;
 
             var materials = GetObjectMaterials(gameObject, materialName);
+            if (materials.Count == 0) return false;
+            var property = MaterialPropertyIdCache.Get(propertyName);
             for (var i = 0; i < materials.Count; i++)
             {
                 var material = materials[i];
-                if (material.HasProperty($"_{propertyName}"))
+                if (MaterialPropertyAccess.HasProperty(material, property))
                 {
-                    material.SetTextureScale($"_{propertyName}", (Vector2)value);
+                    MaterialPropertyAccess.SetTextureScale(
+                        material,
+                        property,
+                        (Vector2)value);
                     didSet = true;
                 }
             }
@@ -847,6 +923,18 @@ namespace MaterialEditorAPI
                             case ShaderPropertyType.Color:
                                 SetColor(gameObject, materialName, shaderPropertyData.Name, shaderPropertyData.DefaultValue);
                                 break;
+                            case ShaderPropertyType.Vector:
+                                var defaultVectorColor = shaderPropertyData.DefaultValue.ToColor();
+                                SetVector(
+                                    gameObject,
+                                    materialName,
+                                    shaderPropertyData.Name,
+                                    new Vector4(
+                                        defaultVectorColor.r,
+                                        defaultVectorColor.g,
+                                        defaultVectorColor.b,
+                                        defaultVectorColor.a));
+                                break;
                             case ShaderPropertyType.Texture:
                                 if (shaderPropertyData.DefaultValue.IsNullOrEmpty()) continue;
                                 try
@@ -883,9 +971,12 @@ namespace MaterialEditorAPI
                                             $"Could not load default cubemap:{shaderPropertyData.DefaultValueAssetBundle}:{shaderPropertyData.DefaultValue}");
                                     }
                                 }
-                                if (cubemap != null
-                                    && material.HasProperty("_" + shaderPropertyData.Name))
-                                    material.SetTexture("_" + shaderPropertyData.Name, cubemap);
+                                if (cubemap != null)
+                                {
+                                    var cubemapProperty = MaterialPropertyIdCache.Get(shaderPropertyData.Name);
+                                    if (MaterialPropertyAccess.HasProperty(material, cubemapProperty))
+                                        MaterialPropertyAccess.SetTexture(material, cubemapProperty, cubemap);
+                                }
                                 break;
                             case ShaderPropertyType.Keyword:
                                 SetKeyword(gameObject, materialName, shaderPropertyData.Name, bool.Parse(shaderPropertyData.DefaultValue));
@@ -958,23 +1049,27 @@ namespace MaterialEditorAPI
             /// <summary>
             /// Texture
             /// </summary>
-            Texture,
+            Texture = 0,
             /// <summary>
-            /// Color, Vector4, Vector3, Vector2
+            /// Color
             /// </summary>
-            Color,
+            Color = 1,
             /// <summary>
             /// Float, Int, Bool
             /// </summary>
-            Float,
+            Float = 2,
             /// <summary>
             /// Bool
             /// </summary>
-            Keyword,
+            Keyword = 3,
             /// <summary>
             /// Native shader Cube property backed by UnityEngine.Cubemap
             /// </summary>
-            Cubemap = 4
+            Cubemap = 5,
+            /// <summary>
+            /// Vector4, Vector3, Vector2
+            /// </summary>
+            Vector = 4
         }
 
         /// <summary>
