@@ -44,6 +44,20 @@ internal static class UiControlReadabilityRegressionTests
             numericSource,
             "gameObject.AddComponent<RowColumnLayoutOverride>()",
             "numeric input high-priority layout override");
+        Contains(
+            numericSource,
+            "input.textComponent.verticalOverflow = VerticalWrapMode.Overflow;",
+            "compact numeric inputs always generate their text line");
+
+        var selectionSource = ReadSource("src", "MaterialEditor.Base", "UI", "UI.SelectListPanel.cs");
+        Contains(
+            selectionSource,
+            "label.horizontalOverflow = HorizontalWrapMode.Overflow;",
+            "selection names stay on one generated line");
+        Contains(
+            selectionSource,
+            "label.verticalOverflow = VerticalWrapMode.Overflow;",
+            "compact selection rows always generate their name text");
     }
 
     private static void DropdownTypographyHasReadableBounds()
@@ -62,6 +76,10 @@ internal static class UiControlReadabilityRegressionTests
             source,
             "text.resizeTextMaxSize = MaterialEditorLayout.DropdownFontSize",
             "dropdown maximum size matches its fixed type size");
+        Contains(
+            source,
+            "text.verticalOverflow = VerticalWrapMode.Overflow;",
+            "compact dropdown rows always generate their text");
         Contains(
             source,
             "MaterialEditorLayout.DropdownTextVerticalInset",

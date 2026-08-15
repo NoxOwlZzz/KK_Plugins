@@ -652,7 +652,8 @@ namespace MaterialEditorAPI
             text.resizeTextMinSize = MaterialEditorLayout.DropdownFontSize;
             text.resizeTextMaxSize = MaterialEditorLayout.DropdownFontSize;
             text.horizontalOverflow = HorizontalWrapMode.Wrap;
-            text.verticalOverflow = VerticalWrapMode.Truncate;
+            // Generate the full line; the compact dropdown row owns clipping.
+            text.verticalOverflow = VerticalWrapMode.Overflow;
 
             var rect = text.rectTransform;
             rect.offsetMin = new Vector2(

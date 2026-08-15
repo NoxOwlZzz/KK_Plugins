@@ -418,8 +418,10 @@ namespace MaterialEditorAPI
             MaterialEditorStyles.ApplyText(label, MaterialEditorTextRole.Input);
             label.resizeTextForBestFit = false;
             label.fontSize = MaterialEditorTheme.Typography.PrimaryFontSize;
-            label.horizontalOverflow = HorizontalWrapMode.Wrap;
-            label.verticalOverflow = VerticalWrapMode.Truncate;
+            // The row mask owns clipping. Generating a wrapped/truncated line
+            // can produce no glyphs at all in compact rows on Unity 5.6.
+            label.horizontalOverflow = HorizontalWrapMode.Overflow;
+            label.verticalOverflow = VerticalWrapMode.Overflow;
             label.alignment = TextAnchor.MiddleLeft;
         }
 

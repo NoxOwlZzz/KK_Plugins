@@ -802,7 +802,7 @@ internal static class SubcategoryHierarchyContractTests
 
     private static void DocumentationUsesThePresentationOnlyContract()
     {
-        var schema = ReadSource("MANIFEST_SCHEMA_V2.md");
+        var schema = ReadSource("Guides", "Material Editor Guide", "MANIFEST_SCHEMA_V2.md");
         var templateText = ReadSource(
             "Guides", "Material Editor Guide", "shader_manifest_template.xml");
         var template = LoadXml(templateText);

@@ -87,7 +87,10 @@ namespace MaterialEditorAPI
             input.lineType = InputField.LineType.SingleLine;
             input.textComponent.resizeTextForBestFit = false;
             input.textComponent.horizontalOverflow = HorizontalWrapMode.Overflow;
-            input.textComponent.verticalOverflow = VerticalWrapMode.Truncate;
+            // Unity 5.6 can discard the complete line when a fixed-size font is
+            // slightly taller than the compact input viewport. The viewport
+            // already clips the mesh, so generate the line and let it clip.
+            input.textComponent.verticalOverflow = VerticalWrapMode.Overflow;
 
             EnsureViewport();
             if (GetComponent<RowColumnLayoutOverride>() == null)

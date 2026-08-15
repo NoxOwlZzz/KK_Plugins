@@ -638,7 +638,9 @@ internal static class PhaseOneRegressionTests
     }
 
     private static string ReadRepositorySource(string relativePath) =>
-        File.ReadAllText(Path.Combine(FindRepositoryRoot(), relativePath));
+        File.ReadAllText(Path.Combine(FindRepositoryRoot(), relativePath))
+            .Replace("\r\n", "\n")
+            .Replace("\r", "\n");
 
     private static int CountOccurrences(string text, string value)
     {
