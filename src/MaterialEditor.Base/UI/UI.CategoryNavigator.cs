@@ -595,8 +595,9 @@ namespace MaterialEditorAPI
                 return;
 
             text.resizeTextForBestFit = false;
-            text.horizontalOverflow = HorizontalWrapMode.Wrap;
-            text.verticalOverflow = VerticalWrapMode.Truncate;
+            // The navigator viewport clips the generated single line.
+            text.horizontalOverflow = HorizontalWrapMode.Overflow;
+            text.verticalOverflow = VerticalWrapMode.Overflow;
             text.alignment = TextAnchor.MiddleLeft;
         }
 
