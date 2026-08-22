@@ -245,7 +245,7 @@ namespace MaterialEditorAPI
         {
             return selectionListsVisible || renameListVisible
                 ? MaterialEditorResponsiveSideState.Expanded
-                : MaterialEditorResponsiveSideState.Collapsed;
+                : MaterialEditorResponsiveSideState.Hidden;
         }
 
         private static float CapExpandedRightWidth(

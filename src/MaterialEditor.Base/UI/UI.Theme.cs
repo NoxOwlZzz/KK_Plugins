@@ -14,108 +14,184 @@ namespace MaterialEditorAPI
         Modified
     }
 
-    // Internal, immutable visual tokens for the programmatic uGUI surface.
-    // This is one fixed dark presentation. Colors describe structural roles
-    // only; they are never selected from a renderer, material, shader or
-    // category name.
+    internal enum MaterialEditorThemeMode
+    {
+        Legacy,
+        Dark
+    }
+
+    internal enum MaterialEditorThemeColorRole
+    {
+        Transparent,
+        PrimaryText,
+        SecondaryText,
+        DisabledText,
+        Accent,
+        TooltipSurface,
+        NavigatorShaderHeader,
+        InputBorder,
+        StrongBorder,
+        Outline
+    }
+
+
+    // Dynamic visual tokens for the programmatic uGUI surface. Legacy is the
+    // default and reproduces the palette used immediately before the UI
+    // redesign; Dark remains an opt-in presentation of the same semantic roles.
     internal static class MaterialEditorTheme
     {
+        private static MaterialEditorThemeMode _mode =
+            MaterialEditorThemeMode.Legacy;
+
+        internal static MaterialEditorThemeMode Mode => _mode;
+
+        internal static bool SetMode(MaterialEditorThemeMode mode)
+        {
+            if (_mode == mode)
+                return false;
+            _mode = mode;
+            return true;
+        }
+
+        internal static MaterialEditorThemeMode ToggleMode =>
+            _mode == MaterialEditorThemeMode.Legacy
+                ? MaterialEditorThemeMode.Dark
+                : MaterialEditorThemeMode.Legacy;
+
         internal static class Colors
         {
-            internal static readonly Color Window = Rgb(0x1E, 0x23, 0x2B);
-            internal static readonly Color LeftPanel = Rgb(0x20, 0x26, 0x2F);
-            internal static readonly Color CenterPanel = Rgb(0x24, 0x2B, 0x34);
-            internal static readonly Color RightPanel = Rgb(0x22, 0x28, 0x32);
-            internal static readonly Color NeutralHeader = Rgb(0x2A, 0x31, 0x3B);
-            internal static readonly Color PropertyRow = Rgb(0x2A, 0x31, 0x3B);
-            internal static readonly Color PropertyRowAlternate = Rgb(0x2D, 0x35, 0x40);
-            internal static readonly Color InputSurface = Rgb(0x16, 0x1B, 0x22);
-            internal static readonly Color DropdownSurface = Rgb(0x16, 0x1B, 0x22);
-            internal static readonly Color PopupSurface = Rgb(0x16, 0x1B, 0x22);
+            internal static Color Window => Select(Color.white, Rgb(0x1E, 0x23, 0x2B));
+            internal static Color LeftPanel => Select(Gray(0.42f), Rgb(0x20, 0x26, 0x2F));
+            internal static Color CenterPanel => Select(Color.white, Rgb(0x24, 0x2B, 0x34));
+            internal static Color RightPanel => Select(Gray(0.42f), Rgb(0x22, 0x28, 0x32));
+            internal static Color NeutralHeader => Select(Color.gray, Rgb(0x2A, 0x31, 0x3B));
+            internal static Color PropertyRow => Select(new Color(1f, 1f, 1f, 0f), Rgb(0x2A, 0x31, 0x3B));
+            internal static Color PropertyRowAlternate => Select(new Color(0f, 0f, 0f, 0.08f), Rgb(0x2D, 0x35, 0x40));
+            internal static Color InputSurface => Select(Color.white, Rgb(0x16, 0x1B, 0x22));
+            internal static Color DropdownSurface => Select(Color.white, Rgb(0x16, 0x1B, 0x22));
+            internal static Color PopupSurface => Select(Color.white, Rgb(0x16, 0x1B, 0x22));
 
-            internal static readonly Color RendererHeader = Rgb(0x2F, 0x4F, 0x74);
-            internal static readonly Color MaterialHeader = Rgb(0x5A, 0x4A, 0x73);
-            internal static readonly Color ShaderHeader = Rgb(0x36, 0x5C, 0x73);
-            internal static readonly Color CategoryHeader = Rgb(0x6F, 0x5A, 0x8E);
-            internal static readonly Color CategoryHeaderHover = Rgb(0x76, 0x5F, 0x97);
-            internal static readonly Color CategoryHeaderExpanded = Rgb(0x5F, 0x4C, 0x7D);
-            // A neutral, lower-contrast child header keeps Category as the
-            // dominant landmark in any manifest that opts into hierarchy.
-            internal static readonly Color SubcategoryHeader = Rgb(0x3A, 0x42, 0x4C);
-            internal static readonly Color SubcategoryHeaderHover = Rgb(0x44, 0x4D, 0x58);
-            internal static readonly Color SubcategoryHeaderExpanded = Rgb(0x34, 0x3B, 0x44);
+            internal static Color RendererHeader => Select(new Color(0.984f, 0.600f, 0.008f, 0.5f), Rgb(0x2F, 0x4F, 0x74));
+            internal static Color MaterialHeader => Select(new Color(0.400f, 0.690f, 0.196f, 0.5f), Rgb(0x3F, 0x5A, 0x48));
+            internal static Color ShaderHeader => Select(new Color(1f, 1f, 1f, 0f), Rgb(0x36, 0x5C, 0x73));
+            internal static Color NavigatorShaderHeader => Select(Gray(0.64f), Rgb(0x36, 0x5C, 0x73));
+            internal static Color CategoryHeader => Select(new Color(0.627f, 0.004f, 0.812f, 0.5f), Rgb(0x6F, 0x5A, 0x8E));
+            internal static Color CategoryHeaderHover => Select(new Color(0.627f, 0.004f, 0.812f, 0.5f), Rgb(0x76, 0x5F, 0x97));
+            internal static Color CategoryHeaderExpanded => Select(new Color(0.627f, 0.004f, 0.812f, 0.5f), Rgb(0x5F, 0x4C, 0x7D));
+            internal static Color SubcategoryHeader => Select(new Color(0.72f, 0.72f, 0.72f, 0.5f), Rgb(0x3A, 0x42, 0x4C));
+            internal static Color SubcategoryHeaderHover => Select(new Color(0.78f, 0.78f, 0.78f, 0.65f), Rgb(0x44, 0x4D, 0x58));
+            internal static Color SubcategoryHeaderExpanded => Select(new Color(0.68f, 0.68f, 0.68f, 0.55f), Rgb(0x34, 0x3B, 0x44));
 
-            internal static readonly Color Hover = Rgb(0x33, 0x46, 0x5C);
-            internal static readonly Color Pressed = Rgb(0x39, 0x45, 0x53);
-            internal static readonly Color Selected = Rgb(0x3A, 0x74, 0xA8);
-            internal static readonly Color SelectedText = Rgb(0xFF, 0xFF, 0xFF);
-            internal static readonly Color DisabledSurface = Rgb(0x20, 0x26, 0x2F);
-            internal static readonly Color ModifiedIndicator = Rgb(0xD2, 0x94, 0x28);
-            internal static readonly Color ModifiedSurface = Rgb(0x4A, 0x39, 0x20);
+            internal static Color Hover => Select(Gray(0.882353f), Rgb(0x33, 0x46, 0x5C));
+            internal static Color Pressed => Select(Gray(0.698039f), Rgb(0x39, 0x45, 0x53));
+            internal static Color Selected => Select(Rgb(0x4D, 0x84, 0xB8), Rgb(0x3A, 0x74, 0xA8));
+            internal static Color SelectedText => Select(Color.black, Color.white);
+            internal static Color DisabledSurface => Select(Gray(0.521569f), Rgb(0x20, 0x26, 0x2F));
+            internal static Color ModifiedIndicator => Select(Gray(0.35f), Rgb(0x8A, 0x98, 0xA8));
+            internal static Color ModifiedSurface => Select(new Color(0f, 0f, 0f, 0.3f), Rgb(0x34, 0x3C, 0x46));
 
-            internal static readonly Color Primary = Rgb(0xE6, 0xEC, 0xF2);
-            internal static readonly Color Secondary = Rgb(0xAA, 0xB6, 0xC3);
-            internal static readonly Color Disabled = Rgb(0x8A, 0x92, 0x9D);
-            internal static readonly Color Accent = Rgb(0x4A, 0xA3, 0xFF);
-            internal static readonly Color InputBorder = Rgb(0x8D, 0x9B, 0xAA);
-            internal static readonly Color StrongBorder = Rgb(0x73, 0x82, 0x91);
-            internal static readonly Color Divider = Rgb(0x3E, 0x4A, 0x58);
-            internal static readonly Color HandlePressed = Rgb(0x8D, 0xC6, 0xFF);
-            internal static readonly Color Warning = Rgb(0xD7, 0xA4, 0x4A);
-            internal static readonly Color Error = Rgb(0xDD, 0x66, 0x70);
-            internal static readonly Color Success = Rgb(0x62, 0xB9, 0x85);
+            internal static Color Primary => Select(Color.black, Rgb(0xE6, 0xEC, 0xF2));
+            internal static Color NativeControlText => Select(Gray(50f / 255f), Primary);
+            internal static Color Secondary => Select(Gray(0.20f), Rgb(0xAA, 0xB6, 0xC3));
+            internal static Color Disabled => Select(Gray(0.45f), Rgb(0x8A, 0x92, 0x9D));
+            internal static Color Accent => Select(new Color(0.05f, 0.45f, 1f, 1f), Rgb(0x4A, 0xA3, 0xFF));
+            internal static Color InputBorder => Select(Gray(0.28f), Rgb(0x8D, 0x9B, 0xAA));
+            internal static Color StrongBorder => Select(Color.black, Rgb(0x73, 0x82, 0x91));
+            internal static Color Divider => Select(Gray(0.60f), Rgb(0x3E, 0x4A, 0x58));
+            internal static Color HandlePressed => Select(Rgb(0xA5, 0xCD, 0xF5), Rgb(0x8D, 0xC6, 0xFF));
+            internal static Color Warning => Select(Rgb(0x9A, 0x62, 0x00), Rgb(0xD7, 0xA4, 0x4A));
+            internal static Color Error => Select(Rgb(0xA5, 0x1E, 0x2D), Rgb(0xDD, 0x66, 0x70));
+            internal static Color Success => Select(Rgb(0x1F, 0x78, 0x43), Rgb(0x62, 0xB9, 0x85));
 
-            // Compatibility aliases for existing view factories. New code
-            // should prefer the structural names above.
-            internal static readonly Color Panel = CenterPanel;
-            internal static readonly Color Raised = InputSurface;
-            internal static readonly Color Header = NeutralHeader;
-            internal static readonly Color Row = PropertyRow;
-            internal static readonly Color Border = Divider;
+            internal static Color Panel => CenterPanel;
+            internal static Color Raised => InputSurface;
+            internal static Color Header => NeutralHeader;
+            internal static Color Row => Select(new Color(1f, 1f, 1f, 0.6f), PropertyRow);
+            internal static Color Border => Divider;
 
-            // Semantic aliases keep view code independent of concrete controls.
-            // uGUI multiplies a Selectable ColorBlock by Graphic.color, so the
-            // graphic base must remain the neutral multiplication identity.
-            internal static readonly Color TintIdentity = new Color(1f, 1f, 1f, 1f);
-            internal static readonly Color MainPanel = CenterPanel;
-            internal static readonly Color SidePanel = RightPanel;
-            internal static readonly Color NavigatorShaderHeader = ShaderHeader;
-            internal static readonly Color RendererRow = RendererHeader;
-            internal static readonly Color MaterialRow = MaterialHeader;
-            internal static readonly Color ShaderRow = ShaderHeader;
-            internal static readonly Color CategoryRow = CategoryHeader;
-            internal static readonly Color SubcategoryRow = SubcategoryHeader;
-            internal static readonly Color TransparentRow = WithAlpha(PropertyRow, 0f);
-            internal static readonly Color ChangedRow = ModifiedSurface;
-            internal static readonly Color ControlNormal = InputSurface;
-            internal static readonly Color ControlHover = Hover;
-            internal static readonly Color ControlPressed = Pressed;
-            internal static readonly Color ControlDisabled = DisabledSurface;
-            internal static readonly Color ToggleMark = SelectedText;
-            internal static readonly Color SliderTrack = Divider;
-            internal static readonly Color SliderFill = Accent;
-            internal static readonly Color SliderHandle = Primary;
-            internal static readonly Color SliderHandlePressed = HandlePressed;
-            internal static readonly Color ScrollSurface = CenterPanel;
-            internal static readonly Color ScrollbarTrack = RightPanel;
-            internal static readonly Color Scrollbar = StrongBorder;
-            internal static readonly Color ScrollbarHandle = Secondary;
-            internal static readonly Color ScrollbarHandlePressed = HandlePressed;
-            internal static readonly Color PlaceholderText = Secondary;
-            internal static readonly Color ShaderHintUnderline = Accent;
-            internal static readonly Color TooltipSurface = WithAlpha(PopupSurface, 0.98f);
-            internal static readonly Color PrimaryText = Primary;
-            internal static readonly Color SecondaryText = Secondary;
-            internal static readonly Color DisabledText = Disabled;
-            internal static readonly Color Outline = StrongBorder;
+            internal static Color TintIdentity => Color.white;
+            internal static Color MainPanel => CenterPanel;
+            internal static Color SidePanel => RightPanel;
+            internal static Color RendererRow => RendererHeader;
+            internal static Color MaterialRow => MaterialHeader;
+            internal static Color ShaderRow => ShaderHeader;
+            internal static Color CategoryRow => CategoryHeader;
+            internal static Color SubcategoryRow => SubcategoryHeader;
+            internal static Color TransparentRow => new Color(1f, 1f, 1f, 0f);
+            internal static Color ChangedRow => ModifiedSurface;
+            internal static Color ControlNormal => InputSurface;
+            internal static Color ControlHover => Hover;
+            internal static Color ControlPressed => Pressed;
+            internal static Color ControlDisabled => DisabledSurface;
+            internal static Color ToggleMark => SelectedText;
+            internal static Color SliderTrack => Divider;
+            internal static Color SliderFill => Accent;
+            internal static Color SliderHandle => Select(Color.white, Primary);
+            internal static Color SliderHandlePressed => HandlePressed;
+            internal static Color ScrollSurface => CenterPanel;
+            internal static Color ScrollbarTrack => RightPanel;
+            internal static Color Scrollbar => Select(new Color(1f, 1f, 1f, 0.6f), StrongBorder);
+            internal static Color ScrollbarHandle => Select(new Color(1f, 1f, 1f, 0.6f), Secondary);
+            internal static Color ScrollbarHandlePressed => HandlePressed;
+            internal static Color PlaceholderText => Secondary;
+            internal static Color ShaderHintUnderline => Accent;
+            internal static Color TooltipSurface => Select(
+                new Color(0.2f, 0.2f, 0.2f, 0.98f),
+                WithAlpha(Rgb(0x16, 0x1B, 0x22), 0.98f));
+            internal static Color PrimaryText => Primary;
+            internal static Color SecondaryText => Secondary;
+            internal static Color DisabledText => Disabled;
+            internal static Color Outline => StrongBorder;
+
+            internal static Color Resolve(MaterialEditorThemeColorRole role)
+            {
+                switch (role)
+                {
+                    case MaterialEditorThemeColorRole.Transparent:
+                        return TransparentRow;
+                    case MaterialEditorThemeColorRole.PrimaryText:
+                        return PrimaryText;
+                    case MaterialEditorThemeColorRole.SecondaryText:
+                        return SecondaryText;
+                    case MaterialEditorThemeColorRole.DisabledText:
+                        return DisabledText;
+                    case MaterialEditorThemeColorRole.Accent:
+                        return Accent;
+                    case MaterialEditorThemeColorRole.TooltipSurface:
+                        return TooltipSurface;
+                    case MaterialEditorThemeColorRole.NavigatorShaderHeader:
+                        return NavigatorShaderHeader;
+                    case MaterialEditorThemeColorRole.InputBorder:
+                        return InputBorder;
+                    case MaterialEditorThemeColorRole.StrongBorder:
+                        return StrongBorder;
+                    default:
+                        return Outline;
+                }
+            }
+
+
+            private static Color Select(Color legacy, Color dark)
+            {
+                return Select(_mode, legacy, dark);
+            }
+
+            private static Color Select(
+                MaterialEditorThemeMode mode,
+                Color legacy,
+                Color dark)
+            {
+                return mode == MaterialEditorThemeMode.Dark ? dark : legacy;
+            }
+
+            private static Color Gray(float value)
+            {
+                return new Color(value, value, value, 1f);
+            }
 
             private static Color Rgb(int red, int green, int blue)
             {
-                return new Color(
-                    red / 255f,
-                    green / 255f,
-                    blue / 255f,
-                    1f);
+                return new Color(red / 255f, green / 255f, blue / 255f, 1f);
             }
 
             private static Color WithAlpha(Color color, float alpha)
@@ -123,7 +199,6 @@ namespace MaterialEditorAPI
                 return new Color(color.r, color.g, color.b, alpha);
             }
         }
-
         internal static class Metrics
         {
             internal const float CanvasReferenceWidth = 1920f;
@@ -178,7 +253,8 @@ namespace MaterialEditorAPI
             internal const float MaterialRenameButtonWidth = SmallButtonWidth;
             internal const float ShaderLabelMinimumWidth = 70f;
             internal const float ShaderDropdownMinimumWidth = 220f;
-            internal const float ShaderDropdownWidth = ContentWidth;
+            internal const float ShaderDropdownWidth =
+                ContentWidth + Spacing.Control;
             internal const float RenderQueueInputWidth = 94f;
             internal const float OffsetScaleLabelXWidth = 48f;
             internal const float OffsetScaleLabelYWidth = 10f;
@@ -190,7 +266,11 @@ namespace MaterialEditorAPI
             internal const float FloatSliderWidth = ContentWidth - 94f;
             internal const float FloatInputWidth = 94f;
             internal const float VectorComponentLabelWidth = 14f;
-            internal const float VectorComponentInputWidth = 58f;
+            // Four vector channels, including their labels and internal gaps,
+            // must consume the same 318 px editor budget as the other
+            // Timeline-capable property rows. This keeps the stable "O"
+            // column aligned without shrinking the numeric fields.
+            internal const float VectorComponentInputWidth = 62f;
             internal const float KeywordToggleWidth = ContentWidth;
 
             internal const float DropdownTemplateWidth = 100f;
@@ -261,8 +341,6 @@ namespace MaterialEditorAPI
             internal const string AllFolded = FoldCollapsed + FoldCollapsed;
             internal const string AllExpanded = FoldExpanded + FoldExpanded;
             internal const string Reset = "R";
-            internal const string MaterialCollapsed = "+";
-            internal const string MaterialExpanded = "-";
             internal const string ChevronRight = ">";
             internal const string ChevronLeft = "<";
             internal const string Interpolable = "O";
@@ -274,14 +352,17 @@ namespace MaterialEditorAPI
             internal const float DisabledAlpha = 0.55f;
             internal const float HiddenAlpha = 0f;
 
-            internal static readonly Color DefaultSurface = Colors.Row;
-            internal static readonly Color HoveredSurface = Colors.Hover;
-            internal static readonly Color PressedSurface = Colors.Pressed;
-            internal static readonly Color SelectedSurface = Colors.Selected;
-            internal static readonly Color FocusedIndicator = Colors.Accent;
-            internal static readonly Color DisabledText = Colors.Disabled;
-            internal static readonly Color MixedIndicator = Colors.Secondary;
-            internal static readonly Color ModifiedSurface = Colors.ChangedRow;
+            internal static float SelectableFadeDuration =>
+                Mode == MaterialEditorThemeMode.Legacy ? 0.1f : 0.08f;
+
+            internal static Color DefaultSurface => Colors.Row;
+            internal static Color HoveredSurface => Colors.Hover;
+            internal static Color PressedSurface => Colors.Pressed;
+            internal static Color SelectedSurface => Colors.Selected;
+            internal static Color FocusedIndicator => Colors.Accent;
+            internal static Color DisabledText => Colors.Disabled;
+            internal static Color MixedIndicator => Colors.Secondary;
+            internal static Color ModifiedSurface => Colors.ChangedRow;
         }
     }
 }

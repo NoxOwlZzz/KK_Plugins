@@ -8,7 +8,7 @@ namespace MaterialEditorAPI
     internal sealed class NumericInputSpec
     {
         internal static readonly NumericInputSpec FloatingPoint =
-            new NumericInputSpec("0.####", "R");
+            new NumericInputSpec("0.#####", "R");
 
         internal NumericInputSpec(string displayFormat, string editFormat)
         {
@@ -59,7 +59,7 @@ namespace MaterialEditorAPI
     {
         [SerializeField] private InputField _inputField;
         [SerializeField] private RectTransform _viewport;
-        [SerializeField] private string _displayFormat = "0.####";
+        [SerializeField] private string _displayFormat = "0.#####";
         [SerializeField] private string _editFormat = "R";
 
         private bool _editing;
@@ -93,8 +93,9 @@ namespace MaterialEditorAPI
             input.textComponent.verticalOverflow = VerticalWrapMode.Overflow;
 
             EnsureViewport();
-            if (GetComponent<RowColumnLayoutOverride>() == null)
-                gameObject.AddComponent<RowColumnLayoutOverride>();
+            // Column sizing belongs to RowLayoutCatalog or the immediate
+            // editor group. An unconfigured high-priority layout override here
+            // would force nested numeric inputs to zero width.
         }
 
         internal void SetValue(float value)

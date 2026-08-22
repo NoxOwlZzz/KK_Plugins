@@ -1,9 +1,64 @@
-﻿using System;
+using System;
 using UnityEngine;
 using UnityEngine.UI;
 
 namespace MaterialEditorAPI
 {
+    internal static class TimelineColumnBinding
+    {
+        internal static bool Bind(
+            Button button,
+            ListenerScope listeners,
+            Action selectInterpolable)
+        {
+            if (button == null)
+                return false;
+
+            var visible = selectInterpolable != null && IsTimelineAvailable();
+            var buttonObject = button.gameObject;
+            if (!buttonObject.activeSelf)
+                buttonObject.SetActive(true);
+
+            // Timeline owns a stable historical column. Incompatible rows keep
+            // the 20 px slot in layout, but expose no glyph or hit target.
+            var visibility = button.GetComponent<CanvasGroup>()
+                             ?? buttonObject.AddComponent<CanvasGroup>();
+            visibility.alpha = visible
+                ? MaterialEditorTheme.States.VisibleAlpha
+                : MaterialEditorTheme.States.HiddenAlpha;
+            visibility.interactable = visible;
+            visibility.blocksRaycasts = visible;
+            MaterialEditorStyles.SetControlAvailability(
+                button,
+                visible,
+                MaterialEditorControlAvailabilityMode.TimelineSlot);
+
+            var layout = button.GetComponent<RowColumnLayoutOverride>()
+                         ?? buttonObject.AddComponent<RowColumnLayoutOverride>();
+            layout.Configure(RowColumnSpec.Fixed(
+                buttonObject.name,
+                RowColumnRole.Timeline,
+                MaterialEditorLayout.InterpolableButtonWidth));
+
+            var parent = button.transform.parent as RectTransform;
+            if (parent != null)
+                LayoutRebuilder.MarkLayoutForRebuild(parent);
+
+            if (visible)
+                listeners.Listen(button, () => selectInterpolable());
+            return visible;
+        }
+
+        private static bool IsTimelineAvailable()
+        {
+#if API || EC
+            return false;
+#else
+            return TimelineCompatibilityHelper.IsTimelineAvailable();
+#endif
+        }
+    }
+
     internal enum RowColumnRole
     {
         Label,
@@ -221,41 +276,10 @@ namespace MaterialEditorAPI
                     RowColumnRole.Timeline,
                     MaterialEditorLayout.InterpolableButtonWidth),
                 RowColumnSpec.Fixed(
-                    "ColorRText",
+                    "ColorEditorGroup",
                     RowColumnRole.Editor,
-                    MaterialEditorLayout.ColorLabelWidth),
-                RowColumnSpec.Fixed(
-                    "ColorRInput",
-                    RowColumnRole.Editor,
-                    MaterialEditorLayout.ColorInputWidth),
-                RowColumnSpec.Fixed(
-                    "ColorGText",
-                    RowColumnRole.Editor,
-                    MaterialEditorLayout.ColorLabelWidth),
-                RowColumnSpec.Fixed(
-                    "ColorGInput",
-                    RowColumnRole.Editor,
-                    MaterialEditorLayout.ColorInputWidth),
-                RowColumnSpec.Fixed(
-                    "ColorBText",
-                    RowColumnRole.Editor,
-                    MaterialEditorLayout.ColorLabelWidth),
-                RowColumnSpec.Fixed(
-                    "ColorBInput",
-                    RowColumnRole.Editor,
-                    MaterialEditorLayout.ColorInputWidth),
-                RowColumnSpec.Fixed(
-                    "ColorAText",
-                    RowColumnRole.Editor,
-                    MaterialEditorLayout.ColorLabelWidth),
-                RowColumnSpec.Fixed(
-                    "ColorAInput",
-                    RowColumnRole.Editor,
-                    MaterialEditorLayout.ColorInputWidth),
-                RowColumnSpec.Fixed(
-                    "ColorEditButton",
-                    RowColumnRole.Auxiliary,
-                    MaterialEditorLayout.ColorEditButtonWidth),
+                    MaterialEditorLayout.ContentWidth
+                    + MaterialEditorTheme.Spacing.Control),
                 RowColumnSpec.Fixed(
                     "ColorResetButton",
                     RowColumnRole.Reset,
@@ -289,7 +313,8 @@ namespace MaterialEditorAPI
                 RowColumnSpec.Fixed(
                     "EnumDropdown",
                     RowColumnRole.Editor,
-                    MaterialEditorLayout.ContentWidth),
+                    MaterialEditorLayout.ContentWidth
+                    + MaterialEditorTheme.Spacing.Control),
                 RowColumnSpec.Fixed(
                     "EnumResetButton",
                     RowColumnRole.Reset,
@@ -347,9 +372,26 @@ namespace MaterialEditorAPI
                 RowColumnSpec.Fixed(
                     "FloatToggleToggle",
                     RowColumnRole.Editor,
-                    MaterialEditorLayout.KeywordToggleWidth),
+                    MaterialEditorLayout.KeywordToggleWidth
+                    + MaterialEditorTheme.Spacing.Control),
                 RowColumnSpec.Fixed(
                     "FloatToggleResetButton",
+                    RowColumnRole.Reset,
+                    MaterialEditorLayout.ResetButtonWidth)),
+            new RowLayoutSpec(
+                "KeywordPanel",
+                RowColumnSpec.Flexible("KeywordLabel", RowColumnRole.Label),
+                RowColumnSpec.Fixed(
+                    "EmptySpace",
+                    RowColumnRole.Timeline,
+                    MaterialEditorLayout.InterpolableButtonWidth),
+                RowColumnSpec.Fixed(
+                    "KeywordToggle",
+                    RowColumnRole.Editor,
+                    MaterialEditorLayout.KeywordToggleWidth
+                    + MaterialEditorTheme.Spacing.Control),
+                RowColumnSpec.Fixed(
+                    "KeywordResetButton",
                     RowColumnRole.Reset,
                     MaterialEditorLayout.ResetButtonWidth))
         };

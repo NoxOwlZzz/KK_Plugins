@@ -7,6 +7,8 @@ namespace MaterialEditorAPI
 {
     internal static class RendererRowViewFactory
     {
+        private const float RendererActionButtonWidth = 72f;
+
         internal static void CreateRows(Transform parent)
         {
             CreateRendererRow(parent);
@@ -78,14 +80,27 @@ namespace MaterialEditorAPI
                 panel.transform,
                 "Select the properties (Enabled, Shadow casting mode and Receive shadows) of the currently selected renderer as interpolables in timeline");
 
-            var actions = MaterialEditorControlFactory.CreateButton(
-                "RendererActionMenuButton",
+            var exportUvs = MaterialEditorControlFactory.CreateButton(
+                "RendererExportUvsButton",
                 panel.transform,
-                "...");
-            RowViewFactorySupport.SetWidth(actions, SmallButtonWidth);
+                "Export UVs");
+            RowViewFactorySupport.SetWidth(
+                exportUvs,
+                RendererActionButtonWidth);
             TooltipManager.AddTooltip(
-                actions.gameObject,
-                "Renderer actions");
+                exportUvs.gameObject,
+                "Export the UV map of this renderer.\n\nThe UV map is the 2d projection of the renderer with which to map textures to the 3d model. You can use this UV map as a guide to drawing on textures");
+
+            var exportMesh = MaterialEditorControlFactory.CreateButton(
+                "RendererExportMeshButton",
+                panel.transform,
+                "Export Mesh");
+            RowViewFactorySupport.SetWidth(
+                exportMesh,
+                RendererActionButtonWidth);
+            TooltipManager.AddTooltip(
+                exportMesh.gameObject,
+                "Export the renderer as a .obj.\n\nYou can use the <i>ExportBakedMesh</i> and <i>ExportBakedWorldPosition</i> config options to change the exporting behaviour");
         }
 
         private static void CreateBooleanRow(

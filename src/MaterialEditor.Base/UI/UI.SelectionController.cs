@@ -28,30 +28,38 @@ namespace MaterialEditorAPI
 
         internal void InitializeViewState()
         {
-            ApplyRightPanelState();
+            _session.CategoriesVisible =
+                MaterialEditorPluginBase.CategoriesPanelOpen != null
+                && MaterialEditorPluginBase.CategoriesPanelOpen.Value;
+            _session.SelectionPanelsVisible =
+                (MaterialEditorPluginBase.RenderersPanelOpen != null
+                 && MaterialEditorPluginBase.RenderersPanelOpen.Value)
+                || (MaterialEditorPluginBase.MaterialsPanelOpen != null
+                    && MaterialEditorPluginBase.MaterialsPanelOpen.Value);
+            PersistSelectionPanelsVisible(
+                _session.SelectionPanelsVisible);
+            ApplyPanelState();
         }
 
-        internal void ToggleSidePanels()
+        internal void ToggleCategoriesPanel()
         {
-            if (_session.RenameListVisible)
-            {
-                CloseRenamePanel();
-                return;
-            }
-
-            _session.ListsVisible = !_session.ListsVisible;
-            ApplyRightPanelState();
+            var visible = !_session.CategoriesVisible;
+            _session.CategoriesVisible = visible;
+            if (MaterialEditorPluginBase.CategoriesPanelOpen != null
+                && MaterialEditorPluginBase.CategoriesPanelOpen.Value != visible)
+                MaterialEditorPluginBase.CategoriesPanelOpen.Value = visible;
+            ApplyPanelState();
         }
 
-        internal void HideSidePanels()
+        internal void ToggleSelectionPanels()
         {
             var renameWasVisible = _session.RenameListVisible;
-            if (!_session.ListsVisible && !renameWasVisible)
-                return;
-
-            _session.ListsVisible = false;
             _session.RenameListVisible = false;
-            ApplyRightPanelState();
+            var visible =
+                renameWasVisible || !_session.SelectionPanelsVisible;
+            _session.SelectionPanelsVisible = visible;
+            PersistSelectionPanelsVisible(visible);
+            ApplyPanelState();
             if (renameWasVisible)
                 ReleaseRenameContext();
         }
@@ -61,7 +69,7 @@ namespace MaterialEditorAPI
             if (_session.RenameListVisible)
             {
                 _session.RenameListVisible = false;
-                ApplyRightPanelState();
+                ApplyPanelState();
             }
             ReleaseRenameContext();
         }
@@ -69,7 +77,7 @@ namespace MaterialEditorAPI
         internal void ShowRenamePanel(GameObject gameObject, Material material, object data)
         {
             _session.RenameListVisible = true;
-            ApplyRightPanelState();
+            ApplyPanelState();
             PopulateRenameList(gameObject, material, data);
         }
 
@@ -210,7 +218,7 @@ namespace MaterialEditorAPI
             if (_session.RenameListVisible)
             {
                 _session.RenameListVisible = false;
-                ApplyRightPanelState();
+                ApplyPanelState();
             }
             ReleaseRenameContext();
             _session.ClearSelections();
@@ -219,16 +227,35 @@ namespace MaterialEditorAPI
         private void ReleaseRenameContext()
         {
             _view.RenameButton.onClick.RemoveAllListeners();
-            _view.RenameButton.interactable = false;
+            MaterialEditorStyles.SetControlAvailability(
+                _view.RenameButton,
+                false);
             _view.RenameList.ReleaseEntries();
             _session.SelectedMaterialRenderers.Clear();
         }
 
-        private void ApplyRightPanelState()
+        private void ApplyPanelState()
         {
-            _view.SetRightPanelState(
-                _session.ListsVisible,
+            _view.SetPanelState(
+                _session.CategoriesVisible,
+                _session.SelectionPanelsVisible,
                 _session.RenameListVisible);
+        }
+
+        private static void PersistSelectionPanelsVisible(bool visible)
+        {
+            // Preserve both existing keys as compatibility aliases while the
+            // UI exposes one joint Renderers/Materials visibility state.
+            if (MaterialEditorPluginBase.RenderersPanelOpen != null
+                && MaterialEditorPluginBase.RenderersPanelOpen.Value != visible)
+            {
+                MaterialEditorPluginBase.RenderersPanelOpen.Value = visible;
+            }
+            if (MaterialEditorPluginBase.MaterialsPanelOpen != null
+                && MaterialEditorPluginBase.MaterialsPanelOpen.Value != visible)
+            {
+                MaterialEditorPluginBase.MaterialsPanelOpen.Value = visible;
+            }
         }
 
         private void PopulateRenameList(GameObject gameObject, Material material, object data)
@@ -248,7 +275,9 @@ namespace MaterialEditorAPI
             _view.RenameField.text = formattedName;
 
             var suffix = material.NameFormatted().Replace(formattedName, "");
-            _view.RenameButton.interactable = false;
+            MaterialEditorStyles.SetControlAvailability(
+                _view.RenameButton,
+                false);
             _view.RenameButton.onClick.RemoveAllListeners();
             _view.RenameButton.onClick.AddListener(() =>
             {
@@ -267,7 +296,9 @@ namespace MaterialEditorAPI
                 _view.RenameList.AddEntry(capturedRenderer.NameFormatted(), selected =>
                 {
                     UpdateSelection(_session.SelectedMaterialRenderers, capturedRenderer, selected);
-                    _view.RenameButton.interactable = _session.SelectedMaterialRenderers.Count > 0;
+                    MaterialEditorStyles.SetControlAvailability(
+                        _view.RenameButton,
+                        _session.SelectedMaterialRenderers.Count > 0);
                 });
             }
         }

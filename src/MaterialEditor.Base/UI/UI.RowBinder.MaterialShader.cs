@@ -35,8 +35,8 @@ namespace MaterialEditorAPI
             controls.SetVisible(true);
             controls.CollapseButton.GetComponentInChildren<Text>().text =
                 item.Collapsed
-                    ? MaterialEditorTheme.Glyphs.MaterialCollapsed
-                    : MaterialEditorTheme.Glyphs.MaterialExpanded;
+                    ? FoldGlyphs.Collapsed
+                    : FoldGlyphs.Expanded;
             listeners.Listen(
                 controls.CollapseButton, () => item.CollapsedOnChange(!item.Collapsed));
             controls.Name.text = item.MaterialName;
@@ -59,13 +59,10 @@ namespace MaterialEditorAPI
                     clipboard,
                     item.Material,
                     item.Projector);
-                controls.PasteEditsButton.interactable = canPaste;
-                if (controls.PasteEditsLabel != null)
-                {
-                    controls.PasteEditsLabel.color = canPaste
-                        ? MaterialEditorTheme.Colors.PrimaryText
-                        : MaterialEditorTheme.Colors.DisabledText;
-                }
+                MaterialEditorStyles.SetControlAvailability(
+                    controls.PasteEditsButton,
+                    canPaste,
+                    MaterialEditorControlAvailabilityMode.LegacyPassive);
                 if (controls.PasteEditsTooltip != null)
                 {
                     controls.PasteEditsTooltip.SetStandardTooltipText(
@@ -81,10 +78,17 @@ namespace MaterialEditorAPI
                 listeners,
                 refreshPasteAvailability);
 
-            listeners.Listen(controls.CopyEditsButton, () =>
-            {
-                item.Copy();
-            });
+            MaterialEditorStyles.SetControlAvailability(
+                controls.RenameButton,
+                item.Rename != null,
+                MaterialEditorControlAvailabilityMode.Hidden);
+            MaterialEditorStyles.SetControlAvailability(
+                controls.CopyEditsButton,
+                item.Copy != null);
+            if (item.Rename != null)
+                listeners.Listen(controls.RenameButton, () => item.Rename());
+            if (item.Copy != null)
+                listeners.Listen(controls.CopyEditsButton, () => item.Copy());
             listeners.Listen(controls.PasteEditsButton, () =>
             {
                 if (MaterialEditorClipboardPolicy.CanPaste(
@@ -94,17 +98,36 @@ namespace MaterialEditorAPI
                     item.Paste();
             });
 
-            listeners.Listen(
-                controls.ActionMenuButton,
-                () => _controls.Owner.OpenMaterialActionMenu(
-                    controls.ActionMenuButton.transform as RectTransform,
-                    item.CopyOrRemove,
-                    item.MaterialName.Contains(MaterialAPI.MaterialCopyPostfix)
-                        ? "Remove Material"
-                        : "Copy Material",
-                    item.Rename));
+            var removesCopy = item.MaterialName != null
+                              && item.MaterialName.Contains(
+                                  MaterialAPI.MaterialCopyPostfix);
+            var copyOrRemoveAvailable = item.CopyOrRemove != null;
+            MaterialEditorStyles.SetControlAvailability(
+                controls.CopyOrRemoveButton,
+                copyOrRemoveAvailable,
+                MaterialEditorControlAvailabilityMode.Hidden);
+            if (controls.CopyOrRemoveLabel != null)
+            {
+                controls.CopyOrRemoveLabel.text = removesCopy
+                    ? "Remove"
+                    : "Duplicate";
+            }
+            if (controls.CopyOrRemoveTooltip != null)
+            {
+                controls.CopyOrRemoveTooltip.SetStandardTooltipText(
+                    !copyOrRemoveAvailable
+                        ? "This material cannot be duplicated or removed"
+                        : removesCopy
+                            ? "Remove this duplicated material instance"
+                            : "Make a copy of this material.\n\nUseful for overlaying different effects onto an object with different material shaders/properties");
+            }
+            if (copyOrRemoveAvailable)
+            {
+                listeners.Listen(
+                    controls.CopyOrRemoveButton,
+                    () => item.CopyOrRemove());
+            }
         }
-
         private void BindShader(ShaderRowModel item, ListenerScope listeners)
         {
             var controls = _controls.Shader;
@@ -114,10 +137,6 @@ namespace MaterialEditorAPI
                 item.TooltipText,
                 item.ShaderName,
                 controls.Label);
-            controls.CollapseButton.GetComponentInChildren<Text>().text =
-                item.Collapsed ? FoldGlyphs.Collapsed : FoldGlyphs.Expanded;
-            listeners.Listen(
-                controls.CollapseButton, () => item.CollapsedOnChange(!item.Collapsed));
 
             controls.CategoriesCollapseButton.gameObject.SetActive(item.HasCategories);
             controls.CategoriesCollapseButton.GetComponentInChildren<Text>().text =
@@ -170,10 +189,6 @@ namespace MaterialEditorAPI
                     if (resetIndex >= 0)
                         controls.Dropdown.value = resetIndex;
                 });
-            listeners.Listen(
-                controls.SelectInterpolableButton,
-                () => item.SelectInterpolable());
-
             AutoScrollToSelectionWithDropdown.Setup(controls.Dropdown);
             DropdownFilter.AddFilterUI(controls.Dropdown, "ShaderDropDown");
             LabelClickBinding.Bind(

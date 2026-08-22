@@ -57,7 +57,7 @@ namespace MaterialEditorAPI
                 title,
                 selectionChrome
                     ? MaterialEditorTextRole.Title
-                    : MaterialEditorTextRole.Label);
+                    : MaterialEditorTextRole.SecondaryChrome);
 
             _filterInputField = MaterialEditorControlFactory.CreateInputField(
                 name + "Filter",
@@ -110,15 +110,13 @@ namespace MaterialEditorAPI
                     Panel.transform,
                     FoldGlyphs.Expanded);
                 _collapseButton.transform.SetRect(
-                    0f,
-                    1f,
-                    0f,
-                    1f,
+                    0f, 1f, 0f, 1f,
                     MaterialEditorTheme.Spacing.SelectionPanelContentInset,
                     -MaterialEditorTheme.Metrics.SelectionPanelHeaderHeight,
                     MaterialEditorTheme.Metrics.SelectionPanelHeaderHeight,
                     0f);
-                _collapseLabel = _collapseButton.GetComponentInChildren<Text>();
+                _collapseLabel =
+                    _collapseButton.GetComponentInChildren<Text>();
                 _collapseButton.onClick.AddListener(
                     () => SetExpanded(!_expanded));
                 ApplyExpandedVisual();
@@ -154,14 +152,13 @@ namespace MaterialEditorAPI
             if (_listItems.ContainsKey(name))
                 return;
 
-            var contentList = MaterialEditorControlFactory.CreatePanel(
-                _name + "Entry",
-                _scrollRect.content.transform,
-                MaterialEditorPanelRole.Row);
+            var contentList =
+                MaterialEditorControlFactory.CreateStencilMaskPanel(
+                    _name + "Entry",
+                    _scrollRect.content.transform);
             var contentLayout = contentList.gameObject.AddComponent<LayoutElement>();
             contentLayout.minHeight = MaterialEditorUI.PanelHeight;
             contentLayout.preferredHeight = MaterialEditorUI.PanelHeight;
-            contentList.gameObject.AddComponent<Mask>();
 
             var itemPanel = MaterialEditorControlFactory.CreatePanel(
                 _name + "EntryPanel",
@@ -275,6 +272,13 @@ namespace MaterialEditorAPI
             _expandedChanged?.Invoke(_expanded);
         }
 
+        internal void ApplyTheme()
+        {
+            foreach (var entry in _listItems.Values)
+                ApplySelectedState(entry, entry.Toggle.isOn);
+        }
+
+
         private void ConfigureSelectionChrome()
         {
             _titleText.alignment = TextAnchor.MiddleLeft;
@@ -373,6 +377,7 @@ namespace MaterialEditorAPI
             }
         }
 
+
         private void FilterList(string filter)
         {
             _filterPattern = MaterialEditorFilter.Prepare(filter);
@@ -391,7 +396,7 @@ namespace MaterialEditorAPI
         private void UpdateHeader()
         {
             if (_selectionChrome)
-                _titleText.text = _title + " · " + _listItems.Count;
+                _titleText.text = _title;
         }
 
         private void UpdateEmptyState()
@@ -430,17 +435,15 @@ namespace MaterialEditorAPI
             MaterialEditorStyles.SetSelectionListSelected(
                 entry.RowButton,
                 selected);
-            if (entry.Label == null)
-                return;
 
-            entry.Label.fontStyle = selected
-                ? FontStyle.Bold
-                : FontStyle.Normal;
-            entry.Label.color = selected
-                ? MaterialEditorTheme.Colors.SelectedText
-                : MaterialEditorTheme.Colors.SecondaryText;
+            if (entry.Label != null)
+            {
+                entry.Label.fontStyle = selected
+                    ? FontStyle.Bold
+                    : FontStyle.Normal;
+                entry.Label.SetVerticesDirty();
+            }
         }
-
         private sealed class Entry
         {
             internal Entry(

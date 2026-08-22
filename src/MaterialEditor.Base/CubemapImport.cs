@@ -304,7 +304,10 @@ namespace MaterialEditorAPI
                 if (_faceIndex < 6)
                     return true;
 
-                _result.Apply(true, true);
+                // Keep imported Cubemaps CPU-readable. Export must work even in
+                // Unity builds that strip the built-in Skybox/Cubemap shader,
+                // where the GPU readback fallback is unavailable.
+                _result.Apply(true, false);
                 IsComplete = true;
                 ReleaseSourceMemory();
                 return true;

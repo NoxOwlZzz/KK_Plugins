@@ -249,6 +249,40 @@ namespace MaterialEditorAPI
                    isCompatibleWithTarget: (oci) => IsCompatibleWithTarget(RowModel.RowItemType.ColorProperty)
                );
 
+            //Vector value
+            TimelineCompatibility.AddInterpolableModelDynamic(
+                   owner: "MaterialEditor",
+                   id: "vectorProperty",
+                   name: "Vector Property",
+                   interpolateBefore: (oci, parameter, leftValue, rightValue, factor) => SetVector(parameter.GetGameObject(oci), parameter.materialName, parameter.propertyName, Vector4.LerpUnclamped(leftValue, rightValue, factor)),
+                   interpolateAfter: null,
+                   getValue: (oci, parameter) => MaterialPropertyAccess.GetVector(
+                       parameter.GetMaterial(oci),
+                       MaterialPropertyIdCache.Get(parameter.propertyName)),
+                   readValueFromXml: (parameter, node) =>
+                   {
+                       return new Vector4(
+                           XmlConvert.ToSingle(node.Attributes["X"].Value),
+                           XmlConvert.ToSingle(node.Attributes["Y"].Value),
+                           XmlConvert.ToSingle(node.Attributes["Z"].Value),
+                           XmlConvert.ToSingle(node.Attributes["W"].Value)
+                       );
+                   },
+                   writeValueToXml: (parameter, writer, value) =>
+                   {
+                       writer.WriteAttributeString("X", XmlConvert.ToString(value.x));
+                       writer.WriteAttributeString("Y", XmlConvert.ToString(value.y));
+                       writer.WriteAttributeString("Z", XmlConvert.ToString(value.z));
+                       writer.WriteAttributeString("W", XmlConvert.ToString(value.w));
+                   },
+                   getParameter: GetMaterialInfoParameter,
+                   readParameterFromXml: ReadMaterialInfoXml,
+                   writeParameterToXml: WriteMaterialInfoXml,
+                   checkIntegrity: (oci, parameter, leftValue, rightValue) => CheckIntegrity(oci, parameter, leftValue, rightValue, RowModel.RowItemType.VectorProperty),
+                   getFinalName: (currentName, oci, parameter) => $"{parameter.propertyName}: {parameter.materialName}",
+                   isCompatibleWithTarget: (oci) => IsCompatibleWithTarget(RowModel.RowItemType.VectorProperty)
+               );
+
             //Float value
             TimelineCompatibility.AddInterpolableModelDynamic(
                    owner: "MaterialEditor",
@@ -349,7 +383,7 @@ namespace MaterialEditorAPI
                     return true;
                 else if (rowtype == RowModel.RowItemType.Shader && !selectedInterpolable.MaterialName.IsNullOrEmpty())
                     return true;
-                else if ((rowtype == RowModel.RowItemType.TextureProperty || rowtype == RowModel.RowItemType.ColorProperty || rowtype == RowModel.RowItemType.FloatProperty) && !selectedInterpolable.MaterialName.IsNullOrEmpty() && !selectedInterpolable.PropertyName.IsNullOrEmpty())
+                else if ((rowtype == RowModel.RowItemType.TextureProperty || rowtype == RowModel.RowItemType.ColorProperty || rowtype == RowModel.RowItemType.FloatProperty || rowtype == RowModel.RowItemType.VectorProperty) && !selectedInterpolable.MaterialName.IsNullOrEmpty() && !selectedInterpolable.PropertyName.IsNullOrEmpty())
                     return true;
             return false;
         }
@@ -436,6 +470,7 @@ namespace MaterialEditorAPI
                     case RowModel.RowItemType.TextureProperty:
                     case RowModel.RowItemType.ColorProperty:
                     case RowModel.RowItemType.FloatProperty:
+                    case RowModel.RowItemType.VectorProperty:
                         if (materialName.IsNullOrEmpty() || propertyName.IsNullOrEmpty()) return false;
                         break;
                 }

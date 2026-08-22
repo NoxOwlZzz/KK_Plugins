@@ -48,7 +48,10 @@ namespace MaterialEditorAPI
                 string.Empty,
                 LabelWidth,
                 1f);
-            label.fontStyle = FontStyle.Bold;
+            label.fontStyle = MaterialEditorTheme.Mode
+                              == MaterialEditorThemeMode.Legacy
+                ? FontStyle.Normal
+                : FontStyle.Bold;
             label.resizeTextForBestFit = false;
             label.fontSize = MaterialEditorTheme.Typography.PrimaryFontSize;
             label.horizontalOverflow = HorizontalWrapMode.Wrap;
@@ -147,6 +150,12 @@ namespace MaterialEditorAPI
                 parent,
                 ItemColor,
                 true);
+            // The pre-401 offset/scale row did not insert spacing between every
+            // coordinate label and input. Applying the generic 2 px control
+            // spacing ten times shifts OffsetX into the Timeline ("O") column.
+            // Keep this row's historical compact geometry; the explicit group
+            // spacer below is the sole separation between Offset and Scale.
+            panel.GetComponent<HorizontalLayoutGroup>().spacing = 0f;
 
             var label = MaterialEditorControlFactory.CreateText(
                 "OffsetScaleLabel",

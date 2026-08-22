@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
@@ -16,10 +16,15 @@ namespace MaterialEditorAPI
             CanvasGroup panel)
         {
             label.text = text ?? string.Empty;
-            panel.gameObject.GetComponent<Image>().color =
-                changed ? MaterialEditorUI.ItemColorChanged : MaterialEditorUI.ItemColor;
+            MaterialEditorStyles.ApplyPanel(
+                panel.gameObject.GetComponent<Image>(),
+                changed
+                    ? MaterialEditorPanelRole.ModifiedRow
+                    : MaterialEditorPanelRole.PropertyRow);
             if (resetButton)
-                resetButton.interactable = changed;
+                MaterialEditorStyles.SetControlAvailability(
+                    resetButton,
+                    changed);
         }
 
         internal static void SetLabel(Text label, string text)

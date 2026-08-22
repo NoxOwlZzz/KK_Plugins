@@ -7,6 +7,9 @@ namespace MaterialEditorAPI
 {
     internal static class MaterialShaderRowViewFactory
     {
+        private const float CompactMaterialActionWidth = 60f;
+        private const float MaterialCopyOrRemoveActionWidth = 78f;
+
         internal static void CreateRows(Transform parent)
         {
             CreateMaterialRow(parent);
@@ -20,7 +23,7 @@ namespace MaterialEditorAPI
             var collapse = MaterialEditorControlFactory.CreateButton(
                 "MaterialCollapseButton",
                 panel.transform,
-                MaterialEditorTheme.Glyphs.MaterialExpanded);
+                FoldGlyphs.Expanded);
             RowViewFactorySupport.SetWidth(collapse, SmallButtonWidth);
             TooltipManager.AddTooltip(
                 collapse.gameObject,
@@ -35,11 +38,20 @@ namespace MaterialEditorAPI
             materialName.gameObject.AddComponent<LabelClickTrigger>();
             TooltipManager.AddTooltip(materialName.gameObject, "Material name");
 
+            var rename = MaterialEditorControlFactory.CreateButton(
+                "MaterialRenameButton",
+                panel.transform,
+                "Rename");
+            RowViewFactorySupport.SetWidth(rename, CompactMaterialActionWidth);
+            TooltipManager.AddTooltip(
+                rename.gameObject,
+                "Rename material instances");
+
             var copyEdits = MaterialEditorControlFactory.CreateButton(
                 "MaterialCopyEditsButton",
                 panel.transform,
-                "Copy Edits");
-            RowViewFactorySupport.SetWidth(copyEdits, MaterialButtonWidth);
+                "Copy");
+            RowViewFactorySupport.SetWidth(copyEdits, CompactMaterialActionWidth);
             TooltipManager.AddTooltip(
                 copyEdits.gameObject,
                 "Copy all edits from this material");
@@ -47,36 +59,30 @@ namespace MaterialEditorAPI
             var pasteEdits = MaterialEditorControlFactory.CreateButton(
                 "MaterialPasteEditsButton",
                 panel.transform,
-                "Paste Edits");
-            RowViewFactorySupport.SetWidth(pasteEdits, MaterialButtonWidth);
+                "Paste");
+            RowViewFactorySupport.SetWidth(pasteEdits, CompactMaterialActionWidth);
             TooltipManager.AddTooltip(
                 pasteEdits.gameObject,
                 "Copy material edits before pasting");
 
-            var actions = MaterialEditorControlFactory.CreateButton(
-                "MaterialActionMenuButton",
+            var copyOrRemove = MaterialEditorControlFactory.CreateButton(
+                "MaterialCopyOrRemoveButton",
                 panel.transform,
-                "...");
-            RowViewFactorySupport.SetWidth(actions, SmallButtonWidth);
+                "Duplicate");
+            RowViewFactorySupport.SetWidth(
+                copyOrRemove,
+                MaterialCopyOrRemoveActionWidth);
             TooltipManager.AddTooltip(
-                actions.gameObject,
-                "Material actions");
+                copyOrRemove.gameObject,
+                "Make a copy of this material.\n\nUseful for overlaying different effects onto an object with different material shaders/properties");
         }
-
         private static void CreateShaderRow(Transform parent)
         {
             var panel = RowViewFactorySupport.CreatePanel(
                 "ShaderPanel",
                 parent,
                 MaterialEditorStyles.ShaderColor);
-            var collapse = MaterialEditorControlFactory.CreateButton(
-                "ShaderCollapseButton",
-                panel.transform,
-                FoldGlyphs.Expanded);
-            RowViewFactorySupport.SetWidth(collapse, SmallButtonWidth);
-            TooltipManager.AddTooltip(
-                collapse.gameObject,
-                "Expand or collapse this shader section");
+
             var label = RowViewFactorySupport.CreateLabel(
                 "ShaderLabel",
                 panel.transform,
@@ -94,11 +100,6 @@ namespace MaterialEditorAPI
             TooltipManager.AddTooltip(
                 categories.gameObject,
                 "Expand or collapse all property categories");
-
-            RowViewFactorySupport.CreateInterpolableButton(
-                "SelectInterpolableShaderButton",
-                panel.transform,
-                "Select the currently selected shader property and its render queue as interpolables in timeline");
 
             var dropdown = MaterialEditorControlFactory.CreateDropdown(
                 "ShaderDropdown",

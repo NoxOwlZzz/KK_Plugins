@@ -33,12 +33,17 @@ namespace MaterialEditorAPI
                 item.TooltipText,
                 item.PropertyName,
                 controls.Label);
+            TimelineColumnBinding.Bind(
+                controls.SelectInterpolableButton,
+                listeners,
+                item.SelectInterpolable);
             if (controls.Slider.gameObject.activeSelf != item.HasRange)
                 controls.Slider.gameObject.SetActive(item.HasRange);
             controls.InputLayout.SetFixedWidth(
                 item.HasRange
                     ? MaterialEditorLayout.FloatInputWidth
-                    : MaterialEditorLayout.ContentWidth);
+                    : MaterialEditorLayout.ContentWidth
+                      + MaterialEditorTheme.Spacing.Control);
 
             System.Action refresh = () =>
                 ChangedStateBinding.Apply(
@@ -88,9 +93,6 @@ namespace MaterialEditorAPI
                 refresh();
                 item.PresentationRefresh?.Invoke();
             });
-            listeners.Listen(
-                controls.SelectInterpolableButton,
-                () => item.SelectInterpolable());
             LabelClickBinding.Bind(
                 listeners,
                 controls.LabelClickTrigger,

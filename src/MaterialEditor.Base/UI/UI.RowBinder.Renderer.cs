@@ -72,15 +72,22 @@ namespace MaterialEditorAPI
                 item.TooltipText,
                 item.RendererName,
                 controls.Name);
-            listeners.Listen(
-                controls.ActionMenuButton,
-                () => _controls.Owner.OpenRendererActionMenu(
-                    controls.ActionMenuButton.transform as UnityEngine.RectTransform,
-                    item.ExportUv,
-                    item.ExportObj));
-            listeners.Listen(
+            MaterialEditorStyles.SetControlAvailability(
+                controls.ExportUvsButton,
+                item.ExportUv != null,
+                MaterialEditorControlAvailabilityMode.LegacyPassive);
+            MaterialEditorStyles.SetControlAvailability(
+                controls.ExportMeshButton,
+                item.ExportObj != null,
+                MaterialEditorControlAvailabilityMode.LegacyPassive);
+            if (item.ExportUv != null)
+                listeners.Listen(controls.ExportUvsButton, () => item.ExportUv());
+            if (item.ExportObj != null)
+                listeners.Listen(controls.ExportMeshButton, () => item.ExportObj());
+            TimelineColumnBinding.Bind(
                 controls.SelectInterpolableButton,
-                () => item.SelectInterpolable());
+                listeners,
+                null);
             LabelClickBinding.Bind(
                 listeners,
                 controls.LabelClickTrigger,

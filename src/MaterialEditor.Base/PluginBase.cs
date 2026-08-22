@@ -76,6 +76,10 @@ namespace MaterialEditorAPI
         /// Configuration entry for width of the renderer/materials lists to the side of the window
         /// </summary>
         public static ConfigEntry<float> UIListWidth { get; set; }
+        internal static ConfigEntry<MaterialEditorThemeMode> UITheme { get; private set; }
+        internal static ConfigEntry<bool> CategoriesPanelOpen { get; private set; }
+        internal static ConfigEntry<bool> RenderersPanelOpen { get; private set; }
+        internal static ConfigEntry<bool> MaterialsPanelOpen { get; private set; }
         /// <summary>
         /// Configuration entry for sensitivity of dragging labels to edit float values
         /// </summary>
@@ -237,6 +241,36 @@ namespace MaterialEditorAPI
             UIWidth = Config.Bind("Config", "UI Width", MaterialEditorTheme.Metrics.WindowWidthDefault, new ConfigDescription("Controls the size of the window.", new AcceptableValueRange<float>(MaterialEditorTheme.Metrics.WindowWidthMinimum, MaterialEditorTheme.Metrics.WindowWidthMaximum), new ConfigurationManagerAttributes { Order = 6, ShowRangeAsPercent = false }));
             UIHeight = Config.Bind("Config", "UI Height", MaterialEditorTheme.Metrics.WindowHeightDefault, new ConfigDescription("Controls the size of the window.", new AcceptableValueRange<float>(MaterialEditorTheme.Metrics.WindowHeightMinimum, MaterialEditorTheme.Metrics.WindowHeightMaximum), new ConfigurationManagerAttributes { Order = 5, ShowRangeAsPercent = false }));
             UIListWidth = Config.Bind("Config", "UI List Width", MaterialEditorTheme.Metrics.SidePanelDefaultWidth, new ConfigDescription("Controls width of the renderer/materials lists to the side of the window", new AcceptableValueRange<float>(MaterialEditorTheme.Metrics.SidePanelMinimumWidth, MaterialEditorTheme.Metrics.SidePanelMaximumWidth), new ConfigurationManagerAttributes { Order = 4, ShowRangeAsPercent = false }));
+            UITheme = Config.Bind(
+                "Config",
+                "UI Theme",
+                MaterialEditorThemeMode.Legacy,
+                "Selects the original Legacy palette or the optional Dark palette. This changes visuals only.");
+            MaterialEditorTheme.SetMode(UITheme.Value);
+            CategoriesPanelOpen = Config.Bind(
+                "UI State",
+                "Categories Panel Open",
+                false,
+                new ConfigDescription(
+                    "Remembers whether the Categories panel was left open.",
+                    null,
+                    new ConfigurationManagerAttributes { Browsable = false }));
+            RenderersPanelOpen = Config.Bind(
+                "UI State",
+                "Renderers Panel Open",
+                false,
+                new ConfigDescription(
+                    "Compatibility state for the jointly visible Renderers and Materials panels.",
+                    null,
+                    new ConfigurationManagerAttributes { Browsable = false }));
+            MaterialsPanelOpen = Config.Bind(
+                "UI State",
+                "Materials Panel Open",
+                false,
+                new ConfigDescription(
+                    "Compatibility state for the jointly visible Renderers and Materials panels.",
+                    null,
+                    new ConfigurationManagerAttributes { Browsable = false }));
             DragSensitivity = Config.Bind("Config", "Drag Sensitivity", 30f, new ConfigDescription("Controls the sensitivity of dragging labels to edit float values", new AcceptableValueRange<float>(1f, 100f), new ConfigurationManagerAttributes { Order = 3, ShowRangeAsPercent = false }));
             PreventDragout = Config.Bind(
                 "Config",
@@ -312,6 +346,7 @@ namespace MaterialEditorAPI
             UIWidth.SettingChanged += MaterialEditorUI.UISettingChanged;
             UIHeight.SettingChanged += MaterialEditorUI.UISettingChanged;
             UIListWidth.SettingChanged += MaterialEditorUI.UISettingChanged;
+            UITheme.SettingChanged += MaterialEditorUI.UIThemeSettingChanged;
             WatchTexChanges.SettingChanged += WatchTexChanges_SettingChanged;
             ShaderOptimization.SettingChanged += ShaderOptimization_SettingChanged;
             ConfigExportPath.SettingChanged += ConfigExportPath_SettingChanged;
@@ -325,6 +360,14 @@ namespace MaterialEditorAPI
 
             ResourceRedirection.RegisterAssetLoadedHook(HookBehaviour.OneCallbackPerResourceLoaded, AssetLoadedHook);
             LoadXML();
+        }
+
+        internal static void ToggleUITheme()
+        {
+            if (UITheme == null)
+                return;
+
+            UITheme.Value = MaterialEditorTheme.ToggleMode;
         }
 
         private static void PerformanceSettingsChanged(object sender, EventArgs eventArgs)

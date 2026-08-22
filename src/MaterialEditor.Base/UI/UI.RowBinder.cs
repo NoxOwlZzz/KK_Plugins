@@ -9,11 +9,9 @@ namespace MaterialEditorAPI
         private RowModel _currentModel;
         private RowControlSet _controls;
         private RowHandlerRegistry _registry;
-        private MaterialEditorRowActionMenu _rowActionMenu;
         private MaterialEditorClipboardViewState _clipboardViewState;
         private readonly ListenerScope _listeners = new ListenerScope();
         private bool _bindingActive;
-        private int _bindingGeneration;
 
         internal RowModel CurrentModel
         {
@@ -31,7 +29,6 @@ namespace MaterialEditorAPI
             var canvas = GetComponentInParent<Canvas>();
             if (canvas != null)
             {
-                _rowActionMenu = canvas.GetComponent<MaterialEditorRowActionMenu>();
                 _clipboardViewState =
                     canvas.GetComponent<MaterialEditorClipboardViewState>()
                     ?? canvas.gameObject.AddComponent<MaterialEditorClipboardViewState>();
@@ -89,7 +86,6 @@ namespace MaterialEditorAPI
                 && ReferenceEquals(item, _currentModel)
                 && _bindingActive)
                 return;
-            InvalidateActionMenu();
             var bindSample = MaterialEditorPerformance.Start(
                 MaterialEditorPerformanceMetric.Bind);
             try
@@ -140,14 +136,12 @@ namespace MaterialEditorAPI
 
         internal void SuspendListeners()
         {
-            InvalidateActionMenu();
             ClearListeners();
             _bindingActive = false;
         }
 
         internal void Release()
         {
-            InvalidateActionMenu();
             ClearListeners();
             _bindingActive = false;
             _currentModel = null;
@@ -159,40 +153,6 @@ namespace MaterialEditorAPI
             }
         }
 
-        internal void OpenRendererActionMenu(
-            RectTransform anchor,
-            Action exportUv,
-            Action exportObj)
-        {
-            if (_rowActionMenu == null
-                || !IsActionMenuBindingValid(_bindingGeneration))
-                return;
-            _rowActionMenu.OpenRenderer(
-                this,
-                _bindingGeneration,
-                anchor,
-                exportUv,
-                exportObj);
-        }
-
-        internal void OpenMaterialActionMenu(
-            RectTransform anchor,
-            Action copyOrRemove,
-            string copyOrRemoveLabel,
-            Action rename)
-        {
-            if (_rowActionMenu == null
-                || !IsActionMenuBindingValid(_bindingGeneration))
-                return;
-            _rowActionMenu.OpenMaterial(
-                this,
-                _bindingGeneration,
-                anchor,
-                copyOrRemove,
-                copyOrRemoveLabel,
-                rename);
-        }
-
         internal void ListenForClipboardChanges(
             ListenerScope listeners,
             Action listener)
@@ -202,15 +162,6 @@ namespace MaterialEditorAPI
 
             _clipboardViewState.Changed += listener;
             listeners.OnDispose(() => _clipboardViewState.Changed -= listener);
-        }
-
-        internal bool IsActionMenuBindingValid(int generation)
-        {
-            return generation == _bindingGeneration
-                   && _bindingActive
-                   && _currentModel != null
-                   && _currentModel.Enabled
-                   && gameObject.activeInHierarchy;
         }
 
         public void SetVisible(bool visible)
@@ -238,8 +189,7 @@ namespace MaterialEditorAPI
 
         private void ClearListeners()
         {
-            if (_rowActionMenu != null)
-                _rowActionMenu.CloseIfOwner(this);
+
             if (!_bindingActive)
                 return;
 
@@ -257,15 +207,6 @@ namespace MaterialEditorAPI
             }
         }
 
-        private void InvalidateActionMenu()
-        {
-            if (_rowActionMenu != null)
-                _rowActionMenu.CloseIfOwner(this);
-            unchecked
-            {
-                _bindingGeneration++;
-            }
-        }
     }
 
     // View-local interaction-state invalidation. It never retains a row after

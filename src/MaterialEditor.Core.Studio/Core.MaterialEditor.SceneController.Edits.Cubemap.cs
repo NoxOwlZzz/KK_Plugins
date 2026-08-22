@@ -86,10 +86,7 @@ namespace KK_Plugins.MaterialEditor
             MaterialCubemapProperty cubemapProperty = null;
             var propertyAdded = false;
             int? previousTexID = null;
-            Dictionary<Material, Cubemap> previousOriginalMaterials = null;
-            List<MaterialCubemapOriginalBinding> previousOriginalBindings = null;
-            var previousBindingsNeedRemap = false;
-            var previousSnapshotWarningLogged = false;
+            MaterialCubemapOriginalState.Checkpoint previousOriginalState = null;
             Dictionary<Material, Cubemap> previousAppliedValues = null;
             string materialName = null;
             GameObject gameObject = null;
@@ -149,12 +146,8 @@ namespace KK_Plugins.MaterialEditor
                 else
                 {
                     previousTexID = cubemapProperty.TexID;
-                    previousOriginalMaterials = cubemapProperty.CubemapOriginalMaterials;
-                    previousOriginalBindings = cubemapProperty.CubemapOriginalBindings;
-                    previousBindingsNeedRemap =
-                        cubemapProperty.CubemapOriginalBindingsNeedRemap;
-                    previousSnapshotWarningLogged =
-                        cubemapProperty.CubemapOriginalSnapshotWarningLogged;
+                    previousOriginalState =
+                        cubemapProperty.CubemapOriginalState.CaptureCheckpoint();
                     cubemapProperty.TexID = texID;
                 }
 
@@ -168,10 +161,7 @@ namespace KK_Plugins.MaterialEditor
                     cubemapProperty,
                     propertyAdded,
                     previousTexID,
-                    previousOriginalMaterials,
-                    previousOriginalBindings,
-                    previousBindingsNeedRemap,
-                    previousSnapshotWarningLogged,
+                    previousOriginalState,
                     previousAppliedValues,
                     texID,
                     textureEntryCreated);
@@ -190,10 +180,7 @@ namespace KK_Plugins.MaterialEditor
                     cubemapProperty,
                     propertyAdded,
                     previousTexID,
-                    previousOriginalMaterials,
-                    previousOriginalBindings,
-                    previousBindingsNeedRemap,
-                    previousSnapshotWarningLogged,
+                    previousOriginalState,
                     previousAppliedValues,
                     texID,
                     textureEntryCreated);
@@ -219,10 +206,7 @@ namespace KK_Plugins.MaterialEditor
             MaterialCubemapProperty cubemapProperty,
             bool propertyAdded,
             int? previousTexID,
-            Dictionary<Material, Cubemap> previousOriginalMaterials,
-            List<MaterialCubemapOriginalBinding> previousOriginalBindings,
-            bool previousBindingsNeedRemap,
-            bool previousSnapshotWarningLogged,
+            MaterialCubemapOriginalState.Checkpoint previousOriginalState,
             Dictionary<Material, Cubemap> previousAppliedValues,
             int texID,
             bool textureEntryCreated)
@@ -252,13 +236,9 @@ namespace KK_Plugins.MaterialEditor
                 else
                 {
                     cubemapProperty.TexID = previousTexID;
-                    cubemapProperty.CubemapOriginalMaterials = previousOriginalMaterials;
-                    cubemapProperty.CubemapOriginalBindings = previousOriginalBindings;
-                    cubemapProperty.CubemapOriginalBindingsNeedRemap =
-                        previousBindingsNeedRemap;
-                    cubemapProperty.CubemapOriginalSnapshotWarningLogged =
-                        previousSnapshotWarningLogged
-                        || cubemapProperty.CubemapOriginalSnapshotWarningLogged;
+                    cubemapProperty.CubemapOriginalState.RestoreCheckpoint(
+                        previousOriginalState,
+                        true);
                 }
             }
 
@@ -351,13 +331,8 @@ namespace KK_Plugins.MaterialEditor
                 return;
 
             var gameObject = GetObjectByID(id);
-            if (!cubemapProperty.SynchronizeCubemapOriginalSnapshot(gameObject))
+            if (!cubemapProperty.RestoreCubemapOriginalSnapshot(gameObject))
                 return;
-            MaterialCubemapOriginalSnapshot.RestoreByMaterialReference(
-                gameObject,
-                cubemapProperty.MaterialName,
-                cubemapProperty.Property,
-                cubemapProperty.CubemapOriginalMaterials);
             cubemapProperty.ClearCubemapOriginalSnapshot();
             cubemapProperty.TexID = null;
             if (cubemapProperty.NullCheck())

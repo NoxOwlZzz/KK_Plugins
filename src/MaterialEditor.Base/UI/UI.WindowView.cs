@@ -16,20 +16,17 @@ namespace MaterialEditorAPI
         internal Text HeaderTitle { get; private set; }
         internal ScrollRect ScrollableUI { get; private set; }
         internal InputField FilterInputField { get; private set; }
-        internal Button CategoryNavigatorButton { get; private set; }
         internal Button CollapseAllCategoriesButton { get; private set; }
         internal Button CollapseAllSectionsButton { get; private set; }
-        internal Button ViewListButton { get; private set; }
         internal Transform HeaderContextSlot => _topBar.HeaderContextSlot;
 
         private MaterialEditorTopBarView _topBar;
-        private MaterialEditorRowActionMenu _rowActionMenu;
+        private MaterialEditorThemeRepaintCoordinator _themeRepaint;
         private Text _emptyStateText;
-        private Button _rightPanelToggleButton;
-        private Tooltip _rightPanelToggleTooltip;
-        private bool _selectionListsVisible;
+        private bool _categoriesVisible;
+        private bool _selectionPanelsVisible;
         private bool _renameListVisible;
-        private bool _rightPanelStateInitialized;
+        private bool _panelStateInitialized;
         private MaterialEditorResponsiveLayout _responsiveLayout;
         private Vector2 _responsiveBaseAnchoredPosition;
         private bool _hasResponsiveBasePosition;
@@ -50,25 +47,42 @@ namespace MaterialEditorAPI
             string filter,
             Action<string> filterChanged,
             Action close,
-            Action toggleSidePanels,
-            Action hideSidePanels,
+            Action toggleCategoriesPanel,
+            Action toggleSelectionPanels,
             Action toggleAllCategories,
             Action toggleAllSections,
             Action<CategoryNavigationTarget> navigateToCategory,
             Action<CategoryNavigationTarget> toggleCategory)
         {
             Build(
-                owner, filter, filterChanged, close, toggleSidePanels,
-                hideSidePanels, toggleAllCategories, toggleAllSections,
+                owner, filter, filterChanged, close,
+                toggleCategoriesPanel, toggleSelectionPanels,
+                toggleAllCategories, toggleAllSections,
                 navigateToCategory, toggleCategory);
         }
 
         internal void PrepareForDisplay(string filter)
         {
-            _rowActionMenu?.Close();
             Window.gameObject.SetActive(true);
             ApplySettings();
             _topBar.PrepareForDisplay(filter);
+            // Legacy is the startup mode, so no configuration-change event is
+            // raised for it. Reapply semantics after activation just as the Dark
+            // toggle does, then let the shared coordinator settle render caches.
+            ApplyTheme();
+        }
+
+        internal void ApplyTheme()
+        {
+            if (Window == null)
+                return;
+
+            MaterialEditorStyles.ReapplyTheme(Window.gameObject);
+            RendererList?.ApplyTheme();
+            MaterialList?.ApplyTheme();
+            RenameList?.ApplyTheme();
+            _topBar?.RefreshThemeButton();
+            _themeRepaint?.RequestRepaint();
         }
 
         internal void ApplySettings()
@@ -113,13 +127,9 @@ namespace MaterialEditorAPI
                         MaterialEditorLayout.Margin
                         + _responsiveLayout.RightPanelWidth);
 
-                ApplyRightPanelToggleLayout();
-
                 if (CategoryNavigator != null)
                 {
                     CategoryNavigator.ApplySettings();
-                    _topBar?.SetCategoryNavigatorExpanded(
-                        CategoryNavigator.Expanded);
                 }
 
                 VirtualList?.EnsureViewportCapacity(
@@ -200,18 +210,22 @@ namespace MaterialEditorAPI
                 ApplySettings();
         }
 
-        internal void SetRightPanelState(
-            bool selectionListsVisible,
+        internal void SetPanelState(
+            bool categoriesVisible,
+            bool selectionPanelsVisible,
             bool renameListVisible)
         {
-            if (_rightPanelStateInitialized
-                && _selectionListsVisible == selectionListsVisible
+            if (_panelStateInitialized
+                && _categoriesVisible == categoriesVisible
+                && _selectionPanelsVisible == selectionPanelsVisible
                 && _renameListVisible == renameListVisible)
                 return;
 
-            _rightPanelStateInitialized = true;
-            _selectionListsVisible = selectionListsVisible;
+            _panelStateInitialized = true;
+            _categoriesVisible = categoriesVisible;
+            _selectionPanelsVisible = selectionPanelsVisible;
             _renameListVisible = renameListVisible;
+            CategoryNavigator?.SetVisible(categoriesVisible);
             UpdateRightPanelVisibility();
             MaterialEditorPerformance.Increment(
                 MaterialEditorPerformanceMetric.LayoutInvalidations);
@@ -233,8 +247,8 @@ namespace MaterialEditorAPI
             string filter,
             Action<string> filterChanged,
             Action close,
-            Action toggleSidePanels,
-            Action hideSidePanels,
+            Action toggleCategoriesPanel,
+            Action toggleSelectionPanels,
             Action toggleAllCategories,
             Action toggleAllSections,
             Action<CategoryNavigationTarget> navigateToCategory,
@@ -252,6 +266,8 @@ namespace MaterialEditorAPI
             Window.gameObject
                 .AddComponent<MaterialEditorResponsiveCanvasWatcher>()
                 .Initialize(OnCanvasDimensionsChanged);
+            _themeRepaint = Window.gameObject
+                .AddComponent<MaterialEditorThemeRepaintCoordinator>();
 
             MainPanel = MaterialEditorControlFactory.CreatePanel(
                 "Panel",
@@ -267,33 +283,24 @@ namespace MaterialEditorAPI
                 MaterialEditorTheme.Colors.Outline);
 
             TooltipManager.Init(Window.transform);
-            _rowActionMenu = Window.gameObject
-                .AddComponent<MaterialEditorRowActionMenu>();
 
             _topBar = new MaterialEditorTopBarView(
                 MainPanel.transform,
-                Window.transform,
                 filter,
                 filterChanged,
                 close,
-                toggleSidePanels,
+                toggleCategoriesPanel,
+                toggleSelectionPanels,
                 toggleAllCategories,
-                toggleAllSections,
-                ToggleCategoryNavigator,
-                _rowActionMenu.Close);
-            _rowActionMenu.Initialize(
-                Window.transform,
-                _topBar.CloseGlobalMenu);
+                toggleAllSections);
             HeaderPanel = _topBar.HeaderPanel;
             ModePanel = _topBar.ModePanel;
             HeaderTitle = _topBar.HeaderTitle;
             FilterInputField = _topBar.FilterInputField;
-            CategoryNavigatorButton = _topBar.CategoryNavigatorButton;
             CollapseAllCategoriesButton =
                 _topBar.CollapseAllCategoriesButton;
             CollapseAllSectionsButton =
                 _topBar.CollapseAllSectionsButton;
-            ViewListButton = _topBar.ViewListButton;
             _movableWindow = UIUtility.MakeObjectDraggable(
                 HeaderPanel.rectTransform,
                 MainPanel.rectTransform,
@@ -318,7 +325,6 @@ namespace MaterialEditorAPI
             ScrollableUI.viewport.offsetMax = new Vector2(MaterialEditorLayout.ScrollbarOffset, 0f);
             ScrollableUI.movementType = ScrollRect.MovementType.Clamped;
             MaterialEditorStyles.ApplyScrollView(ScrollableUI);
-            _rowActionMenu.BindScrollRect(ScrollableUI);
 
             _emptyStateText = MaterialEditorControlFactory.CreateText(
                 "MaterialEditorEmptyState",
@@ -347,9 +353,7 @@ namespace MaterialEditorAPI
                 MainPanel.transform,
                 VirtualList.ScrollRect.content,
                 navigateToCategory,
-                toggleCategory,
-                SetCategoryNavigatorGlyph);
-            SetCategoryNavigatorGlyph(CategoryNavigator.Expanded);
+                toggleCategory);
             VirtualList.ViewportAnchorIndexChanged += rowIndex =>
             {
                 CategoryNavigator.SetViewportAnchor(
@@ -357,7 +361,7 @@ namespace MaterialEditorAPI
                     VirtualList.ViewportAnchorIsProgrammatic);
             };
 
-            BuildSelectionPanels(toggleSidePanels, hideSidePanels);
+            BuildSelectionPanels();
             BuildRenamePanel();
             ApplySettings();
         }
@@ -366,10 +370,13 @@ namespace MaterialEditorAPI
             MaterialEditorPresentation presentation,
             bool deferCategoryAnchor = false)
         {
+            var categoriesWereVisible = CategoryNavigator.Visible;
             CategoryNavigator.SetPresentation(
                 presentation,
                 deferCategoryAnchor);
             _topBar.SetPresentation(presentation);
+            if (categoriesWereVisible != CategoryNavigator.Visible)
+                ApplySettings();
             SetEmptyState(
                 presentation == null
                     ? null
@@ -386,9 +393,11 @@ namespace MaterialEditorAPI
 
         internal void ReleasePresentation()
         {
-            _rowActionMenu.Close();
+            var categoriesWereVisible = CategoryNavigator.Visible;
             CategoryNavigator.ReleasePresentation();
             _topBar.ReleasePresentation();
+            if (categoriesWereVisible != CategoryNavigator.Visible)
+                ApplySettings();
             SetEmptyState(null);
         }
 
@@ -404,23 +413,7 @@ namespace MaterialEditorAPI
                 _emptyStateText.gameObject.SetActive(visible);
         }
 
-        private void ToggleCategoryNavigator()
-        {
-            if (CategoryNavigator == null)
-                return;
-
-            CategoryNavigator.ToggleExpanded();
-        }
-
-        private void SetCategoryNavigatorGlyph(bool expanded)
-        {
-            _topBar.SetCategoryNavigatorExpanded(expanded);
-            ApplySettings();
-        }
-
-        private void BuildSelectionPanels(
-            Action toggleSidePanels,
-            Action hideSidePanels)
+        private void BuildSelectionPanels()
         {
             RendererList = new SelectListPanel(
                 MainPanel.transform,
@@ -431,23 +424,6 @@ namespace MaterialEditorAPI
                 expanded => ApplySelectionPanelLayout());
             RendererList.ToggleVisibility(false);
 
-            var rendererTitle = RendererList.Panel.transform.Find(
-                "RendererListTitle");
-            if (rendererTitle != null)
-            {
-                rendererTitle.SetRect(
-                    0f,
-                    1f,
-                    1f,
-                    1f,
-                    MaterialEditorTheme.Metrics.SelectionPanelHeaderHeight
-                    + MaterialEditorTheme.Spacing.Control,
-                    -MaterialEditorTheme.Metrics.SelectionPanelHeaderHeight,
-                    -MaterialEditorTheme.Metrics.SelectionPanelHeaderHeight
-                    - MaterialEditorTheme.Spacing.SelectionPanelContentInset,
-                    0f);
-            }
-
             MaterialList = new SelectListPanel(
                 MainPanel.transform,
                 "MaterialList",
@@ -456,50 +432,6 @@ namespace MaterialEditorAPI
                 true,
                 expanded => ApplySelectionPanelLayout());
             MaterialList.ToggleVisibility(false);
-
-            _rightPanelToggleButton =
-                MaterialEditorControlFactory.CreateButton(
-                    "MaterialEditorSelectionListsToggleHorizontal",
-                    MainPanel.transform,
-                    MaterialEditorTheme.Glyphs.ChevronLeft);
-            _rightPanelToggleButton.onClick.AddListener(
-                () =>
-                {
-                    if (_selectionListsVisible || _renameListVisible)
-                        hideSidePanels();
-                    else
-                        toggleSidePanels();
-                });
-            _rightPanelToggleTooltip = TooltipManager.AddTooltip(
-                _rightPanelToggleButton.gameObject,
-                "Show Renderers and Materials");
-        }
-
-        private void ApplyRightPanelToggleLayout()
-        {
-            if (_rightPanelToggleButton == null)
-                return;
-
-            var expanded = _selectionListsVisible || _renameListVisible;
-            var width = expanded
-                ? MaterialEditorTheme.Metrics.SelectionPanelHeaderHeight
-                : MaterialEditorTheme.Metrics.SelectionPanelCollapsedWidth;
-            var right = expanded
-                ? MaterialEditorLayout.Margin
-                  + (_responsiveLayout == null
-                      ? MaterialEditorTheme.Metrics.SidePanelDefaultWidth
-                      : _responsiveLayout.RightPanelWidth)
-                : MaterialEditorTheme.Metrics.SelectionPanelCollapsedWidth;
-            _rightPanelToggleButton.transform.SetRect(
-                1f,
-                1f,
-                1f,
-                1f,
-                right - width,
-                -MaterialEditorTheme.Metrics.SelectionPanelHeaderHeight,
-                right,
-                0f);
-            _rightPanelToggleButton.transform.SetAsLastSibling();
         }
 
         private void BuildRenamePanel()
@@ -520,7 +452,9 @@ namespace MaterialEditorAPI
             RenameMaterial = UnityEngine.Object.Instantiate(RenameList.Panel.transform.GetChild(0), RenameList.Panel.transform).GetComponent<Text>();
             RenameMaterial.gameObject.name = "MaterialEditorRenameMaterial";
             RenameMaterial.transform.SetRect(0f, 1f, 1f, 1f, 5f, -20f, -2f, -5f);
-            MaterialEditorStyles.ApplyText(RenameMaterial);
+            MaterialEditorStyles.ApplyText(
+                RenameMaterial,
+                MaterialEditorTextRole.Chrome);
             MaterialEditorStyles.ApplyTypography(RenameList.Panel.gameObject);
         }
 
@@ -584,52 +518,22 @@ namespace MaterialEditorAPI
             if (RendererList == null || MaterialList == null || RenameList == null)
                 return;
 
-            var showSelectionLists =
-                _selectionListsVisible && !_renameListVisible;
-            RendererList.ToggleVisibility(showSelectionLists);
-            MaterialList.ToggleVisibility(showSelectionLists);
+            var showSelectionPanels =
+                _selectionPanelsVisible && !_renameListVisible;
+            RendererList.ToggleVisibility(showSelectionPanels);
+            MaterialList.ToggleVisibility(showSelectionPanels);
             RenameList.ToggleVisibility(_renameListVisible);
-            if (_rightPanelToggleButton != null)
-            {
-                var expanded = showSelectionLists || _renameListVisible;
-                var toggleLabel = _rightPanelToggleButton
-                    .GetComponentInChildren<Text>();
-                if (toggleLabel != null)
-                {
-                    toggleLabel.text = expanded
-                        ? MaterialEditorTheme.Glyphs.ChevronRight
-                        : MaterialEditorTheme.Glyphs.ChevronLeft;
-                }
-                _rightPanelToggleTooltip?.SetStandardTooltipText(
-                    expanded
-                        ? "Hide Renderers and Materials"
-                        : "Show Renderers and Materials");
-                _rightPanelToggleButton.gameObject.SetActive(true);
-            }
-
-            if (ViewListButton == null)
-                return;
-
-            var label = ViewListButton.GetComponentInChildren<Text>();
-            if (label == null)
-                return;
-            label.text = _renameListVisible
-                ? "Back to Renderers and Materials"
-                : (_selectionListsVisible
-                    ? "Hide Renderers and Materials"
-                    : "Show Renderers and Materials");
         }
 
         private MaterialEditorResponsiveLayout CalculateResponsiveLayout()
         {
-            var leftState = CategoryNavigator == null
-                ? MaterialEditorResponsiveSideState.Hidden
-                : (CategoryNavigator.Expanded
-                    ? MaterialEditorResponsiveSideState.Expanded
-                    : MaterialEditorResponsiveSideState.Collapsed);
+            var leftState = CategoryNavigator != null
+                            && CategoryNavigator.Visible
+                ? MaterialEditorResponsiveSideState.Expanded
+                : MaterialEditorResponsiveSideState.Hidden;
             var rightState =
                 MaterialEditorResponsiveLayoutPolicy.GetRightSideState(
-                    _selectionListsVisible,
+                    _selectionPanelsVisible && !_renameListVisible,
                     _renameListVisible);
             return MaterialEditorResponsiveLayoutPolicy.Calculate(
                 UIScale.Value,

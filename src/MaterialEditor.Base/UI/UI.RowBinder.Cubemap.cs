@@ -40,15 +40,18 @@ namespace MaterialEditorAPI
             System.Action refreshExport = () =>
             {
                 var text = _controls.ExportButton.GetComponentInChildren<Text>();
-                _controls.ExportButton.enabled = item.Exists;
+                MaterialEditorStyles.SetControlAvailability(
+                    _controls.ExportButton,
+                    item.Exists,
+                    MaterialEditorControlAvailabilityMode.LegacyPassive);
                 text.text = item.Exists ? "Export Cubemap" : "No Cubemap";
-                text.color = item.Exists
-                    ? MaterialEditorTheme.Colors.PrimaryText
-                    : MaterialEditorTheme.Colors.DisabledText;
             };
 
             _controls.ImportButton.GetComponentInChildren<Text>().text = "Import Cubemap";
-            _controls.SelectInterpolableButton.gameObject.SetActive(false);
+            TimelineColumnBinding.Bind(
+                _controls.SelectInterpolableButton,
+                listeners,
+                null);
             TooltipBinding.Bind(
                 _controls.ImportButton.gameObject,
                 "Import an equirectangular PNG or Radiance RGBE (.hdr) panorama as a Cubemap. Non-2:1 images are stretched automatically.");

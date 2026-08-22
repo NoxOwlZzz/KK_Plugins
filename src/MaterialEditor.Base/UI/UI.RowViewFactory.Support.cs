@@ -12,9 +12,11 @@ namespace MaterialEditorAPI
             Color color,
             bool insetPropertyLabel = false)
         {
-            var panel = MaterialEditorControlFactory.CreatePanel(name, parent);
+            var panel = MaterialEditorControlFactory.CreatePanel(
+                name,
+                parent,
+                ResolvePanelRole(name, color));
             panel.gameObject.AddComponent<CanvasGroup>();
-            panel.color = color;
 
             var layout = panel.gameObject.AddComponent<HorizontalLayoutGroup>();
             layout.padding = insetPropertyLabel
@@ -28,6 +30,25 @@ namespace MaterialEditorAPI
             layout.childAlignment = TextAnchor.MiddleLeft;
             layout.spacing = MaterialEditorTheme.Spacing.Control;
             return panel;
+        }
+
+        private static MaterialEditorPanelRole ResolvePanelRole(
+            string name,
+            Color color)
+        {
+            if (name == "RendererPanel" || color == RendererColor)
+                return MaterialEditorPanelRole.RendererRow;
+            if (name == "MaterialPanel" || color == MaterialColor)
+                return MaterialEditorPanelRole.MaterialRow;
+            if (name == "ShaderPanel"
+                || color == MaterialEditorStyles.ShaderColor)
+                return MaterialEditorPanelRole.ShaderRow;
+            if (name == "PropertyCategoryPanel" || color == CategoryColor)
+                return MaterialEditorPanelRole.CategoryRow;
+            if (name == "PropertySubcategoryPanel"
+                || color == SubcategoryColor)
+                return MaterialEditorPanelRole.SubcategoryRow;
+            return MaterialEditorPanelRole.PropertyRow;
         }
 
         internal static Text CreateLabel(
@@ -49,7 +70,14 @@ namespace MaterialEditorAPI
             if (label == null)
                 return;
 
-            label.resizeTextForBestFit = false;
+            // Property labels own the flexible part of the row budget. Keep
+            // them on one visual line and scale only within the readable
+            // typography range when the fixed editor columns need the space.
+            label.resizeTextForBestFit = true;
+            label.resizeTextMinSize =
+                MaterialEditorTheme.Typography.PropertyLabelMinimumFontSize;
+            label.resizeTextMaxSize =
+                MaterialEditorTheme.Typography.PrimaryFontSize;
             label.fontSize = MaterialEditorTheme.Typography.PrimaryFontSize;
             label.horizontalOverflow = HorizontalWrapMode.Wrap;
             label.verticalOverflow = VerticalWrapMode.Truncate;
@@ -71,7 +99,8 @@ namespace MaterialEditorAPI
             string objectName,
             Transform parent,
             string tooltipText,
-            bool layoutOwnedBySpec = false)
+            bool layoutOwnedBySpec = false,
+            bool timelineCapable = true)
         {
             var button = MaterialEditorControlFactory.CreateButton(
                 objectName,
@@ -84,7 +113,7 @@ namespace MaterialEditorAPI
             TooltipManager.AddTooltip(button.gameObject, tooltipText);
 
 #if !API && !EC
-            if (TimelineCompatibilityHelper.IsTimelineAvailable())
+            if (timelineCapable && TimelineCompatibilityHelper.IsTimelineAvailable())
                 button.gameObject.SetActive(true);
 #endif
         }

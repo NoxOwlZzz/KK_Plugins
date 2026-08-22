@@ -1,4 +1,4 @@
-﻿using BepInEx;
+using BepInEx;
 using BepInEx.Bootstrap;
 using KKAPI;
 using KKAPI.Maker;
@@ -61,6 +61,7 @@ namespace KK_Plugins.MaterialEditor
 
         internal static Dropdown ItemTypeDropDown;
         private ChaControl _itemTypeTarget;
+        private Tooltip _itemTypeDropdownTooltip;
 
         private void Start()
         {
@@ -90,6 +91,9 @@ namespace KK_Plugins.MaterialEditor
             ItemTypeDropDown.transform.SetRect();
             ItemTypeDropDown.captionText.transform.SetRect(0.05f, 0f, 1f, 1f, 5f, 2f, -15f, -2f);
             ItemTypeDropDown.captionText.alignment = TextAnchor.MiddleLeft;
+            _itemTypeDropdownTooltip = TooltipManager.AddTooltip(
+                ItemTypeDropDown.gameObject,
+                "Body");
             SetItemTypeDropdownVisible(false);
             AutoScrollToSelectionWithDropdown.Setup(ItemTypeDropDown);
 
@@ -163,11 +167,13 @@ namespace KK_Plugins.MaterialEditor
         {
             ItemTypeDropDown.onValueChanged.RemoveAllListeners();
             _itemTypeTarget = chaControl;
-            ItemTypeDropDown.onValueChanged.AddListener(value => ChangeItemType(value, chaControl));
+            ItemTypeDropDown.onValueChanged.AddListener(value =>
+            {
+                RefreshItemTypeDropdownCaption(value);
+                ChangeItemType(value, chaControl);
+            });
             ItemTypeDropDown.options.Clear();
             ItemTypeDropDown.options.Add(new Dropdown.OptionData("Body"));
-            ItemTypeDropDown.Set(0);
-            ItemTypeDropDown.captionText.text = "Body";
 
             var clothes = chaControl.GetClothes();
             for (var i = 0; i < clothes.Length; i++)
@@ -191,13 +197,18 @@ namespace KK_Plugins.MaterialEditor
             for (var i = 0; i < accessories.Length; i++)
                 if (accessories[i] != null)
                 {
-                    string optionName = $"Accessory {AccessoryIndexToString(i)}";
+                    string optionName = $"Acc. {AccessoryIndexToString(i)}";
 #if !PH
                     if (i < chaControl.infoAccessory.Length)
-                        optionName += $" {chaControl.infoAccessory[i].Name}";
+                        optionName += $" - {chaControl.infoAccessory[i].Name}";
 #endif
                     ItemTypeDropDown.options.Add(new Dropdown.OptionData(optionName));
                 }
+
+            // Populate every option before refreshing the selected value. Direct
+            // changes to Dropdown.options do not update the caption, and this
+            // control is normally populated while its header slot is inactive.
+            RefreshItemTypeDropdownCaption(0);
         }
 
         internal void ReleaseItemTypeDropdownTarget(
@@ -220,11 +231,60 @@ namespace KK_Plugins.MaterialEditor
             _itemTypeTarget = null;
         }
 
+        private void UpdateItemTypeDropdownTooltip(int optionIndex)
+        {
+            if (_itemTypeDropdownTooltip == null || ItemTypeDropDown == null)
+                return;
+            _itemTypeDropdownTooltip.SetStandardTooltipText(
+                ItemTypeDropDown.OptionText(optionIndex));
+        }
+
+        private void RefreshItemTypeDropdownCaption(int optionIndex)
+        {
+            var dropdown = ItemTypeDropDown;
+            if (dropdown == null || dropdown.options.Count == 0)
+                return;
+
+            var selectedIndex = Mathf.Clamp(
+                optionIndex,
+                0,
+                dropdown.options.Count - 1);
+            var selectedText = dropdown.OptionText(selectedIndex)
+                               ?? string.Empty;
+
+            // UILib.Set invokes Dropdown.RefreshShownValue on every supported
+            // Unity version without notifying listeners. Keep the explicit text
+            // assignment as the old-uGUI fallback, then restore the semantic
+            // dropdown style and its renderer tint after parent activation.
+            dropdown.Set(selectedIndex);
+            if (dropdown.captionText != null)
+                dropdown.captionText.text = selectedText;
+            MaterialEditorStyles.ApplyDropdown(dropdown);
+            if (dropdown.captionText != null)
+                MaterialEditorStyles.RefreshTextRendering(
+                    dropdown.captionText.gameObject,
+                    false);
+            UpdateItemTypeDropdownTooltip(selectedIndex);
+        }
+
         private void SetItemTypeDropdownVisible(bool visible)
         {
+            if (visible)
+            {
+                // Activate the parent before the child so caption styling and
+                // RefreshShownValue run against a renderable hierarchy.
+                SetHeaderContextControlVisible(true);
+                if (ItemTypeDropDown != null)
+                {
+                    ItemTypeDropDown.gameObject.SetActive(true);
+                    RefreshItemTypeDropdownCaption(ItemTypeDropDown.value);
+                }
+                return;
+            }
+
             if (ItemTypeDropDown != null)
-                ItemTypeDropDown.gameObject.SetActive(visible);
-            SetHeaderContextControlVisible(visible);
+                ItemTypeDropDown.gameObject.SetActive(false);
+            SetHeaderContextControlVisible(false);
         }
 
         internal void ReleaseItemTypeDropdownTarget(ChaControl destroyedTarget)
@@ -243,6 +303,7 @@ namespace KK_Plugins.MaterialEditor
             ReleaseItemTypeDropdownTarget();
             ShutdownMaterialEditorUi();
             ItemTypeDropDown = null;
+            _itemTypeDropdownTooltip = null;
             Instance = null;
         }
 
@@ -288,6 +349,7 @@ namespace KK_Plugins.MaterialEditor
                         PopulateList(hair, new ObjectData(index, MaterialEditorCharaController.ObjectType.Hair));
                     break;
                 case "Accessory":
+                case "Acc.":
                     if (option.Length > 1)
                         index = AccessoryStringToIndex(option[1]);
                     var accessory = chaControl.GetAccessoryObject(index);

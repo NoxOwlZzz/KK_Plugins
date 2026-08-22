@@ -1,4 +1,4 @@
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using UILib;
 using UnityEngine;
 using UnityEngine.UI;
@@ -51,7 +51,9 @@ namespace MaterialEditorAPI
             var panel = MaterialEditorControlFactory.CreatePanel("TooltipPanel", parent);
             var panelTransform = (RectTransform)panel.transform;
 
-            panel.color = MaterialEditorTheme.Colors.TooltipSurface;
+            MaterialEditorStyles.ApplyGraphicColor(
+                panel,
+                MaterialEditorThemeColorRole.TooltipSurface);
             panel.raycastTarget = false;
             panelTransform.pivot = Vector3.zero;
             panelTransform.anchorMax = Vector3.zero;

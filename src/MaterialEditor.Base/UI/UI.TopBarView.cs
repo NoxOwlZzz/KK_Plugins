@@ -8,46 +8,39 @@ namespace MaterialEditorAPI
 {
     internal sealed class MaterialEditorTopBarView
     {
-        private const float ContextSlotLeft = -224f;
-        private const float ContextSlotRight = -42f;
-        private const float HeaderContentRight = -42f;
-        private const float ShaderContextLeft = 118f;
+        private const float ContextSlotLeft = -244f;
+        private const float ContextSlotRight = -62f;
+        private const float HeaderContentRight = -62f;
         private const float PersistSearchWidth = 88f;
 
         private readonly MaterialEditorPopupMenu _globalMenu;
-        private readonly Action _beforeGlobalMenuOpen;
-        private readonly Text _shaderContextText;
-        private readonly Tooltip _shaderContextTooltip;
         private readonly Image _headerContextSlot;
+        private bool _headerContextControlVisible;
 
         internal Image HeaderPanel { get; private set; }
         internal Image ModePanel { get; private set; }
         internal Text HeaderTitle { get; private set; }
         internal InputField FilterInputField { get; private set; }
         internal Toggle PersistSearchToggle { get; private set; }
-        internal Button CategoryNavigatorButton =>
-            _globalMenu.CategoryNavigatorButton;
+        internal Button CategoryNavigatorButton { get; private set; }
+        internal Button ViewListButton { get; private set; }
         internal Button CollapseAllCategoriesButton =>
             _globalMenu.CollapseAllCategoriesButton;
         internal Button CollapseAllSectionsButton =>
             _globalMenu.CollapseAllSectionsButton;
-        internal Button ViewListButton => _globalMenu.ViewListButton;
+        internal Button ThemeButton => _globalMenu.ThemeButton;
         internal Transform HeaderContextSlot => _headerContextSlot.transform;
-        internal bool IsGlobalMenuOpen => _globalMenu.IsOpen;
 
         internal MaterialEditorTopBarView(
             Transform mainPanel,
-            Transform popupParent,
             string filter,
             Action<string> filterChanged,
             Action close,
-            Action toggleSidePanels,
+            Action toggleCategoriesPanel,
+            Action toggleSelectionPanels,
             Action toggleAllCategories,
-            Action toggleAllSections,
-            Action toggleCategoryNavigator,
-            Action beforeGlobalMenuOpen)
+            Action toggleAllSections)
         {
-            _beforeGlobalMenuOpen = beforeGlobalMenuOpen;
             HeaderPanel = MaterialEditorControlFactory.CreatePanel(
                 "Draggable",
                 mainPanel,
@@ -66,31 +59,11 @@ namespace MaterialEditorAPI
                 "Material Editor",
                 MaterialEditorTextRole.Title);
             HeaderTitle.alignment = TextAnchor.MiddleLeft;
-            HeaderTitle.transform.SetRect(
-                0f,
-                0f,
-                0f,
-                1f,
-                MaterialEditorTheme.Spacing.Horizontal * 2f,
-                0f,
-                114f,
-                0f);
-
-            _shaderContextText = MaterialEditorControlFactory.CreateText(
-                "MaterialEditorShaderContext",
-                HeaderPanel.transform,
-                string.Empty,
-                MaterialEditorTextRole.Label);
-            _shaderContextText.alignment = TextAnchor.MiddleLeft;
-            SetShaderContextRect(false);
-            _shaderContextTooltip = TooltipManager.AddTooltip(
-                _shaderContextText.gameObject,
-                string.Empty);
-            _shaderContextText.gameObject.SetActive(false);
 
             _headerContextSlot = MaterialEditorControlFactory.CreatePanel(
                 "MaterialEditorStudioContextSlot",
-                HeaderPanel.transform);
+                HeaderPanel.transform,
+                MaterialEditorPanelRole.TransparentRow);
             _headerContextSlot.transform.SetRect(
                 1f,
                 0f,
@@ -114,13 +87,64 @@ namespace MaterialEditorAPI
                 0f,
                 1f,
                 1f,
-                -40f,
+                -60f,
                 1f,
-                -21f,
+                -41f,
                 -1f);
+            SetNavigationNone(globalMenuButton);
             TooltipManager.AddTooltip(
                 globalMenuButton.gameObject,
-                "Global view options");
+                "Global view and theme options");
+
+            var popupParent = mainPanel.GetComponentInParent<Canvas>().transform;
+            _globalMenu = popupParent.gameObject
+                .AddComponent<MaterialEditorPopupMenu>();
+            _globalMenu.Initialize(
+                popupParent,
+                globalMenuButton.transform as RectTransform,
+                toggleAllCategories,
+                toggleAllSections,
+                ToggleUITheme);
+            globalMenuButton.onClick.AddListener(_globalMenu.Toggle);
+
+            CategoryNavigatorButton =
+                MaterialEditorControlFactory.CreateButton(
+                    "CategoryNavigatorButton",
+                    HeaderPanel.transform,
+                    MaterialEditorTheme.Glyphs.ChevronLeft);
+            CategoryNavigatorButton.transform.SetRect(
+                0f, 0f, 0f, 1f,
+                1f, 1f,
+                MaterialEditorLayout.SmallButtonWidth, -1f);
+            SetNavigationNone(CategoryNavigatorButton);
+            TooltipManager.AddTooltip(
+                CategoryNavigatorButton.gameObject,
+                "Show or hide Categories");
+            CategoryNavigatorButton.onClick.AddListener(
+                () =>
+                {
+                    _globalMenu.Close();
+                    toggleCategoriesPanel();
+                });
+
+            ViewListButton = MaterialEditorControlFactory.CreateButton(
+                "ViewListButton",
+                HeaderPanel.transform,
+                MaterialEditorTheme.Glyphs.ChevronRight);
+            ViewListButton.transform.SetRect(
+                1f, 0f, 1f, 1f,
+                -MaterialEditorLayout.SmallButtonWidth, 1f,
+                -1f, -1f);
+            SetNavigationNone(ViewListButton);
+            TooltipManager.AddTooltip(
+                ViewListButton.gameObject,
+                "Show or hide Renderers and Materials");
+            ViewListButton.onClick.AddListener(
+                () =>
+                {
+                    _globalMenu.Close();
+                    toggleSelectionPanels();
+                });
 
             var closeButton = MaterialEditorControlFactory.CreateButton(
                 "CloseButton",
@@ -131,30 +155,24 @@ namespace MaterialEditorAPI
                 0f,
                 1f,
                 1f,
-                -20f,
+                -40f,
                 1f,
-                -1f,
+                -21f,
                 -1f);
             CreateCloseGlyph(closeButton.transform);
 
-            _globalMenu = popupParent.gameObject
-                .AddComponent<MaterialEditorPopupMenu>();
-            _globalMenu.Initialize(
-                popupParent,
-                globalMenuButton.transform as RectTransform,
-                toggleAllCategories,
-                toggleAllSections,
-                toggleCategoryNavigator,
-                toggleSidePanels);
-            globalMenuButton.onClick.AddListener(ToggleGlobalMenu);
             closeButton.onClick.AddListener(
                 () =>
                 {
                     _globalMenu.Close();
                     close();
                 });
+            SetHeaderTitleRect();
 
-            BuildModeRow(mainPanel, filter, filterChanged);
+            BuildModeRow(
+                mainPanel,
+                filter,
+                filterChanged);
 
             MaterialEditorStyles.ApplyTypography(HeaderPanel.gameObject);
             MaterialEditorStyles.ApplyTypography(ModePanel.gameObject);
@@ -166,32 +184,17 @@ namespace MaterialEditorAPI
             FilterInputField.Set(filter);
         }
 
-        internal void CloseGlobalMenu()
-        {
-            _globalMenu.Close();
-        }
-
-        private void ToggleGlobalMenu()
-        {
-            _beforeGlobalMenuOpen?.Invoke();
-            _globalMenu.Toggle();
-        }
 
         internal void SetPresentation(MaterialEditorPresentation presentation)
         {
-            var shaderContext = new MaterialEditorShaderContextAccumulator();
-            if (presentation != null)
-                foreach (var section in presentation.MaterialSections)
-                    shaderContext.Add(section.ShaderName);
-
-            string shaderName;
-            var contextKind = shaderContext.Resolve(out shaderName);
-            SetShaderContext(contextKind, shaderName);
-
-            var hasCategories = HasCategories(presentation);
+            var hasNavigatorCategories = HasNavigatorCategories(presentation);
+            MaterialEditorStyles.SetControlAvailability(
+                CategoryNavigatorButton, hasNavigatorCategories);
+            var canCollapseCategories =
+                CanCollapseCategories(presentation);
             _globalMenu.SetCollapseState(
-                hasCategories,
-                hasCategories && presentation.AllCategoriesCollapsed);
+                canCollapseCategories,
+                canCollapseCategories && presentation.AllCategoriesCollapsed);
             RefreshSectionCollapseState(presentation);
         }
 
@@ -208,27 +211,20 @@ namespace MaterialEditorAPI
         internal void ReleasePresentation()
         {
             _globalMenu.Close();
-            SetShaderContext(
-                MaterialEditorShaderContextKind.None,
-                string.Empty);
+            MaterialEditorStyles.SetControlAvailability(
+                CategoryNavigatorButton, false);
             _globalMenu.SetCollapseState(false, false);
             _globalMenu.SetSectionCollapseState(false, false);
         }
-
-        internal void SetCategoryNavigatorExpanded(bool expanded)
+        internal void RefreshThemeButton()
         {
-            _globalMenu.SetCategoryNavigatorExpanded(expanded);
+            _globalMenu.RefreshThemeState();
         }
-
-        internal void SetCategoryNavigatorConstrained(bool constrained)
-        {
-            _globalMenu.SetCategoryNavigatorConstrained(constrained);
-        }
-
         internal void SetHeaderContextControlVisible(bool visible)
         {
+            _headerContextControlVisible = visible;
             _headerContextSlot.gameObject.SetActive(visible);
-            SetShaderContextRect(visible);
+            SetHeaderTitleRect();
         }
 
         internal void SetHeaderTitleHorizontalOffset(float offset)
@@ -258,6 +254,10 @@ namespace MaterialEditorAPI
                 0f,
                 -MaterialEditorLayout.HeaderHeight);
 
+            var filterRight = -PersistSearchWidth
+                              - MaterialEditorTheme.Spacing.TopBarHorizontalInset
+                              - MaterialEditorTheme.Spacing.Control;
+
             FilterInputField = MaterialEditorControlFactory.CreateInputField(
                 "Filter",
                 ModePanel.transform,
@@ -270,9 +270,7 @@ namespace MaterialEditorAPI
                 1f,
                 MaterialEditorTheme.Spacing.TopBarHorizontalInset,
                 1f,
-                -PersistSearchWidth
-                - MaterialEditorTheme.Spacing.TopBarHorizontalInset
-                - MaterialEditorTheme.Spacing.Control,
+                filterRight,
                 -1f);
             FilterInputField.onValueChanged.AddListener(
                 value => filterChanged(value));
@@ -318,6 +316,9 @@ namespace MaterialEditorAPI
                 .GetComponentInChildren<Text>(true);
             if (persistSearchText != null)
             {
+                MaterialEditorStyles.ApplyText(
+                    persistSearchText,
+                    MaterialEditorTextRole.Chrome);
                 persistSearchText.alignment = TextAnchor.MiddleLeft;
                 persistSearchText.rectTransform.SetRect(
                     0f,
@@ -338,51 +339,37 @@ namespace MaterialEditorAPI
 
         }
 
-        private void SetShaderContext(
-            MaterialEditorShaderContextKind kind,
-            string shaderName)
+        private void SetHeaderTitleRect()
         {
-            string text;
-            switch (kind)
-            {
-                case MaterialEditorShaderContextKind.Single:
-                    text = "Shader: " + shaderName;
-                    break;
-                case MaterialEditorShaderContextKind.Multiple:
-                    text = "Multiple shaders";
-                    break;
-                default:
-                    text = string.Empty;
-                    break;
-            }
-
-            _shaderContextText.text = text;
-            _shaderContextTooltip.SetStandardTooltipText(text);
-            _shaderContextText.gameObject.SetActive(
-                kind != MaterialEditorShaderContextKind.None);
-        }
-
-        private void SetShaderContextRect(bool contextControlVisible)
-        {
-            _shaderContextText.transform.SetRect(
+            var actionRight = _headerContextControlVisible
+                ? ContextSlotLeft - MaterialEditorTheme.Spacing.Control
+                : HeaderContentRight;
+            HeaderTitle.transform.SetRect(
                 0f,
                 0f,
                 1f,
                 1f,
-                ShaderContextLeft,
+                MaterialEditorLayout.SmallButtonWidth
+                + MaterialEditorTheme.Spacing.Control,
                 0f,
-                contextControlVisible
-                    ? ContextSlotLeft - MaterialEditorTheme.Spacing.Horizontal
-                    : HeaderContentRight,
+                actionRight - MaterialEditorTheme.Spacing.Horizontal,
                 0f);
         }
-
-        private static bool HasCategories(
+        private static bool HasNavigatorCategories(
             MaterialEditorPresentation presentation)
         {
             if (presentation == null)
                 return false;
-            if (presentation.HasPropertyFilter)
+            foreach (var section in presentation.MaterialSections)
+                foreach (var category in section.Categories)
+                    return true;
+            return false;
+        }
+
+        private static bool CanCollapseCategories(
+            MaterialEditorPresentation presentation)
+        {
+            if (presentation == null || presentation.HasPropertyFilter)
                 return false;
             foreach (var section in presentation.MaterialSections)
                 foreach (var category in section.Categories)
@@ -413,7 +400,9 @@ namespace MaterialEditorAPI
                 0f,
                 0f,
                 MaterialEditorTheme.Metrics.CloseGlyphAngle);
-            firstLine.color = MaterialEditorTheme.Colors.PrimaryText;
+            MaterialEditorStyles.ApplyGraphicColor(
+                firstLine,
+                MaterialEditorThemeColorRole.PrimaryText);
 
             var secondLine = MaterialEditorControlFactory.CreatePanel(
                 "x2",
@@ -427,7 +416,9 @@ namespace MaterialEditorAPI
                 0f,
                 0f,
                 -MaterialEditorTheme.Metrics.CloseGlyphAngle);
-            secondLine.color = MaterialEditorTheme.Colors.PrimaryText;
+            MaterialEditorStyles.ApplyGraphicColor(
+                secondLine,
+                MaterialEditorThemeColorRole.PrimaryText);
         }
     }
 }

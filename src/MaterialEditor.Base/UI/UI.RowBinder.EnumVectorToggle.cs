@@ -39,9 +39,10 @@ namespace MaterialEditorAPI
                 item.TooltipText,
                 item.PropertyName,
                 controls.Label);
-            var canSelectInterpolable = item.SelectInterpolable != null;
-            controls.SelectInterpolableButton.gameObject.SetActive(
-                canSelectInterpolable);
+            TimelineColumnBinding.Bind(
+                controls.SelectInterpolableButton,
+                listeners,
+                item.SelectInterpolable);
             Action refresh = () =>
                 ChangedStateBinding.Apply(
                     controls.Label,
@@ -84,10 +85,7 @@ namespace MaterialEditorAPI
                 refresh();
                 item.PresentationRefresh?.Invoke();
             });
-            if (canSelectInterpolable)
-                listeners.Listen(
-                    controls.SelectInterpolableButton,
-                    () => item.SelectInterpolable());
+
             LabelClickBinding.Bind(
                 listeners,
                 controls.LabelClickTrigger,
@@ -108,9 +106,10 @@ namespace MaterialEditorAPI
             var count = Mathf.Clamp(item.ComponentCount, 2, 4);
             if (item.MixedComponents == null || item.MixedComponents.Length < 4)
                 item.MixedComponents = new bool[4];
-            var canSelectInterpolable = item.SelectInterpolable != null;
-            controls.SelectInterpolableButton.gameObject.SetActive(
-                canSelectInterpolable);
+            TimelineColumnBinding.Bind(
+                controls.SelectInterpolableButton,
+                listeners,
+                item.SelectInterpolable);
 
             Action refreshState = () =>
                 ChangedStateBinding.Apply(
@@ -139,8 +138,10 @@ namespace MaterialEditorAPI
             {
                 var index = component;
                 var visible = index < count;
-                controls.ComponentLabels[index].gameObject.SetActive(visible);
-                controls.ComponentInputs[index].gameObject.SetActive(visible);
+                SetVectorComponentVisibility(
+                    controls.ComponentLabels[index],
+                    controls.ComponentInputs[index],
+                    visible);
                 if (!visible)
                     continue;
 
@@ -191,10 +192,7 @@ namespace MaterialEditorAPI
                 refreshState();
                 item.PresentationRefresh?.Invoke();
             });
-            if (canSelectInterpolable)
-                listeners.Listen(
-                    controls.SelectInterpolableButton,
-                    () => item.SelectInterpolable());
+
             LabelClickBinding.Bind(
                 listeners,
                 controls.LabelClickTrigger,
@@ -214,9 +212,10 @@ namespace MaterialEditorAPI
                 item.TooltipText,
                 item.PropertyName,
                 controls.Label);
-            var canSelectInterpolable = item.SelectInterpolable != null;
-            controls.SelectInterpolableButton.gameObject.SetActive(
-                canSelectInterpolable);
+            TimelineColumnBinding.Bind(
+                controls.SelectInterpolableButton,
+                listeners,
+                item.SelectInterpolable);
             Action refresh = () =>
             {
                 var desired = !item.IsMixed && item.Value == item.OnValue;
@@ -240,16 +239,47 @@ namespace MaterialEditorAPI
                 BooleanPropertyRowModelBinding.Reset(item);
                 refresh();
             });
-            if (canSelectInterpolable)
-                listeners.Listen(
-                    controls.SelectInterpolableButton,
-                    () => item.SelectInterpolable());
+
             LabelClickBinding.Bind(
                 listeners,
                 controls.LabelClickTrigger,
                 item,
                 MaterialEditorLabelType.FloatProperty,
                 () => item.PropertyName);
+        }
+
+        private static void SetVectorComponentVisibility(
+            Text label,
+            NumericInputView input,
+            bool visible)
+        {
+            // A Vector2/Vector3 must not move the shared Timeline/editor
+            // columns merely because its unused Z/W controls are absent.
+            // Keep those controls in layout, while removing their pixels and
+            // hit targets without invoking any value callbacks.
+            if (!label.gameObject.activeSelf)
+                label.gameObject.SetActive(true);
+            if (!input.gameObject.activeSelf)
+                input.gameObject.SetActive(true);
+
+            var labelVisibility = label.GetComponent<CanvasGroup>()
+                                  ?? label.gameObject.AddComponent<CanvasGroup>();
+            labelVisibility.alpha = visible
+                ? MaterialEditorTheme.States.VisibleAlpha
+                : MaterialEditorTheme.States.HiddenAlpha;
+            labelVisibility.interactable = visible;
+            labelVisibility.blocksRaycasts = visible;
+
+            var inputVisibility = input.GetComponent<CanvasGroup>()
+                                  ?? input.gameObject.AddComponent<CanvasGroup>();
+            inputVisibility.alpha = visible
+                ? MaterialEditorTheme.States.VisibleAlpha
+                : MaterialEditorTheme.States.HiddenAlpha;
+            inputVisibility.interactable = visible;
+            inputVisibility.blocksRaycasts = visible;
+            if (!visible)
+                input.InputField.DeactivateInputField();
+            input.InputField.interactable = visible;
         }
 
         private static bool HasMixed(bool[] values, int count)

@@ -5,20 +5,25 @@ using UnityEngine.UI;
 
 namespace MaterialEditorAPI
 {
+    // Owns only the three global presentation actions exposed from the title
+    // bar. Side-panel visibility remains on its independent arrow controls.
     internal sealed class MaterialEditorPopupMenu : MonoBehaviour
     {
+        private const float MenuWidth = 252f;
+        private const int ActionCount = 3;
+
         private readonly Vector3[] _triggerCorners = new Vector3[4];
         private Image _root;
         private Image _menuPanel;
         private RectTransform _trigger;
         private bool _open;
-        private bool _categoryNavigatorExpanded;
-        private Tooltip _categoryNavigatorTooltip;
+        private Tooltip _categoriesTooltip;
+        private Tooltip _sectionsTooltip;
+        private Tooltip _themeTooltip;
 
         internal Button CollapseAllCategoriesButton { get; private set; }
         internal Button CollapseAllSectionsButton { get; private set; }
-        internal Button CategoryNavigatorButton { get; private set; }
-        internal Button ViewListButton { get; private set; }
+        internal Button ThemeButton { get; private set; }
         internal bool IsOpen => _open;
 
         internal void Initialize(
@@ -26,24 +31,29 @@ namespace MaterialEditorAPI
             RectTransform trigger,
             Action toggleAllCategories,
             Action toggleAllSections,
-            Action toggleCategoryNavigator,
-            Action toggleSidePanels)
+            Action toggleTheme)
         {
             _trigger = trigger;
 
             _root = MaterialEditorControlFactory.CreatePanel(
                 "MaterialEditorGlobalMenu",
-                popupParent);
+                popupParent,
+                MaterialEditorPanelRole.TransparentRow);
             _root.transform.SetRect();
-            _root.color = MaterialEditorTheme.Colors.TransparentRow;
             _root.raycastTarget = false;
 
-            var dismissLayer = MaterialEditorControlFactory.CreateButton(
+            // This is an input catcher, not a visual button. Giving it the
+            // standard Button style as well as TransparentRow lets theme
+            // reapplication make the full-canvas surface opaque.
+            var dismissSurface = MaterialEditorControlFactory.CreatePanel(
                 "MaterialEditorGlobalMenuDismissLayer",
                 _root.transform,
-                string.Empty);
-            dismissLayer.transform.SetRect();
-            dismissLayer.image.color = MaterialEditorTheme.Colors.TransparentRow;
+                MaterialEditorPanelRole.TransparentRow);
+            dismissSurface.transform.SetRect();
+            dismissSurface.raycastTarget = true;
+            var dismissLayer = dismissSurface.gameObject.AddComponent<Button>();
+            dismissLayer.targetGraphic = dismissSurface;
+            dismissLayer.transition = Selectable.Transition.None;
             dismissLayer.navigation = new Navigation
             {
                 mode = Navigation.Mode.None
@@ -59,10 +69,10 @@ namespace MaterialEditorAPI
             _menuPanel.rectTransform.pivot = new Vector2(1f, 1f);
             _menuPanel.rectTransform.SetSizeWithCurrentAnchors(
                 RectTransform.Axis.Horizontal,
-                280f);
+                MenuWidth);
             _menuPanel.rectTransform.SetSizeWithCurrentAnchors(
                 RectTransform.Axis.Vertical,
-                MaterialEditorLayout.HeaderHeight * 4f
+                MaterialEditorLayout.HeaderHeight * ActionCount
                 + MaterialEditorTheme.Spacing.Control * 2f);
 
             CollapseAllCategoriesButton = CreateMenuButton(
@@ -70,24 +80,28 @@ namespace MaterialEditorAPI
                 0,
                 "Collapse all categories",
                 toggleAllCategories);
+            _categoriesTooltip = TooltipManager.AddTooltip(
+                CollapseAllCategoriesButton.gameObject,
+                "Collapse all categories");
+
             CollapseAllSectionsButton = CreateMenuButton(
                 "CollapseAllSectionsButton",
                 1,
                 "Collapse all renderer/material sections",
                 toggleAllSections);
-            CategoryNavigatorButton = CreateMenuButton(
-                "CategoryNavigatorButton",
+            _sectionsTooltip = TooltipManager.AddTooltip(
+                CollapseAllSectionsButton.gameObject,
+                "Collapse all renderer/material sections");
+
+            ThemeButton = CreateMenuButton(
+                "MaterialEditorThemeButton",
                 2,
-                "Show categories",
-                toggleCategoryNavigator);
-            _categoryNavigatorTooltip = TooltipManager.AddTooltip(
-                CategoryNavigatorButton.gameObject,
-                "Show or hide the categories panel");
-            ViewListButton = CreateMenuButton(
-                "ViewListButton",
-                3,
-                "Show/hide Renderers and Materials",
-                toggleSidePanels);
+                string.Empty,
+                toggleTheme);
+            _themeTooltip = TooltipManager.AddTooltip(
+                ThemeButton.gameObject,
+                string.Empty);
+            RefreshThemeState();
 
             MaterialEditorStyles.ApplyTypography(_menuPanel.gameObject);
             _root.gameObject.SetActive(false);
@@ -123,55 +137,43 @@ namespace MaterialEditorAPI
             enabled = false;
         }
 
-        internal void SetCollapseState(bool hasCategories, bool allCollapsed)
+        internal void SetCollapseState(bool available, bool allCollapsed)
         {
-            CollapseAllCategoriesButton.interactable = hasCategories;
-            SetButtonText(
+            SetActionState(
                 CollapseAllCategoriesButton,
+                _categoriesTooltip,
+                available,
                 allCollapsed
                     ? "Expand all categories"
-                    : "Collapse all categories");
+                    : "Collapse all categories",
+                "No collapsible categories");
         }
 
-        internal void SetCategoryNavigatorExpanded(bool expanded)
+        internal void SetSectionCollapseState(bool available, bool allCollapsed)
         {
-            _categoryNavigatorExpanded = expanded;
-            ApplyCategoryNavigatorState();
-        }
-
-        internal void SetCategoryNavigatorConstrained(bool constrained)
-        {
-            // Kept as a compatibility bridge for TopBarView. Responsive layout
-            // no longer overrides the user's navigator state.
-            ApplyCategoryNavigatorState();
-        }
-
-        internal void SetSectionCollapseState(
-            bool hasSections,
-            bool allCollapsed)
-        {
-            CollapseAllSectionsButton.interactable = hasSections;
-            SetButtonText(
+            SetActionState(
                 CollapseAllSectionsButton,
+                _sectionsTooltip,
+                available,
                 allCollapsed
                     ? "Expand all renderer/material sections"
-                    : "Collapse all renderer/material sections");
+                    : "Collapse all renderer/material sections",
+                "No collapsible renderer/material sections");
         }
 
-        private void ApplyCategoryNavigatorState()
+        internal void RefreshThemeState()
         {
-            if (CategoryNavigatorButton == null)
-                return;
-
-            CategoryNavigatorButton.interactable = true;
-            SetButtonText(
-                CategoryNavigatorButton,
-                _categoryNavigatorExpanded
-                    ? "Hide categories"
-                    : "Show categories");
-            if (_categoryNavigatorTooltip != null)
-                _categoryNavigatorTooltip.SetStandardTooltipText(
-                    "Show or hide the categories panel");
+            var switchToDark = MaterialEditorTheme.Mode
+                               == MaterialEditorThemeMode.Legacy;
+            var text = switchToDark
+                ? "Switch to Dark theme"
+                : "Switch to Legacy theme";
+            SetActionState(
+                ThemeButton,
+                _themeTooltip,
+                true,
+                text,
+                text);
         }
 
         private Button CreateMenuButton(
@@ -208,21 +210,25 @@ namespace MaterialEditorAPI
             return button;
         }
 
-        private static void SetButtonText(Button button, string text)
+        private static void SetActionState(
+            Button button,
+            Tooltip tooltip,
+            bool available,
+            string activeText,
+            string unavailableText)
         {
-            if (button != null)
-                button.GetComponentInChildren<Text>().text = text;
-        }
+            if (button == null)
+                return;
 
-        private void Update()
-        {
-            if (_open && Input.GetKeyDown(KeyCode.Escape))
-                Close();
-        }
-
-        private void OnDisable()
-        {
-            Close();
+            var text = available ? activeText : unavailableText;
+            var label = button.GetComponentInChildren<Text>(true);
+            if (label != null)
+            {
+                label.text = text;
+                label.SetVerticesDirty();
+            }
+            MaterialEditorStyles.SetControlAvailability(button, available);
+            tooltip?.SetStandardTooltipText(text);
         }
     }
 }

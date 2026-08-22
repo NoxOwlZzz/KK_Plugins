@@ -10,13 +10,12 @@ namespace MaterialEditorAPI
     {
         private readonly Action<CategoryNavigationTarget> _navigate;
         private readonly Action<CategoryNavigationTarget> _toggle;
-        private readonly Action<bool> _expandedChanged;
         private readonly List<Entry> _entries = new List<Entry>();
         private readonly Text _materialText;
         private readonly Text _shaderText;
+        private readonly Image _shaderHeader;
         private readonly ScrollRect _scrollRect;
         private readonly RectTransform _centralScrollContent;
-        private readonly Button _expandButton;
         private MaterialEditorPresentation _presentation;
         private Entry _activeEntry;
         private string _sectionId;
@@ -25,27 +24,29 @@ namespace MaterialEditorAPI
         private string _pendingClickedStableKey;
         private string _pendingNavigationKey;
         private bool _deferredPresentationRebuild;
-        private bool _expanded;
+        private bool _visible;
 
         internal CategoryNavigatorView(
             Transform parent,
             RectTransform centralScrollContent,
             Action<CategoryNavigationTarget> navigate,
-            Action<CategoryNavigationTarget> toggle,
-            Action<bool> expandedChanged)
+            Action<CategoryNavigationTarget> toggle)
         {
             _navigate = navigate;
             _toggle = toggle;
-            _expandedChanged = expandedChanged;
             _centralScrollContent = centralScrollContent;
 
             Panel = MaterialEditorControlFactory.CreatePanel(
                 "CategoryNavigatorPanel",
                 parent,
                 MaterialEditorPanelRole.LeftPanel);
+            Panel.gameObject.AddComponent<RectMask2D>();
             UIUtility.AddOutlineToObject(
                 Panel.transform,
                 MaterialEditorTheme.Colors.Outline);
+            MaterialEditorStyles.ApplyOutline(
+                Panel,
+                MaterialEditorThemeColorRole.Outline);
 
             var header = MaterialEditorControlFactory.CreatePanel(
                 "CategoryNavigatorHeader",
@@ -61,11 +62,11 @@ namespace MaterialEditorAPI
             var headerLayout = header.gameObject.AddComponent<HorizontalLayoutGroup>();
             headerLayout.padding = new RectOffset(
                 MaterialEditorTheme.Spacing.PropertyLabelInset,
-                0,
+                MaterialEditorTheme.Spacing.PropertyLabelInset,
                 0,
                 0);
             headerLayout.spacing = MaterialEditorTheme.Spacing.Control;
-            headerLayout.childAlignment = TextAnchor.MiddleLeft;
+            headerLayout.childAlignment = TextAnchor.MiddleCenter;
             headerLayout.childControlWidth = true;
             headerLayout.childForceExpandWidth = false;
             headerLayout.childControlHeight = true;
@@ -75,32 +76,19 @@ namespace MaterialEditorAPI
                 "CategoryNavigatorTitle",
                 header.transform,
                 "Categories",
-                MaterialEditorTextRole.Label);
-            title.color = MaterialEditorTheme.Colors.PrimaryText;
+                MaterialEditorTextRole.Chrome);
             title.fontStyle = FontStyle.Bold;
+            title.alignment = TextAnchor.MiddleCenter;
             var titleLayout = title.gameObject.AddComponent<LayoutElement>();
             titleLayout.minWidth = 0f;
             titleLayout.preferredWidth = 0f;
             titleLayout.flexibleWidth = 1f;
 
-            var panelCollapse = MaterialEditorControlFactory.CreateButton(
-                "CategoryNavigatorPanelCollapse",
-                header.transform,
-                MaterialEditorTheme.Glyphs.ChevronLeft);
-            var panelCollapseLayout = panelCollapse.gameObject.AddComponent<LayoutElement>();
-            panelCollapseLayout.minWidth = MaterialEditorLayout.SmallButtonWidth;
-            panelCollapseLayout.preferredWidth = MaterialEditorLayout.SmallButtonWidth;
-            panelCollapseLayout.flexibleWidth = 0f;
-            TooltipManager.AddTooltip(
-                panelCollapse.gameObject,
-                "Collapse categories panel");
-            panelCollapse.onClick.AddListener(() => SetExpanded(false));
-
             _materialText = MaterialEditorControlFactory.CreateText(
                 "CategoryNavigatorMaterial",
                 Panel.transform,
                 string.Empty,
-                MaterialEditorTextRole.Label);
+                MaterialEditorTextRole.SecondaryChrome);
             ConfigureSingleLineText(_materialText);
             _materialText.transform.SetRect(
                 0f, 1f, 1f, 1f,
@@ -109,11 +97,13 @@ namespace MaterialEditorAPI
                 -MaterialEditorLayout.Margin,
                 -MaterialEditorLayout.HeaderHeight);
 
-            var shaderHeader = MaterialEditorControlFactory.CreatePanel(
+            _shaderHeader = MaterialEditorControlFactory.CreatePanel(
                 "CategoryNavigatorShaderHeader",
                 Panel.transform);
-            shaderHeader.color = MaterialEditorStyles.NavigatorShaderHeaderColor;
-            shaderHeader.transform.SetRect(
+            MaterialEditorStyles.ApplyGraphicColor(
+                _shaderHeader,
+                MaterialEditorThemeColorRole.NavigatorShaderHeader);
+            _shaderHeader.transform.SetRect(
                 0f, 1f, 1f, 1f,
                 MaterialEditorLayout.Margin,
                 -MaterialEditorLayout.HeaderHeight * 3f,
@@ -122,10 +112,9 @@ namespace MaterialEditorAPI
 
             _shaderText = MaterialEditorControlFactory.CreateText(
                 "CategoryNavigatorShader",
-                shaderHeader.transform,
+                _shaderHeader.transform,
                 string.Empty,
                 MaterialEditorTextRole.Label);
-            _shaderText.color = MaterialEditorTheme.Colors.SecondaryText;
             ConfigureSingleLineText(_shaderText);
             _shaderText.transform.SetRect();
 
@@ -160,35 +149,15 @@ namespace MaterialEditorAPI
             _scrollRect.vertical = true;
             _scrollRect.movementType = ScrollRect.MovementType.Clamped;
 
-            _expandButton = MaterialEditorControlFactory.CreateButton(
-                "CategoryNavigatorExpand",
-                parent,
-                MaterialEditorTheme.Glyphs.ChevronRight);
-            _expandButton.transform.SetRect(
-                0f, 1f, 0f, 1f,
-                -MaterialEditorTheme.Metrics.CategoryNavigatorCollapsedWidth,
-                -MaterialEditorLayout.HeaderHeight,
-                0f,
-                0f);
-            TooltipManager.AddTooltip(
-                _expandButton.gameObject,
-                "Expand categories panel");
-            _expandButton.onClick.AddListener(() => SetExpanded(true));
-
             ApplySettings();
         }
 
         internal Image Panel { get; }
-        internal bool Expanded => _expanded;
 
+        internal bool Visible => _visible && HasCategories();
         internal void ApplySettings()
         {
-            Panel.transform.SetRect(
-                0f, 0f, 0f, 1f,
-                -MaterialEditorLayout.CategoryNavigatorWidth - MaterialEditorLayout.Margin,
-                0f,
-                -MaterialEditorLayout.Margin,
-                0f);
+            ApplyPanelRect();
             UpdateVisibility();
         }
 
@@ -236,20 +205,13 @@ namespace MaterialEditorAPI
             ApplyViewportAnchor(rowIndex, forceRebuild, programmatic);
         }
 
-        internal bool ToggleExpanded()
+        internal void SetVisible(bool visible)
         {
-            SetExpanded(!_expanded);
-            return _expanded;
-        }
-
-        private void SetExpanded(bool expanded)
-        {
-            if (_expanded == expanded)
+            if (_visible == visible)
                 return;
 
-            _expanded = expanded;
+            _visible = visible;
             UpdateVisibility();
-            _expandedChanged?.Invoke(_expanded);
         }
 
         private void ApplyViewportAnchor(
@@ -285,8 +247,32 @@ namespace MaterialEditorAPI
 
         private void UpdateVisibility()
         {
-            Panel.gameObject.SetActive(_expanded);
-            _expandButton.gameObject.SetActive(!_expanded);
+            var visible = Visible;
+            if (Panel.gameObject.activeSelf != visible)
+                Panel.gameObject.SetActive(visible);
+        }
+
+        private void ApplyPanelRect()
+        {
+            Panel.transform.SetRect(
+                0f, 0f, 0f, 1f,
+                -MaterialEditorLayout.CategoryNavigatorWidth
+                - MaterialEditorLayout.Margin,
+                0f,
+                -MaterialEditorLayout.Margin,
+                0f);
+        }
+
+        private bool HasCategories()
+        {
+            if (_presentation == null)
+                return false;
+
+            foreach (var section in _presentation.MaterialSections)
+                if (section.Categories.Count > 0)
+                    return true;
+
+            return false;
         }
 
         private void Rebuild(MaterialSectionPresentation section)
@@ -353,7 +339,9 @@ namespace MaterialEditorAPI
                 "CategoryNavigationActiveMarker",
                 root.transform,
                 MaterialEditorPanelRole.Default);
-            activeMarker.color = MaterialEditorTheme.Colors.Accent;
+            MaterialEditorStyles.ApplyGraphicColor(
+                activeMarker,
+                MaterialEditorThemeColorRole.Accent);
             activeMarker.raycastTarget = false;
             var activeMarkerLayout = activeMarker.gameObject.AddComponent<LayoutElement>();
             activeMarkerLayout.minWidth = MaterialEditorTheme.Metrics.CategoryActiveMarkerWidth;
@@ -584,9 +572,7 @@ namespace MaterialEditorAPI
                 entry.NavigateButton,
                 active);
             entry.Label.fontStyle = active ? FontStyle.Bold : FontStyle.Normal;
-            entry.Label.color = active
-                ? MaterialEditorTheme.Colors.SelectedText
-                : MaterialEditorTheme.Colors.SecondaryText;
+            entry.Label.SetVerticesDirty();
         }
 
         private static void ConfigureSingleLineText(Text text)

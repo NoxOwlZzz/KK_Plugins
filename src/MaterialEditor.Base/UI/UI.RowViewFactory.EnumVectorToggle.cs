@@ -24,7 +24,8 @@ namespace MaterialEditorAPI
             RowViewFactorySupport.CreateInterpolableButton(
                 "SelectInterpolableEnumButton",
                 panel.transform,
-                "Select currently selected enum property as interpolable in timeline");
+                "Select currently selected enum property as interpolable in timeline",
+                timelineCapable: false);
             var dropdown = MaterialEditorControlFactory.CreateDropdown(
                 "EnumDropdown", panel.transform);
             RowViewFactorySupport.SetWidth(dropdown, ContentFullWidth);
@@ -47,7 +48,8 @@ namespace MaterialEditorAPI
             RowViewFactorySupport.CreateInterpolableButton(
                 "SelectInterpolableVectorButton",
                 panel.transform,
-                "Select currently selected vector property as interpolable in timeline");
+                "Select currently selected vector property as interpolable in timeline",
+                timelineCapable: false);
 
             CreateVectorComponent(panel.transform, "X", "VectorXText", "VectorXInput");
             CreateVectorComponent(panel.transform, "Y", "VectorYText", "VectorYInput");
@@ -99,7 +101,8 @@ namespace MaterialEditorAPI
             RowViewFactorySupport.CreateInterpolableButton(
                 "SelectInterpolableFloatToggleButton",
                 panel.transform,
-                "Select currently selected toggle property as interpolable in timeline");
+                "Select currently selected toggle property as interpolable in timeline",
+                timelineCapable: false);
             var toggle = MaterialEditorControlFactory.CreateToggle(
                 "FloatToggleToggle", panel.transform, string.Empty);
             RowViewFactorySupport.SetWidth(toggle, KeywordToggleWidth);

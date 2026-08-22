@@ -445,17 +445,18 @@ namespace KK_Plugins.MaterialEditor
             [Key("TexID")]
             public int? TexID;
 
-            [IgnoreMember]
-            internal Dictionary<Material, Cubemap> CubemapOriginalMaterials;
+            private MaterialCubemapOriginalState _cubemapOriginalState;
 
             [IgnoreMember]
-            internal List<MaterialCubemapOriginalBinding> CubemapOriginalBindings;
-
-            [IgnoreMember]
-            internal bool CubemapOriginalBindingsNeedRemap;
-
-            [IgnoreMember]
-            internal bool CubemapOriginalSnapshotWarningLogged;
+            internal MaterialCubemapOriginalState CubemapOriginalState
+            {
+                get
+                {
+                    if (_cubemapOriginalState == null)
+                        _cubemapOriginalState = new MaterialCubemapOriginalState();
+                    return _cubemapOriginalState;
+                }
+            }
 
             /// <summary>
             /// Creates a persisted native Cubemap property edit.
@@ -480,108 +481,43 @@ namespace KK_Plugins.MaterialEditor
                 MaterialCubemapProperty source,
                 GameObject sourceGameObject)
             {
-                ClearCubemapOriginalSnapshot();
-                if (source == null)
-                    return;
-
-                if (sourceGameObject != null)
-                    source.SynchronizeCubemapOriginalSnapshot(sourceGameObject);
-                CubemapOriginalBindings = MaterialCubemapOriginalSnapshot.CloneStableValues(
-                    source.CubemapOriginalBindings);
-                CubemapOriginalBindingsNeedRemap = CubemapOriginalBindings != null
-                    && CubemapOriginalBindings.Count > 0;
+                CubemapOriginalState.InheritFrom(
+                    source == null ? null : source.CubemapOriginalState,
+                    sourceGameObject,
+                    source == null ? null : source.MaterialName,
+                    source == null ? null : source.Property);
             }
 
             internal void InheritCubemapOriginalSnapshotSameMaterials(
                 MaterialCubemapProperty source,
                 GameObject sourceGameObject)
             {
-                ClearCubemapOriginalSnapshot();
-                if (source == null)
-                    return;
-
-                if (sourceGameObject != null)
-                    source.SynchronizeCubemapOriginalSnapshot(sourceGameObject);
-                CubemapOriginalMaterials =
-                    MaterialCubemapOriginalSnapshot.CloneByMaterialReference(
-                        source.CubemapOriginalMaterials);
-                CubemapOriginalBindings = MaterialCubemapOriginalSnapshot.CloneStableValues(
-                    source.CubemapOriginalBindings);
+                CubemapOriginalState.InheritSameMaterialsFrom(
+                    source == null ? null : source.CubemapOriginalState,
+                    sourceGameObject,
+                    source == null ? null : source.MaterialName,
+                    source == null ? null : source.Property);
             }
 
             internal bool SynchronizeCubemapOriginalSnapshot(GameObject gameObject)
             {
-                if (gameObject == null)
-                    return false;
+                return CubemapOriginalState.Synchronize(
+                    gameObject,
+                    MaterialName,
+                    Property);
+            }
 
-                if (CubemapOriginalBindingsNeedRemap)
-                {
-                    Dictionary<Material, Cubemap> remapped;
-                    string remapFailure;
-                    if (MaterialCubemapOriginalSnapshot.TryRemapToCurrentMaterials(
-                        gameObject,
-                        MaterialName,
-                        Property,
-                        CubemapOriginalBindings,
-                        out remapped,
-                        out remapFailure))
-                    {
-                        CubemapOriginalMaterials = remapped;
-                        CubemapOriginalBindingsNeedRemap = false;
-                        CubemapOriginalSnapshotWarningLogged = false;
-                    }
-                    else
-                    {
-                        if (!CubemapOriginalSnapshotWarningLogged)
-                        {
-                            CubemapOriginalSnapshotWarningLogged = true;
-                            MaterialEditorPluginBase.Logger.LogWarning(
-                                "Could not map the inherited Cubemap original snapshot for "
-                                + MaterialName + "/" + Property
-                                + "; the Cubemap override was skipped so Reset remains safe. "
-                                + remapFailure);
-                        }
-                        return false;
-                    }
-                }
-
-                var synchronizedMaterials =
-                    MaterialCubemapOriginalSnapshot.SynchronizeByMaterialReference(
-                        gameObject,
-                        MaterialName,
-                        Property,
-                        CubemapOriginalMaterials);
-                var synchronizedBindings =
-                    MaterialCubemapOriginalSnapshot.GetStableValues(
-                        gameObject,
-                        MaterialName,
-                        Property,
-                        synchronizedMaterials);
-                if (synchronizedBindings == null)
-                {
-                    if (!CubemapOriginalSnapshotWarningLogged)
-                    {
-                        CubemapOriginalSnapshotWarningLogged = true;
-                        MaterialEditorPluginBase.Logger.LogWarning(
-                            "Could not create an unambiguous Cubemap original snapshot for "
-                            + MaterialName + "/" + Property
-                            + "; the Cubemap override was skipped so Reset remains safe.");
-                    }
-                    return false;
-                }
-
-                CubemapOriginalMaterials = synchronizedMaterials;
-                CubemapOriginalBindings = synchronizedBindings;
-                CubemapOriginalSnapshotWarningLogged = false;
-                return true;
+            internal bool RestoreCubemapOriginalSnapshot(GameObject gameObject)
+            {
+                return CubemapOriginalState.RestoreOriginal(
+                    gameObject,
+                    MaterialName,
+                    Property);
             }
 
             internal void ClearCubemapOriginalSnapshot()
             {
-                CubemapOriginalMaterials = null;
-                CubemapOriginalBindings = null;
-                CubemapOriginalBindingsNeedRemap = false;
-                CubemapOriginalSnapshotWarningLogged = false;
+                CubemapOriginalState.Clear();
             }
 
             /// <summary>

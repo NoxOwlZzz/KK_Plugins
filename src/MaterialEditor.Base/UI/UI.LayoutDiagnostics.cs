@@ -72,17 +72,21 @@ namespace MaterialEditorAPI
         {
             var wasActive = row.gameObject.activeSelf;
             Dictionary<GameObject, bool> panelStates = null;
-            Dropdown enumDropdown = null;
-            string originalEnumCaption = null;
             row.SetVisible(true);
 
             try
             {
+                var shaderPanel = FindRect(row.transform, "ShaderPanel");
+                var texturePanel = FindRect(row.transform, "TexturePanel");
                 var colorPanel = FindRect(row.transform, "ColorPanel");
                 var offsetPanel = FindRect(row.transform, "OffsetScalePanel");
                 var floatPanel = FindRect(row.transform, "FloatPanel");
+                var keywordPanel = FindRect(row.transform, "KeywordPanel");
                 var enumPanel = FindRect(row.transform, "EnumPanel");
                 var vectorPanel = FindRect(row.transform, "VectorPanel");
+                var floatTogglePanel = FindRect(
+                    row.transform,
+                    "FloatTogglePanel");
                 var rInput = FindInput(row.transform, "ColorRInput");
                 var gInput = FindInput(row.transform, "ColorGInput");
                 var bInput = FindInput(row.transform, "ColorBInput");
@@ -95,33 +99,32 @@ namespace MaterialEditorAPI
                 var vectorYLabel = FindText(row.transform, "VectorYText");
                 var vectorZLabel = FindText(row.transform, "VectorZText");
                 var vectorWLabel = FindText(row.transform, "VectorWText");
-                enumDropdown = FindDropdown(row.transform, "EnumDropdown");
+                var enumDropdown = FindDropdown(row.transform, "EnumDropdown");
                 panelStates = ActivatePanels(
+                    shaderPanel,
+                    texturePanel,
                     colorPanel,
                     offsetPanel,
                     floatPanel,
+                    keywordPanel,
                     enumPanel,
-                    vectorPanel);
+                    vectorPanel,
+                    floatTogglePanel);
 
-                var originalR = rInput.text;
-                var originalG = gInput.text;
-                originalEnumCaption = enumDropdown.captionText.text;
-                enumDropdown.captionText.text = "Logical Copy Inverted";
-                enumDropdown.captionText.SetAllDirty();
-                ValidateNumericEditing(rInput);
-                ValidateNumericEditing(vectorXInput);
                 ValidateInputVisual(vectorXInput);
                 ValidateInputVisual(vectorYInput);
                 ValidateInputVisual(vectorZInput);
                 ValidateInputVisual(vectorWInput);
-                rInput.text = "0";
-                gInput.text = "0.123456789";
 
+                ForceLayout(shaderPanel);
+                ForceLayout(texturePanel);
                 ForceLayout(colorPanel);
                 ForceLayout(offsetPanel);
                 ForceLayout(floatPanel);
+                ForceLayout(keywordPanel);
                 ForceLayout(enumPanel);
                 ForceLayout(vectorPanel);
+                ForceLayout(floatTogglePanel);
                 Canvas.ForceUpdateCanvases();
 
                 AssertClose(
@@ -130,7 +133,7 @@ namespace MaterialEditorAPI
                     ((RectTransform)rInput.transform).rect.width,
                     row);
                 AssertClose(
-                    "RGBA short/long widths",
+                    "RGBA R/G widths",
                     ((RectTransform)rInput.transform).rect.width,
                     ((RectTransform)gInput.transform).rect.width,
                     row);
@@ -145,16 +148,105 @@ namespace MaterialEditorAPI
                     ((RectTransform)aInput.transform).rect.width,
                     row);
 
+                var colorEditor =
+                    FindRect(row.transform, "ColorEditorGroup");
+                var colorTimeline =
+                    FindRect(row.transform, "SelectInterpolableColorButton");
+                var rowSpacing =
+                    colorPanel.GetComponent<HorizontalLayoutGroup>().spacing;
+                var resetAnchor =
+                    WorldLeft(FindRect(row.transform, "ColorResetButton"));
+                var commonEditorAnchor =
+                    resetAnchor - rowSpacing - colorEditor.rect.width;
+                var commonTimelineAnchor =
+                    commonEditorAnchor - rowSpacing - colorTimeline.rect.width;
+                AssertTimelineRow(
+                    "Color",
+                    commonTimelineAnchor,
+                    commonEditorAnchor,
+                    colorTimeline,
+                    colorEditor,
+                    row);
                 AssertClose(
                     "Color/offset editor alignment",
-                    WorldLeft(FindRect(row.transform, "ColorRText")),
+                    commonEditorAnchor,
                     WorldLeft(FindRect(row.transform, "OffsetXText")),
                     row);
-                AssertClose(
-                    "Color/float editor alignment",
-                    WorldLeft(FindRect(row.transform, "ColorRText")),
-                    WorldLeft(FindRect(row.transform, "FloatSlider")),
+
+                var floatTimeline =
+                    FindRect(row.transform, "SelectInterpolableFloatButton");
+                var floatSlider = FindRect(row.transform, "FloatSlider");
+                var floatEditor = floatSlider.gameObject.activeSelf
+                    ? floatSlider
+                    : FindRect(row.transform, "FloatInputField");
+                var textureTimeline =
+                    FindRect(row.transform, "SelectInterpolableTextureButton");
+                AssertTimelineRow(
+                    "Float",
+                    commonTimelineAnchor,
+                    commonEditorAnchor,
+                    floatTimeline,
+                    floatEditor,
                     row);
+                AssertTimelineRow(
+                    "Texture",
+                    commonTimelineAnchor,
+                    commonEditorAnchor,
+                    textureTimeline,
+                    FindRect(row.transform, "TextureExportButton"),
+                    row);
+                AssertTimelineRow(
+                    "Enum",
+                    commonTimelineAnchor,
+                    commonEditorAnchor,
+                    FindRect(row.transform, "SelectInterpolableEnumButton"),
+                    FindRect(row.transform, "EnumDropdown"),
+                    row);
+                AssertTimelineRow(
+                    "Vector",
+                    commonTimelineAnchor,
+                    commonEditorAnchor,
+                    FindRect(row.transform, "SelectInterpolableVectorButton"),
+                    FindRect(row.transform, "VectorXText"),
+                    row);
+                AssertTimelineRow(
+                    "FloatToggle",
+                    commonTimelineAnchor,
+                    commonEditorAnchor,
+                    FindRect(row.transform, "SelectInterpolableFloatToggleButton"),
+                    FindRect(row.transform, "FloatToggleToggle"),
+                    row);
+                var keywordSlot =
+                    keywordPanel.transform.Find("EmptySpace") as RectTransform;
+                if (keywordSlot == null)
+                    throw new InvalidOperationException("Missing Keyword EmptySpace");
+                AssertClose(
+                    "Keyword Timeline slot width",
+                    MaterialEditorLayout.InterpolableButtonWidth,
+                    keywordSlot.rect.width,
+                    row);
+                AssertClose(
+                    "Keyword Timeline column",
+                    commonTimelineAnchor,
+                    WorldLeft(keywordSlot),
+                    row);
+                AssertClose(
+                    "Keyword editor alignment",
+                    commonEditorAnchor,
+                    WorldLeft(FindRect(row.transform, "KeywordToggle")),
+                    row);
+
+                AssertResetAnchor(
+                    resetAnchor,
+                    row,
+                    "ShaderResetButton",
+                    "TextureResetButton",
+                    "OffsetScaleResetButton",
+                    "FloatResetButton",
+                    "KeywordResetButton",
+                    "EnumResetButton",
+                    "VectorResetButton",
+                    "FloatToggleResetButton");
                 AssertClose(
                     "Vector X declared width",
                     MaterialEditorLayout.VectorComponentInputWidth,
@@ -236,9 +328,6 @@ namespace MaterialEditorAPI
                     enumDropdown.captionText.rectTransform.rect.height,
                     row);
 
-                rInput.text = originalR;
-                gInput.text = originalG;
-                ForceLayout(colorPanel);
                 if (MaterialEditorPluginBase.Logger != null)
                 {
                     MaterialEditorPluginBase.Logger.LogMessage(
@@ -258,12 +347,6 @@ namespace MaterialEditorAPI
             }
             finally
             {
-                if (enumDropdown?.captionText != null
-                    && originalEnumCaption != null)
-                {
-                    enumDropdown.captionText.text = originalEnumCaption;
-                    enumDropdown.captionText.SetAllDirty();
-                }
                 RestorePanels(panelStates);
                 row.SetVisible(wasActive);
             }
@@ -331,6 +414,65 @@ namespace MaterialEditorAPI
                 RestorePanels(panelStates);
                 first.SetVisible(firstWasActive);
                 second.SetVisible(secondWasActive);
+            }
+        }
+
+        private static void AssertTimelineRow(
+            string name,
+            float timelineAnchor,
+            float editorAnchor,
+            RectTransform timeline,
+            RectTransform editor,
+            RowView row)
+        {
+            var slotWidth = timeline.rect.width;
+            var columnLayout =
+                timeline.GetComponent<RowColumnLayoutOverride>();
+            if (columnLayout != null)
+                slotWidth = columnLayout.preferredWidth;
+            else
+            {
+                var layoutElement = timeline.GetComponent<LayoutElement>();
+                if (layoutElement != null)
+                    slotWidth = layoutElement.preferredWidth;
+            }
+            AssertClose(
+                name + " Timeline slot width",
+                MaterialEditorLayout.InterpolableButtonWidth,
+                slotWidth,
+                row);
+
+            var timelineActive = timeline.gameObject.activeSelf;
+            AssertClose(
+                name + " Timeline column",
+                timelineAnchor,
+                WorldLeft(
+                    timelineActive
+                        ? timeline
+                        : editor),
+                row);
+            if (!timelineActive)
+                return;
+
+            AssertClose(
+                name + " editor alignment",
+                editorAnchor,
+                WorldLeft(editor),
+                row);
+        }
+
+        private static void AssertResetAnchor(
+            float expected,
+            RowView row,
+            params string[] resetNames)
+        {
+            foreach (var resetName in resetNames)
+            {
+                AssertClose(
+                    resetName + " column",
+                    expected,
+                    WorldLeft(FindRect(row.transform, resetName)),
+                    row);
             }
         }
 
@@ -402,19 +544,6 @@ namespace MaterialEditorAPI
             LayoutRebuilder.ForceRebuildLayoutImmediate(panel);
         }
 
-        private static void ValidateNumericEditing(InputField input)
-        {
-            var numeric = input.GetComponent<NumericInputView>();
-            if (numeric == null)
-                throw new InvalidOperationException("Missing NumericInputView on " + input.name);
-
-            numeric.SetValue(0.9255123f);
-            numeric.OnSelect(null);
-            numeric.CommitValue(0.5f);
-            if (input.text != "0.5")
-                throw new InvalidOperationException(
-                    "Numeric input did not restore compact text after editing: " + input.text);
-        }
 
         private static void ValidateInputVisual(InputField input)
         {

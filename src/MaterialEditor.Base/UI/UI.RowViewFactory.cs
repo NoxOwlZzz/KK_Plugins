@@ -9,13 +9,24 @@ namespace MaterialEditorAPI
     {
         internal static GameObject CreateTemplate(Transform parent)
         {
-            var contentList = MaterialEditorControlFactory.CreatePanel("ListEntry", parent);
+            // ListEntry is only the clipping source. A separate backdrop owns
+            // the visible Legacy row edge so hierarchy depth can inset the
+            // surface without changing the mask or the Dark layout.
+            var contentList = MaterialEditorControlFactory.CreateRowStencilMaskPanel(
+                "ListEntry",
+                parent);
             contentList.gameObject.AddComponent<LayoutElement>().preferredHeight = PanelHeight;
-            var mask = contentList.gameObject.AddComponent<Mask>();
-            // The root clips the active child panel but must not paint a
-            // full-width band behind an indented Subcategory child.
-            mask.showMaskGraphic = false;
-            contentList.color = RowColor;
+
+            var backdrop = MaterialEditorControlFactory.CreatePanel(
+                "RowBackdrop",
+                contentList.transform,
+                MaterialEditorPanelRole.RowBackdrop);
+            backdrop.raycastTarget = false;
+            backdrop.rectTransform.anchorMin = Vector2.zero;
+            backdrop.rectTransform.anchorMax = Vector2.one;
+            backdrop.rectTransform.offsetMin = Vector2.zero;
+            backdrop.rectTransform.offsetMax = Vector2.zero;
+            backdrop.gameObject.AddComponent<RowPanelInset>();
 
             RendererRowViewFactory.CreateRows(contentList.transform);
             MaterialShaderRowViewFactory.CreateRows(contentList.transform);

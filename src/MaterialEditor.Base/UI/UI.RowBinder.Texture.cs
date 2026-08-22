@@ -1,4 +1,4 @@
-﻿using UnityEngine;
+using UnityEngine;
 using UnityEngine.UI;
 
 namespace MaterialEditorAPI
@@ -97,15 +97,18 @@ namespace MaterialEditorAPI
             System.Action refreshExport = () =>
             {
                 var text = controls.ExportButton.GetComponentInChildren<Text>();
-                controls.ExportButton.enabled = item.Exists;
+                MaterialEditorStyles.SetControlAvailability(
+                    controls.ExportButton,
+                    item.Exists,
+                    MaterialEditorControlAvailabilityMode.LegacyPassive);
                 text.text = item.Exists ? "Export Texture" : "No Texture";
-                text.color = item.Exists
-                    ? MaterialEditorTheme.Colors.PrimaryText
-                    : MaterialEditorTheme.Colors.DisabledText;
             };
 
             controls.ImportButton.GetComponentInChildren<Text>().text = "Import Texture";
-            controls.SelectInterpolableButton.gameObject.SetActive(true);
+            TimelineColumnBinding.Bind(
+                controls.SelectInterpolableButton,
+                listeners,
+                item.SelectInterpolable);
             TooltipBinding.Bind(
                 controls.ImportButton.gameObject,
                 "Import a texture image.");
@@ -141,12 +144,6 @@ namespace MaterialEditorAPI
                 item.Reset();
                 refreshState();
             });
-            if (item.SelectInterpolable != null)
-            {
-                listeners.Listen(
-                    controls.SelectInterpolableButton,
-                    () => item.SelectInterpolable());
-            }
             LabelClickBinding.Bind(
                 listeners,
                 controls.LabelClickTrigger,
