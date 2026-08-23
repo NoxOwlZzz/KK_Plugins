@@ -57,6 +57,8 @@ namespace MaterialEditorAPI
         ISelectHandler,
         IDeselectHandler
     {
+        private const float GlyphBleed = 1f;
+
         [SerializeField] private InputField _inputField;
         [SerializeField] private RectTransform _viewport;
         [SerializeField] private string _displayFormat = "0.#####";
@@ -191,8 +193,15 @@ namespace MaterialEditorAPI
                 _viewport.SetParent(input.transform, false);
                 _viewport.anchorMin = Vector2.zero;
                 _viewport.anchorMax = Vector2.one;
-                _viewport.offsetMin = new Vector2(leftInset, bottomInset);
-                _viewport.offsetMax = new Vector2(-rightInset, -topInset);
+                // Extend the mask one pixel beyond the original text rect so
+                // anti-aliased glyph edges are not clipped. The child text is
+                // inset by the same amount below, preserving its exact layout.
+                _viewport.offsetMin = new Vector2(
+                    leftInset - GlyphBleed,
+                    bottomInset - GlyphBleed);
+                _viewport.offsetMax = new Vector2(
+                    -rightInset + GlyphBleed,
+                    -topInset + GlyphBleed);
             }
 
             if (input.placeholder is Graphic placeholder)
@@ -209,8 +218,8 @@ namespace MaterialEditorAPI
         {
             rect.anchorMin = Vector2.zero;
             rect.anchorMax = Vector2.one;
-            rect.offsetMin = Vector2.zero;
-            rect.offsetMax = Vector2.zero;
+            rect.offsetMin = Vector2.one * GlyphBleed;
+            rect.offsetMax = -Vector2.one * GlyphBleed;
         }
     }
 }

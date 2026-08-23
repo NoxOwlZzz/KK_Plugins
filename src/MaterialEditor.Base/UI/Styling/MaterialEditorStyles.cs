@@ -344,12 +344,8 @@ namespace MaterialEditorAPI
 
             foreach (var outlineState in
                      root.GetComponentsInChildren<MaterialEditorOutlineStyleState>(true))
-            {
-                var outline = outlineState.GetComponent<Outline>();
-                if (outline != null)
-                    outline.effectColor =
-                        MaterialEditorTheme.Colors.Resolve(outlineState.Role);
-            }
+                MaterialEditorScrollSelectableStyles.ReapplyOutline(
+                    outlineState);
 
             foreach (var graphicState in
                      root.GetComponentsInChildren<MaterialEditorGraphicStyleState>(true))

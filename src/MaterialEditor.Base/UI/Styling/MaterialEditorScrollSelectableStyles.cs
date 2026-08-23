@@ -69,10 +69,17 @@ namespace MaterialEditorAPI
 
             var outline = graphic.GetComponent<Outline>()
                           ?? graphic.gameObject.AddComponent<Outline>();
-            outline.effectColor = MaterialEditorTheme.Colors.Resolve(role);
-            outline.effectDistance = new Vector2(1f, -1f);
-            outline.useGraphicAlpha = false;
+            ApplyOutline(outline, role);
             MaterialEditorOutlineStyleState.Assign(graphic, role);
+        }
+
+        internal static void ReapplyOutline(
+            MaterialEditorOutlineStyleState state)
+        {
+            if (state == null)
+                return;
+
+            ApplyOutline(state.GetComponent<Outline>(), state.Role);
         }
 
         internal static void ReapplyTheme(MaterialEditorScrollStyleState state)
@@ -92,15 +99,48 @@ namespace MaterialEditorAPI
             if (scrollbar == null)
                 return;
 
+            var legacy = MaterialEditorTheme.Mode
+                         == MaterialEditorThemeMode.Legacy;
+            var legacyColors = ColorBlock.defaultColorBlock;
             var track = scrollbar.GetComponent<Image>();
             if (track != null)
-                track.color = MaterialEditorTheme.Colors.ScrollbarTrack;
+            {
+                track.color = legacy
+                    ? MaterialEditorTheme.Colors.Scrollbar
+                    : MaterialEditorTheme.Colors.ScrollbarTrack;
+            }
             ApplySelectable(
                 scrollbar,
-                MaterialEditorTheme.Colors.ScrollbarHandle,
-                MaterialEditorTheme.Colors.Accent,
-                MaterialEditorTheme.Colors.ScrollbarHandlePressed,
-                MaterialEditorTheme.Colors.ControlDisabled);
+                legacy
+                    ? legacyColors.normalColor
+                    : MaterialEditorTheme.Colors.ScrollbarHandle,
+                legacy
+                    ? legacyColors.highlightedColor
+                    : MaterialEditorTheme.Colors.Accent,
+                legacy
+                    ? legacyColors.pressedColor
+                    : MaterialEditorTheme.Colors.ScrollbarHandlePressed,
+                legacy
+                    ? legacyColors.disabledColor
+                    : MaterialEditorTheme.Colors.ControlDisabled);
+        }
+
+        private static void ApplyOutline(
+            Outline outline,
+            MaterialEditorThemeColorRole role)
+        {
+            if (outline == null)
+                return;
+
+            // Input fields and dropdowns originally relied on Unity's native
+            // control border. Keep that pre-401 appearance in Legacy while
+            // retaining the explicit outline needed by the Dark palette.
+            outline.enabled = MaterialEditorTheme.Mode
+                              != MaterialEditorThemeMode.Legacy
+                              || role != MaterialEditorThemeColorRole.InputBorder;
+            outline.effectColor = MaterialEditorTheme.Colors.Resolve(role);
+            outline.effectDistance = new Vector2(1f, -1f);
+            outline.useGraphicAlpha = false;
         }
 
         internal static void ApplySelectable(

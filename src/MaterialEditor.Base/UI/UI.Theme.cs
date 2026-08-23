@@ -88,7 +88,7 @@ namespace MaterialEditorAPI
             internal static Color SelectedText => Select(Color.black, Color.white);
             internal static Color DisabledSurface => Select(Gray(0.521569f), Rgb(0x20, 0x26, 0x2F));
             internal static Color ModifiedIndicator => Select(Gray(0.35f), Rgb(0x8A, 0x98, 0xA8));
-            internal static Color ModifiedSurface => Select(new Color(0f, 0f, 0f, 0.3f), Rgb(0x34, 0x3C, 0x46));
+            internal static Color ModifiedSurface => Select(new Color(0f, 0f, 0f, 0.3f), Rgb(0x39, 0x42, 0x4D));
 
             internal static Color Primary => Select(Color.black, Rgb(0xE6, 0xEC, 0xF2));
             internal static Color NativeControlText => Select(Gray(50f / 255f), Primary);
