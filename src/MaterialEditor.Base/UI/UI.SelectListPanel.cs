@@ -94,14 +94,10 @@ namespace MaterialEditorAPI
                     string.Empty,
                     MaterialEditorTextRole.Label);
                 _emptyStateText.transform.SetRect(0f, 0f, 1f, 1f);
+                MaterialEditorTextFitting.ApplyAdaptiveSingleLine(
+                    _emptyStateText,
+                    MaterialEditorTheme.Typography.PrimaryFontSize);
                 _emptyStateText.alignment = TextAnchor.MiddleCenter;
-                _emptyStateText.resizeTextForBestFit = true;
-                _emptyStateText.resizeTextMinSize =
-                    MaterialEditorTheme.Typography.PropertyLabelMinimumFontSize;
-                _emptyStateText.resizeTextMaxSize =
-                    MaterialEditorTheme.Typography.PrimaryFontSize;
-                _emptyStateText.horizontalOverflow = HorizontalWrapMode.Wrap;
-                _emptyStateText.verticalOverflow = VerticalWrapMode.Truncate;
                 _emptyStateText.raycastTarget = false;
 
                 ConfigureSelectionChrome();
@@ -167,7 +163,11 @@ namespace MaterialEditorAPI
             itemPanel.gameObject.AddComponent<CanvasGroup>();
             var itemLayout =
                 itemPanel.gameObject.AddComponent<HorizontalLayoutGroup>();
-            itemLayout.padding = MaterialEditorUI.Padding;
+            itemLayout.padding = new RectOffset(
+                MaterialEditorTheme.Spacing.SelectionEntryPadding,
+                MaterialEditorTheme.Spacing.SelectionEntryPadding,
+                MaterialEditorTheme.Spacing.SelectionEntryPadding,
+                MaterialEditorTheme.Spacing.SelectionEntryPadding);
             itemLayout.childControlWidth = true;
             itemLayout.childForceExpandWidth = true;
             itemLayout.childControlHeight = true;
@@ -283,13 +283,9 @@ namespace MaterialEditorAPI
         {
             _titleText.alignment = TextAnchor.MiddleLeft;
             _titleText.fontStyle = FontStyle.Bold;
-            _titleText.resizeTextForBestFit = true;
-            _titleText.resizeTextMinSize =
-                MaterialEditorTheme.Typography.SelectionNameMinimumFontSize;
-            _titleText.resizeTextMaxSize =
-                MaterialEditorTheme.Typography.PrimaryFontSize;
-            _titleText.horizontalOverflow = HorizontalWrapMode.Wrap;
-            _titleText.verticalOverflow = VerticalWrapMode.Truncate;
+            MaterialEditorTextFitting.ApplyAdaptiveSingleLine(
+                _titleText,
+                MaterialEditorTheme.Typography.PrimaryFontSize);
             _titleText.transform.SetRect(
                 0f,
                 1f,
@@ -421,12 +417,9 @@ namespace MaterialEditorAPI
                 return;
 
             MaterialEditorStyles.ApplyText(label, MaterialEditorTextRole.Input);
-            label.resizeTextForBestFit = false;
-            label.fontSize = MaterialEditorTheme.Typography.PrimaryFontSize;
-            // The row mask owns clipping. Generating a wrapped/truncated line
-            // can produce no glyphs at all in compact rows on Unity 5.6.
-            label.horizontalOverflow = HorizontalWrapMode.Overflow;
-            label.verticalOverflow = VerticalWrapMode.Overflow;
+            MaterialEditorTextFitting.ApplyAdaptiveSingleLine(
+                label,
+                MaterialEditorTheme.Typography.PrimaryFontSize);
             label.alignment = TextAnchor.MiddleLeft;
         }
 

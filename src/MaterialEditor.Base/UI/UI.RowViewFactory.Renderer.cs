@@ -113,7 +113,11 @@ namespace MaterialEditorAPI
             string toggleTooltip,
             string resetTooltip)
         {
-            var panel = RowViewFactorySupport.CreatePanel(panelName, parent, ItemColor);
+            var panel = RowViewFactorySupport.CreatePanel(
+                panelName,
+                parent,
+                ItemColor,
+                true);
             var label = RowViewFactorySupport.CreateLabel(
                 labelName,
                 panel.transform,
@@ -143,7 +147,8 @@ namespace MaterialEditorAPI
             var panel = RowViewFactorySupport.CreatePanel(
                 "RendererShadowCastingModePanel",
                 parent,
-                ItemColor);
+                ItemColor,
+                true);
             var label = RowViewFactorySupport.CreateLabel(
                 "RendererShadowCastingModeLabel",
                 panel.transform,

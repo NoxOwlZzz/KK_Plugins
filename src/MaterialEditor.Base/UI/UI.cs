@@ -367,7 +367,7 @@ namespace MaterialEditorAPI
         {
             var mode = UITheme == null
                 ? MaterialEditorThemeMode.Legacy
-                : UITheme.Value;
+                : GetConfiguredUITheme();
             if (!MaterialEditorTheme.SetMode(mode))
                 return;
 

@@ -10,7 +10,6 @@ namespace MaterialEditorAPI
         internal const float HeaderHeight = MaterialEditorTheme.Metrics.HeaderHeight;
         internal const float ScrollbarOffset = MaterialEditorTheme.Metrics.ScrollbarOffset;
         internal const float RowHeight = MaterialEditorTheme.Metrics.RowHeight;
-        internal const float CategoryNavigatorWidth = MaterialEditorTheme.Metrics.CategoryNavigatorWidth;
         internal const int PropertyLabelInset = MaterialEditorTheme.Spacing.PropertyLabelInset;
 
         internal const float LabelWidth = MaterialEditorTheme.Metrics.LabelWidth;

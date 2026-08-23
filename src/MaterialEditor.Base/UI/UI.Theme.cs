@@ -219,17 +219,15 @@ namespace MaterialEditorAPI
             internal const float SectionHeaderHeight = HeaderHeight;
             internal const float ScrollbarOffset = -15f;
             internal const float RowHeight = 22f;
-            internal const float CategoryNavigatorWidth = 150f;
             internal const float CategoryNavigatorCollapsedWidth = 24f;
             internal const float CategoryActiveMarkerWidth = 3f;
             internal const float SelectionPanelCollapsedWidth = 24f;
             internal const float SelectionPanelHeaderHeight = HeaderHeight;
             internal const float SelectionPanelFilterHeight = HeaderHeight;
             internal const float SidePanelMinimumWidth = 100f;
+            internal const float CategoryPanelDefaultWidth = 150f;
             internal const float SidePanelDefaultWidth = 180f;
             internal const float SidePanelMaximumWidth = 500f;
-            // The mode-row search spans x=177..right-91; 500 keeps 232 px usable.
-            internal const float ResponsiveMinimumMainWidth = 500f;
             // Topbar plus one full row in each half-height selection/Rename list.
             internal const float ResponsiveMinimumMainHeight = 138f;
             internal const float ResponsiveOuterMarginFraction = 0.05f;
@@ -274,6 +272,9 @@ namespace MaterialEditorAPI
             internal const float KeywordToggleWidth = ContentWidth;
 
             internal const float DropdownTemplateWidth = 100f;
+            internal const float DropdownPopupMaximumWidth = 360f;
+            internal const float DropdownPopupHorizontalPadding = 52f;
+            internal const float DropdownPopupScreenMargin = 4f;
             internal const float TooltipWidth = 280f;
             internal const float TooltipMaximumHeight = 360f;
             internal const float TooltipDelaySeconds = 0f;
@@ -290,17 +291,18 @@ namespace MaterialEditorAPI
 
         internal static class Typography
         {
+            internal const int AdaptiveMinimumFontSize = 2;
             internal const int PrimaryFontSize = 16;
             internal const int SecondaryFontSize = 14;
             internal const int IconFontSize = 16;
-            internal const int InputMinimumFontSize = 2;
+            internal const int InputMinimumFontSize = AdaptiveMinimumFontSize;
             internal const int DropdownFontSize = 16;
-            internal const int DropdownMinimumFontSize = 12;
+            internal const int DropdownMinimumFontSize = AdaptiveMinimumFontSize;
             internal const int VectorComponentFontSize = 16;
-            internal const int VectorComponentMinimumFontSize = 12;
-            internal const int PropertyLabelMinimumFontSize = 12;
-            internal const int PropertyCategoryMinimumFontSize = 12;
-            internal const int SelectionNameMinimumFontSize = 12;
+            internal const int VectorComponentMinimumFontSize = AdaptiveMinimumFontSize;
+            internal const int PropertyLabelMinimumFontSize = AdaptiveMinimumFontSize;
+            internal const int PropertyCategoryMinimumFontSize = AdaptiveMinimumFontSize;
+            internal const int SelectionNameMinimumFontSize = AdaptiveMinimumFontSize;
             internal const int TooltipFontSize = 11;
         }
 
@@ -311,8 +313,10 @@ namespace MaterialEditorAPI
             internal const float Control = 2f;
             internal const float TopBarHorizontalInset = 3f;
             internal const float Section = 5f;
-            internal const int PropertyLabelInset = 3;
-            internal const int RowPaddingLeft = 1;
+            internal const int NavigatorHeaderHorizontalInset = 3;
+            internal const int SelectionEntryPadding = 1;
+            internal const int PropertyLabelInset = 1;
+            internal const int RowPaddingLeft = 3;
             internal const int RowPaddingRight = 1;
             internal const int RowPaddingTop = 1;
             internal const int RowPaddingBottom = 1;

@@ -8,7 +8,7 @@ namespace MaterialEditorAPI
     internal sealed class NumericInputSpec
     {
         internal static readonly NumericInputSpec FloatingPoint =
-            new NumericInputSpec("0.#####", "R");
+            new NumericInputSpec("R", "R");
 
         internal NumericInputSpec(string displayFormat, string editFormat)
         {
@@ -61,7 +61,7 @@ namespace MaterialEditorAPI
 
         [SerializeField] private InputField _inputField;
         [SerializeField] private RectTransform _viewport;
-        [SerializeField] private string _displayFormat = "0.#####";
+        [SerializeField] private string _displayFormat = "R";
         [SerializeField] private string _editFormat = "R";
 
         private bool _editing;

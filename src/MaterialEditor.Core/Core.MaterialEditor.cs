@@ -172,7 +172,7 @@ namespace KK_Plugins.MaterialEditor
             RendererCachingEnabled = Config.Bind("Config", "Renderer Cache", true, "Turning this off will fix cache related issues but may have a negative impact on performance.");
 
             // Texture saving configs
-            ConfigLocalTexturePath = Config.Bind("Textures", "Legacy Local Texture Path", "", new ConfigDescription($"Compatibility path used when reading version-2 LOCAL_ texture data. This KK build writes textures inside cards and scenes. If empty, defaults to {LocalTexturePathDefault}.", null, new ConfigurationManagerAttributes { Order = 10, IsAdvanced = true }));
+            ConfigLocalTexturePath = Config.Bind("Textures", "Local Texture Path Override", "", new ConfigDescription("Local textures use this folder for import and export compatibility. If empty, defaults to UserData\\MaterialEditor\\_LocalTextures. If you change it, move any existing local texture files to the new path.", null, new ConfigurationManagerAttributes { Order = 10, IsAdvanced = true }));
             ConfigLocalTexturePath.SettingChanged += ConfigLocalTexturePath_SettingChanged;
             ConfigLocalTexturePath_SettingChanged(null, null);
             new TextureSaveHandler(LocalTexturePath);

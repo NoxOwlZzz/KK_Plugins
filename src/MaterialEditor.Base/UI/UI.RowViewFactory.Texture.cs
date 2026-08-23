@@ -52,10 +52,9 @@ namespace MaterialEditorAPI
                               == MaterialEditorThemeMode.Legacy
                 ? FontStyle.Normal
                 : FontStyle.Bold;
-            label.resizeTextForBestFit = false;
-            label.fontSize = MaterialEditorTheme.Typography.PrimaryFontSize;
-            label.horizontalOverflow = HorizontalWrapMode.Wrap;
-            label.verticalOverflow = VerticalWrapMode.Truncate;
+            MaterialEditorTextFitting.ApplyAdaptiveSingleLine(
+                label,
+                MaterialEditorTheme.Typography.PrimaryFontSize);
             label.raycastTarget = false;
 
         }
@@ -92,10 +91,9 @@ namespace MaterialEditorAPI
                 LabelWidth,
                 1f);
             label.fontStyle = FontStyle.Normal;
-            label.resizeTextForBestFit = false;
-            label.fontSize = MaterialEditorTheme.Typography.SecondaryFontSize;
-            label.horizontalOverflow = HorizontalWrapMode.Wrap;
-            label.verticalOverflow = VerticalWrapMode.Truncate;
+            MaterialEditorTextFitting.ApplyAdaptiveSingleLine(
+                label,
+                MaterialEditorTheme.Typography.SecondaryFontSize);
             label.raycastTarget = false;
 
         }

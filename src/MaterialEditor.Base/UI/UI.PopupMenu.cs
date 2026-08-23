@@ -167,7 +167,7 @@ namespace MaterialEditorAPI
                                == MaterialEditorThemeMode.Legacy;
             var text = switchToDark
                 ? "Switch to Dark theme"
-                : "Switch to Legacy theme";
+                : "Switch to Light theme";
             SetActionState(
                 ThemeButton,
                 _themeTooltip,

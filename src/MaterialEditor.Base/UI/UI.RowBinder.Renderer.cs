@@ -135,6 +135,7 @@ namespace MaterialEditorAPI
                     controls.Panel);
 
             controls.Dropdown.Set(item.Value);
+            MaterialEditorDropdownCaptionFitter.Refresh(controls.Dropdown);
             refresh();
             listeners.Listen(controls.Dropdown, value =>
             {

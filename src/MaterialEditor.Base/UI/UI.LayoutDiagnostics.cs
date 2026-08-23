@@ -270,22 +270,22 @@ namespace MaterialEditorAPI
                 AssertAtLeast(
                     "Vector X rendered label font size",
                     MaterialEditorLayout.VectorComponentMinimumFontSize,
-                    vectorXLabel.cachedTextGenerator.fontSizeUsedForBestFit,
+                    vectorXLabel.fontSize,
                     row);
                 AssertAtLeast(
                     "Vector Y rendered label font size",
                     MaterialEditorLayout.VectorComponentMinimumFontSize,
-                    vectorYLabel.cachedTextGenerator.fontSizeUsedForBestFit,
+                    vectorYLabel.fontSize,
                     row);
                 AssertAtLeast(
                     "Vector Z rendered label font size",
                     MaterialEditorLayout.VectorComponentMinimumFontSize,
-                    vectorZLabel.cachedTextGenerator.fontSizeUsedForBestFit,
+                    vectorZLabel.fontSize,
                     row);
                 AssertAtLeast(
                     "Vector W rendered label font size",
                     MaterialEditorLayout.VectorComponentMinimumFontSize,
-                    vectorWLabel.cachedTextGenerator.fontSizeUsedForBestFit,
+                    vectorWLabel.fontSize,
                     row);
                 AssertOrdered(
                     "Vector X/Y controls",
@@ -319,7 +319,7 @@ namespace MaterialEditorAPI
                     row);
                 AssertClose(
                     "Enum item configured minimum font size",
-                    MaterialEditorLayout.DropdownFontSize,
+                    MaterialEditorLayout.DropdownMinimumFontSize,
                     enumDropdown.itemText.resizeTextMinSize,
                     row);
                 AssertAtLeast(

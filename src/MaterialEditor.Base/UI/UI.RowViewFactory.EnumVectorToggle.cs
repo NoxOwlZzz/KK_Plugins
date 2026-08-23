@@ -76,10 +76,9 @@ namespace MaterialEditorAPI
                 labelText,
                 MaterialEditorLayout.VectorComponentLabelWidth,
                 0f);
-            label.fontSize = MaterialEditorLayout.VectorComponentFontSize;
-            label.resizeTextForBestFit = true;
-            label.resizeTextMinSize = MaterialEditorLayout.VectorComponentMinimumFontSize;
-            label.resizeTextMaxSize = MaterialEditorLayout.VectorComponentFontSize;
+            MaterialEditorTextFitting.ApplyAdaptiveSingleLine(
+                label,
+                MaterialEditorLayout.VectorComponentFontSize);
             var input = MaterialEditorControlFactory.CreateNumericInput(
                 inputName, parent, NumericInputSpec.FloatingPoint);
             input.SetValue(0f);

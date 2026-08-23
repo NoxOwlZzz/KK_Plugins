@@ -19,6 +19,9 @@ namespace MaterialEditorAPI
     [BepInDependency(XUnity.ResourceRedirector.Constants.PluginData.Identifier, XUnity.ResourceRedirector.Constants.PluginData.Version)]
     public partial class MaterialEditorPluginBase : BaseUnityPlugin
     {
+        private const string LightThemeSetting = "Light";
+        private const string DarkThemeSetting = "Dark";
+
         /// <summary>
         /// Logger instance for the plugin
         /// </summary>
@@ -73,10 +76,14 @@ namespace MaterialEditorAPI
         /// </summary>
         public static ConfigEntry<float> UIHeight { get; set; }
         /// <summary>
-        /// Configuration entry for width of the renderer/materials lists to the side of the window
+        /// Configuration entry for width of the renderer/material lists beside the window
         /// </summary>
         public static ConfigEntry<float> UIListWidth { get; set; }
-        internal static ConfigEntry<MaterialEditorThemeMode> UITheme { get; private set; }
+        /// <summary>
+        /// Configuration entry for width of the Categories list beside the window
+        /// </summary>
+        internal static ConfigEntry<float> UICategoriesWidth { get; private set; }
+        internal static ConfigEntry<string> UITheme { get; private set; }
         internal static ConfigEntry<bool> CategoriesPanelOpen { get; private set; }
         internal static ConfigEntry<bool> RenderersPanelOpen { get; private set; }
         internal static ConfigEntry<bool> MaterialsPanelOpen { get; private set; }
@@ -237,16 +244,21 @@ namespace MaterialEditorAPI
             Logger = base.Logger;
             Directory.CreateDirectory(ExportPath);
 
-            UIScale = Config.Bind("Config", "UI Scale", MaterialEditorTheme.Metrics.UiScaleDefault, new ConfigDescription("Controls the size of the window.", new AcceptableValueRange<float>(MaterialEditorTheme.Metrics.UiScaleMinimum, MaterialEditorTheme.Metrics.UiScaleMaximum), new ConfigurationManagerAttributes { Order = 7 }));
-            UIWidth = Config.Bind("Config", "UI Width", MaterialEditorTheme.Metrics.WindowWidthDefault, new ConfigDescription("Controls the size of the window.", new AcceptableValueRange<float>(MaterialEditorTheme.Metrics.WindowWidthMinimum, MaterialEditorTheme.Metrics.WindowWidthMaximum), new ConfigurationManagerAttributes { Order = 6, ShowRangeAsPercent = false }));
-            UIHeight = Config.Bind("Config", "UI Height", MaterialEditorTheme.Metrics.WindowHeightDefault, new ConfigDescription("Controls the size of the window.", new AcceptableValueRange<float>(MaterialEditorTheme.Metrics.WindowHeightMinimum, MaterialEditorTheme.Metrics.WindowHeightMaximum), new ConfigurationManagerAttributes { Order = 5, ShowRangeAsPercent = false }));
-            UIListWidth = Config.Bind("Config", "UI List Width", MaterialEditorTheme.Metrics.SidePanelDefaultWidth, new ConfigDescription("Controls width of the renderer/materials lists to the side of the window", new AcceptableValueRange<float>(MaterialEditorTheme.Metrics.SidePanelMinimumWidth, MaterialEditorTheme.Metrics.SidePanelMaximumWidth), new ConfigurationManagerAttributes { Order = 4, ShowRangeAsPercent = false }));
+            UIScale = Config.Bind("Config", "UI Scale", MaterialEditorTheme.Metrics.UiScaleDefault, new ConfigDescription("Controls the size of the window.", new AcceptableValueRange<float>(MaterialEditorTheme.Metrics.UiScaleMinimum, MaterialEditorTheme.Metrics.UiScaleMaximum), new ConfigurationManagerAttributes { Order = 8 }));
+            UIWidth = Config.Bind("Config", "UI Width", MaterialEditorTheme.Metrics.WindowWidthDefault, new ConfigDescription("Controls the size of the window.", new AcceptableValueRange<float>(MaterialEditorTheme.Metrics.WindowWidthMinimum, MaterialEditorTheme.Metrics.WindowWidthMaximum), new ConfigurationManagerAttributes { Order = 7, ShowRangeAsPercent = false }));
+            UIHeight = Config.Bind("Config", "UI Height", MaterialEditorTheme.Metrics.WindowHeightDefault, new ConfigDescription("Controls the size of the window.", new AcceptableValueRange<float>(MaterialEditorTheme.Metrics.WindowHeightMinimum, MaterialEditorTheme.Metrics.WindowHeightMaximum), new ConfigurationManagerAttributes { Order = 6, ShowRangeAsPercent = false }));
+            UICategoriesWidth = Config.Bind("Config", "UI Categories Width", MaterialEditorTheme.Metrics.CategoryPanelDefaultWidth, new ConfigDescription("Controls the width of the Categories list beside the window.", new AcceptableValueRange<float>(MaterialEditorTheme.Metrics.SidePanelMinimumWidth, MaterialEditorTheme.Metrics.SidePanelMaximumWidth), new ConfigurationManagerAttributes { Order = 5, ShowRangeAsPercent = false }));
+            UIListWidth = Config.Bind("Config", "UI List Width", MaterialEditorTheme.Metrics.SidePanelDefaultWidth, new ConfigDescription("Controls the width of the renderer/material and Rename lists beside the window.", new AcceptableValueRange<float>(MaterialEditorTheme.Metrics.SidePanelMinimumWidth, MaterialEditorTheme.Metrics.SidePanelMaximumWidth), new ConfigurationManagerAttributes { Order = 4, ShowRangeAsPercent = false, DispName = "Renderer/Material List Width" }));
             UITheme = Config.Bind(
                 "Config",
                 "UI Theme",
-                MaterialEditorThemeMode.Legacy,
-                "Selects the original Legacy palette or the optional Dark palette. This changes visuals only.");
-            MaterialEditorTheme.SetMode(UITheme.Value);
+                LightThemeSetting,
+                new ConfigDescription(
+                    "Selects the Light or Dark appearance. This changes visuals only.",
+                    new AcceptableValueList<string>(
+                        LightThemeSetting,
+                        DarkThemeSetting)));
+            MaterialEditorTheme.SetMode(GetConfiguredUITheme());
             CategoriesPanelOpen = Config.Bind(
                 "UI State",
                 "Categories Panel Open",
@@ -293,7 +305,7 @@ namespace MaterialEditorAPI
             ShaderOptimization = Config.Bind("Config", "Shader Optimization", true, new ConfigDescription("Replaces every loaded shader with the MaterialEditor copy of the shader. Reduces the number of copies of shaders loaded which reduces RAM usage and improves performance.", null, new ConfigurationManagerAttributes { Order = 1 }));
             ExportBakedMesh = Config.Bind("Config", "Export Baked Mesh", false, new ConfigDescription("When enabled, skinned meshes will be exported in their current state with all customization applied as well as in the current pose.", null, new ConfigurationManagerAttributes { Order = 1 }));
             ExportBakedWorldPosition = Config.Bind("Config", "Export Baked World Position", false, new ConfigDescription("When enabled, objects will be exported with their position changes intact so that, i.e. when exporting two objects they retain their position relative to each other.\nOnly works when Export Baked Mesh is also enabled.", null, new ConfigurationManagerAttributes { Order = 1 }));
-            ConfigExportPath = Config.Bind("Config", "Export Path Override", "", new ConfigDescription($"Textures and models will be exported to this folder. If empty, exports to {ExportPathDefault}", null, new ConfigurationManagerAttributes { Order = 1 }));
+            ConfigExportPath = Config.Bind("Config", "Export Path Override", "", new ConfigDescription("Textures and models will be exported to this folder. If empty, exports to UserData\\MaterialEditor.", null, new ConfigurationManagerAttributes { Order = 1 }));
             PersistFilter = Config.Bind("Config", "Persist Filter", false, "Persist search filter across editor windows");
             Showtooltips = Config.Bind("Config", "Show Tooltips", true, "Whether to show tooltips or not");
             EnableShaderHints = Config.Bind(
@@ -308,24 +320,34 @@ namespace MaterialEditorAPI
                 "Performance",
                 "PerformanceDiagnostics",
                 false,
-                "Enable internal Material Editor timing diagnostics and Unity Profiler samples.");
+                new ConfigDescription(
+                    "Enable internal Material Editor timing diagnostics and Unity Profiler samples.",
+                    null,
+                    new ConfigurationManagerAttributes { IsAdvanced = true }));
             PerformanceCountersEnabled = Config.Bind(
                 "Performance",
                 "PerformanceCountersEnabled",
                 false,
-                "Enable internal Material Editor operation counters.");
+                new ConfigDescription(
+                    "Enable internal Material Editor operation counters.",
+                    null,
+                    new ConfigurationManagerAttributes { IsAdvanced = true }));
             PerformanceLogThresholdMs = Config.Bind(
                 "Performance",
                 "PerformanceLogThresholdMs",
                 5f,
                 new ConfigDescription(
                     "Minimum elapsed milliseconds for a performance diagnostic log entry.",
-                    new AcceptableValueRange<float>(0f, 60000f)));
+                    new AcceptableValueRange<float>(0f, 60000f),
+                    new ConfigurationManagerAttributes { IsAdvanced = true }));
             PerformanceSummaryOnClose = Config.Bind(
                 "Performance",
                 "PerformanceSummaryOnClose",
                 false,
-                "Write an internal performance counter summary when the Material Editor window closes.");
+                new ConfigDescription(
+                    "Write an internal performance counter summary when the Material Editor window closes.",
+                    null,
+                    new ConfigurationManagerAttributes { IsAdvanced = true }));
             ConfigurePerformanceDiagnostics();
             ConvertNormalmapsOnExport = Config.Bind("Config", "Convert Normalmaps On Export", true, new ConfigDescription("When enabled, normalmaps get converted from DXT5 compressed (red) normals back to normal OpenGL (blue/purple) normals"));
 
@@ -345,6 +367,7 @@ namespace MaterialEditorAPI
             UIScale.SettingChanged += MaterialEditorUI.UISettingChanged;
             UIWidth.SettingChanged += MaterialEditorUI.UISettingChanged;
             UIHeight.SettingChanged += MaterialEditorUI.UISettingChanged;
+            UICategoriesWidth.SettingChanged += MaterialEditorUI.UISettingChanged;
             UIListWidth.SettingChanged += MaterialEditorUI.UISettingChanged;
             UITheme.SettingChanged += MaterialEditorUI.UIThemeSettingChanged;
             WatchTexChanges.SettingChanged += WatchTexChanges_SettingChanged;
@@ -367,7 +390,21 @@ namespace MaterialEditorAPI
             if (UITheme == null)
                 return;
 
-            UITheme.Value = MaterialEditorTheme.ToggleMode;
+            UITheme.Value = MaterialEditorTheme.ToggleMode
+                            == MaterialEditorThemeMode.Dark
+                ? DarkThemeSetting
+                : LightThemeSetting;
+        }
+
+        internal static MaterialEditorThemeMode GetConfiguredUITheme()
+        {
+            return UITheme != null
+                   && string.Equals(
+                       UITheme.Value,
+                       DarkThemeSetting,
+                       StringComparison.OrdinalIgnoreCase)
+                ? MaterialEditorThemeMode.Dark
+                : MaterialEditorThemeMode.Legacy;
         }
 
         private static void PerformanceSettingsChanged(object sender, EventArgs eventArgs)

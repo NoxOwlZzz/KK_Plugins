@@ -129,7 +129,8 @@ namespace MaterialEditorAPI
 
                 if (CategoryNavigator != null)
                 {
-                    CategoryNavigator.ApplySettings();
+                    CategoryNavigator.ApplySettings(
+                        _responsiveLayout.LeftPanelWidth);
                 }
 
                 VirtualList?.EnsureViewportCapacity(
@@ -332,14 +333,10 @@ namespace MaterialEditorAPI
                 string.Empty,
                 MaterialEditorTextRole.Label);
             _emptyStateText.transform.SetRect(0f, 0f, 1f, 1f);
+            MaterialEditorTextFitting.ApplyAdaptiveSingleLine(
+                _emptyStateText,
+                MaterialEditorTheme.Typography.PrimaryFontSize);
             _emptyStateText.alignment = TextAnchor.MiddleCenter;
-            _emptyStateText.resizeTextForBestFit = true;
-            _emptyStateText.resizeTextMinSize =
-                MaterialEditorTheme.Typography.PropertyLabelMinimumFontSize;
-            _emptyStateText.resizeTextMaxSize =
-                MaterialEditorTheme.Typography.PrimaryFontSize;
-            _emptyStateText.horizontalOverflow = HorizontalWrapMode.Wrap;
-            _emptyStateText.verticalOverflow = VerticalWrapMode.Truncate;
             _emptyStateText.raycastTarget = false;
             _emptyStateText.gameObject.SetActive(false);
 
@@ -352,6 +349,7 @@ namespace MaterialEditorAPI
             CategoryNavigator = new CategoryNavigatorView(
                 MainPanel.transform,
                 VirtualList.ScrollRect.content,
+                _responsiveLayout.LeftPanelWidth,
                 navigateToCategory,
                 toggleCategory);
             VirtualList.ViewportAnchorIndexChanged += rowIndex =>
@@ -539,6 +537,7 @@ namespace MaterialEditorAPI
                 UIScale.Value,
                 UIWidth.Value,
                 UIHeight.Value,
+                UICategoriesWidth.Value,
                 UIListWidth.Value,
                 leftState,
                 rightState,

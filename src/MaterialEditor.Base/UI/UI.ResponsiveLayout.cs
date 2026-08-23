@@ -22,6 +22,7 @@ namespace MaterialEditorAPI
         internal float MainWidth;
         internal float MainHeight;
         internal float ViewportHeight;
+        internal float LeftPanelWidth;
         internal float RightPanelWidth;
         internal float MinimumDragOffsetX;
         internal float MaximumDragOffsetX;
@@ -55,6 +56,7 @@ namespace MaterialEditorAPI
             float uiScale,
             float uiWidth,
             float uiHeight,
+            float requestedLeftPanelWidth,
             float requestedRightPanelWidth,
             MaterialEditorResponsiveSideState leftState,
             MaterialEditorResponsiveSideState rightState)
@@ -68,6 +70,7 @@ namespace MaterialEditorAPI
                 uiScale,
                 uiWidth,
                 uiHeight,
+                requestedLeftPanelWidth,
                 requestedRightPanelWidth,
                 leftState,
                 rightState,
@@ -81,6 +84,7 @@ namespace MaterialEditorAPI
             float uiScale,
             float uiWidth,
             float uiHeight,
+            float requestedLeftPanelWidth,
             float requestedRightPanelWidth,
             MaterialEditorResponsiveSideState leftState,
             MaterialEditorResponsiveSideState rightState,
@@ -102,6 +106,11 @@ namespace MaterialEditorAPI
                 MaterialEditorTheme.Metrics.WindowHeightMinimum,
                 MaterialEditorTheme.Metrics.WindowHeightMaximum,
                 MaterialEditorTheme.Metrics.WindowHeightDefault);
+            requestedLeftPanelWidth = ClampFinite(
+                requestedLeftPanelWidth,
+                MaterialEditorTheme.Metrics.SidePanelMinimumWidth,
+                MaterialEditorTheme.Metrics.SidePanelMaximumWidth,
+                MaterialEditorTheme.Metrics.CategoryPanelDefaultWidth);
             requestedRightPanelWidth = ClampFinite(
                 requestedRightPanelWidth,
                 MaterialEditorTheme.Metrics.SidePanelMinimumWidth,
@@ -123,25 +132,19 @@ namespace MaterialEditorAPI
             var outerY = canvasHeight
                          * MaterialEditorTheme.Metrics.ResponsiveOuterMarginFraction;
 
-            // Keep the central editor on the historical UIWidth geometry.
-            // Side-panel state controls only which surface is visible outside
-            // the Main panel; it must never move or resize Main itself.
+            var expandedLeftWidth = requestedLeftPanelWidth;
             var mainLeft = GetMainLeft(
                 outerX,
-                MaterialEditorTheme.Metrics.CategoryNavigatorWidth);
+                expandedLeftWidth);
+            var mainWidth = CalculateMainWidth(
+                uiWidth,
+                uiScale,
+                canvasWidth);
             var expandedRightWidth = CapExpandedRightWidth(
                 requestedRightPanelWidth,
                 canvasWidth,
-                mainLeft);
-            // Preserve the legacy normalized-anchor meaning of UIWidth:
-            // right = UIWidth * UIScale + left - outerFraction. Do not shrink
-            // the requested Main width to make optional side panels fit.
-            var baseMainWidth = Math.Max(
-                MaterialEditorTheme.Metrics.ResponsiveMinimumMainWidth,
-                (uiWidth * uiScale
-                 - MaterialEditorTheme.Metrics.ResponsiveOuterMarginFraction)
-                * canvasWidth);
-            var mainWidth = baseMainWidth;
+                mainLeft,
+                mainWidth);
 
             var maximumMainHeight = Math.Min(
                 Math.Max(0f, canvasHeight - outerY * 2f),
@@ -166,7 +169,9 @@ namespace MaterialEditorAPI
 
             var mainRight = mainLeft + mainWidth;
             var mainTop = outerY + mainHeight;
-            var leftFootprint = GetLeftVisibleFootprint(leftState);
+            var leftFootprint = GetLeftVisibleFootprint(
+                expandedLeftWidth,
+                leftState);
             var rightFootprint = GetRightVisibleFootprint(
                 expandedRightWidth,
                 rightState);
@@ -198,6 +203,7 @@ namespace MaterialEditorAPI
                 MainWidth = mainWidth,
                 MainHeight = mainHeight,
                 ViewportHeight = viewportHeight,
+                LeftPanelWidth = expandedLeftWidth,
                 RightPanelWidth = expandedRightWidth,
                 MinimumDragOffsetX = wholeBounds.MinimumX,
                 MaximumDragOffsetX = wholeBounds.MaximumX,
@@ -206,6 +212,30 @@ namespace MaterialEditorAPI
                 HeaderDragBounds = headerBounds,
                 WholeDragBounds = wholeBounds
             };
+        }
+
+        private static float CalculateMainWidth(
+            float uiWidth,
+            float uiScale,
+            float canvasWidth)
+        {
+            var legacyWidth =
+                (uiWidth * uiScale
+                 - MaterialEditorTheme.Metrics.ResponsiveOuterMarginFraction)
+                * canvasWidth;
+            if (uiWidth >= MaterialEditorTheme.Metrics.WindowWidthDefault)
+                return Math.Max(0f, legacyWidth);
+
+            var defaultWidth =
+                (MaterialEditorTheme.Metrics.WindowWidthDefault * uiScale
+                 - MaterialEditorTheme.Metrics.ResponsiveOuterMarginFraction)
+                * canvasWidth;
+            var minimumWidth = Math.Min(
+                MaterialEditorTheme.Metrics.WindowHeaderRecoveryWidth,
+                defaultWidth);
+            var ratio = uiWidth
+                        / MaterialEditorTheme.Metrics.WindowWidthDefault;
+            return minimumWidth + (defaultWidth - minimumWidth) * ratio;
         }
 
         private static float GetMainLeft(float outerX, float leftWidth)
@@ -218,14 +248,14 @@ namespace MaterialEditorAPI
         }
 
         private static float GetLeftVisibleFootprint(
+            float leftWidth,
             MaterialEditorResponsiveSideState state)
         {
             if (state == MaterialEditorResponsiveSideState.Hidden)
                 return 0f;
             return state == MaterialEditorResponsiveSideState.Collapsed
                 ? MaterialEditorTheme.Metrics.CategoryNavigatorCollapsedWidth
-                : MaterialEditorTheme.Metrics.CategoryNavigatorWidth
-                  + MaterialEditorTheme.Metrics.Margin;
+                : leftWidth + MaterialEditorTheme.Metrics.Margin;
         }
 
         private static float GetRightVisibleFootprint(
@@ -251,12 +281,13 @@ namespace MaterialEditorAPI
         private static float CapExpandedRightWidth(
             float requestedWidth,
             float canvasWidth,
-            float mainLeft)
+            float mainLeft,
+            float mainWidth)
         {
             var maximumWidth =
                 canvasWidth
                 - mainLeft
-                - MaterialEditorTheme.Metrics.ResponsiveMinimumMainWidth
+                - mainWidth
                 - MaterialEditorTheme.Metrics.Margin;
             if (maximumWidth < MaterialEditorTheme.Metrics.SidePanelMinimumWidth)
                 return MaterialEditorTheme.Metrics.SidePanelMinimumWidth;

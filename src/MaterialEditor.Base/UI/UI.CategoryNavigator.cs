@@ -29,6 +29,7 @@ namespace MaterialEditorAPI
         internal CategoryNavigatorView(
             Transform parent,
             RectTransform centralScrollContent,
+            float width,
             Action<CategoryNavigationTarget> navigate,
             Action<CategoryNavigationTarget> toggle)
         {
@@ -61,8 +62,8 @@ namespace MaterialEditorAPI
 
             var headerLayout = header.gameObject.AddComponent<HorizontalLayoutGroup>();
             headerLayout.padding = new RectOffset(
-                MaterialEditorTheme.Spacing.PropertyLabelInset,
-                MaterialEditorTheme.Spacing.PropertyLabelInset,
+                MaterialEditorTheme.Spacing.NavigatorHeaderHorizontalInset,
+                MaterialEditorTheme.Spacing.NavigatorHeaderHorizontalInset,
                 0,
                 0);
             headerLayout.spacing = MaterialEditorTheme.Spacing.Control;
@@ -149,15 +150,15 @@ namespace MaterialEditorAPI
             _scrollRect.vertical = true;
             _scrollRect.movementType = ScrollRect.MovementType.Clamped;
 
-            ApplySettings();
+            ApplySettings(width);
         }
 
         internal Image Panel { get; }
 
         internal bool Visible => _visible && HasCategories();
-        internal void ApplySettings()
+        internal void ApplySettings(float width)
         {
-            ApplyPanelRect();
+            ApplyPanelRect(width);
             UpdateVisibility();
         }
 
@@ -252,12 +253,11 @@ namespace MaterialEditorAPI
                 Panel.gameObject.SetActive(visible);
         }
 
-        private void ApplyPanelRect()
+        private void ApplyPanelRect(float width)
         {
             Panel.transform.SetRect(
                 0f, 0f, 0f, 1f,
-                -MaterialEditorLayout.CategoryNavigatorWidth
-                - MaterialEditorLayout.Margin,
+                -width - MaterialEditorLayout.Margin,
                 0f,
                 -MaterialEditorLayout.Margin,
                 0f);
@@ -580,10 +580,10 @@ namespace MaterialEditorAPI
             if (text == null)
                 return;
 
-            text.resizeTextForBestFit = false;
-            // The navigator viewport clips the generated single line.
-            text.horizontalOverflow = HorizontalWrapMode.Overflow;
-            text.verticalOverflow = VerticalWrapMode.Overflow;
+            var maximumFontSize = Mathf.Max(1, text.fontSize);
+            MaterialEditorTextFitting.ApplyAdaptiveSingleLine(
+                text,
+                maximumFontSize);
             text.alignment = TextAnchor.MiddleLeft;
         }
 

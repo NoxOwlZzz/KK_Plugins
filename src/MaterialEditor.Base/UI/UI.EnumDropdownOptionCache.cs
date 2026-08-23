@@ -91,6 +91,7 @@ namespace MaterialEditorAPI
             selectedIndex = Mathf.Max(0, selectedIndex);
             if (projectionChanged || _dropdown.value != selectedIndex)
                 _dropdown.Set(selectedIndex);
+            MaterialEditorDropdownCaptionFitter.Refresh(_dropdown);
             _lastValue = value;
             _lastIsMixed = isMixed;
         }

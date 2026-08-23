@@ -63,6 +63,8 @@
     <Compile Include="$(MSBuildThisFileDirectory)UI\Styling\MaterialEditorStyleRoles.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)UI\Styling\MaterialEditorStyles.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)UI\Styling\MaterialEditorPanelTextStyles.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)UI\Styling\MaterialEditorTextFitting.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)UI\Styling\MaterialEditorDropdownCaptionFitter.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)UI\Styling\MaterialEditorSelectionStyles.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)UI\Styling\MaterialEditorInputStyles.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)UI\Styling\MaterialEditorDropdownStyles.cs" />

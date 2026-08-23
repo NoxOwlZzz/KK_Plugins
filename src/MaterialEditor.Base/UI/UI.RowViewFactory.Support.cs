@@ -70,17 +70,9 @@ namespace MaterialEditorAPI
             if (label == null)
                 return;
 
-            // Property labels own the flexible part of the row budget. Keep
-            // them on one visual line and scale only within the readable
-            // typography range when the fixed editor columns need the space.
-            label.resizeTextForBestFit = true;
-            label.resizeTextMinSize =
-                MaterialEditorTheme.Typography.PropertyLabelMinimumFontSize;
-            label.resizeTextMaxSize =
-                MaterialEditorTheme.Typography.PrimaryFontSize;
-            label.fontSize = MaterialEditorTheme.Typography.PrimaryFontSize;
-            label.horizontalOverflow = HorizontalWrapMode.Wrap;
-            label.verticalOverflow = VerticalWrapMode.Truncate;
+            MaterialEditorTextFitting.ApplyAdaptiveSingleLine(
+                label,
+                MaterialEditorTheme.Typography.PrimaryFontSize);
         }
 
         internal static LayoutElement SetWidth(

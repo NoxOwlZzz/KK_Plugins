@@ -160,6 +160,9 @@ namespace MaterialEditorAPI
             if (selectedIndex >= 0)
                 controls.Dropdown.Set(selectedIndex);
             controls.Dropdown.captionText.text = item.ShaderName;
+            MaterialEditorDropdownCaptionFitter.Refresh(
+                controls.Dropdown,
+                item.ShaderName);
             refresh();
 
             listeners.Listen(controls.Dropdown, value =>

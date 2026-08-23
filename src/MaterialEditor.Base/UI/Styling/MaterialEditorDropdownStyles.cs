@@ -23,8 +23,8 @@ namespace MaterialEditorAPI
             MaterialEditorScrollSelectableStyles.ApplyControlOutline(
                 dropdown.targetGraphic,
                 MaterialEditorThemeColorRole.InputBorder);
-            ApplyDropdownText(dropdown.captionText, null);
-            ApplyDropdownText(dropdown.itemText, dropdown.captionText);
+            ApplyDropdownCaptionText(dropdown.captionText);
+            ApplyDropdownItemText(dropdown.itemText, dropdown.captionText);
 
             var arrow = dropdown.transform.Find("Arrow");
             if (arrow != null)
@@ -61,12 +61,13 @@ namespace MaterialEditorAPI
                 if (itemToggle != null)
                 {
                     ApplyDropdownItem(itemToggle, dropdown.itemText);
-                    ApplyDropdownText(dropdown.itemText, dropdown.captionText);
+                    ApplyDropdownItemText(dropdown.itemText, dropdown.captionText);
                 }
             }
             MaterialEditorPanelTextStyles.ApplyTypography(dropdown.gameObject);
-            ApplyDropdownText(dropdown.captionText, null);
-            ApplyDropdownText(dropdown.itemText, dropdown.captionText);
+            ApplyDropdownCaptionText(dropdown.captionText);
+            ApplyDropdownItemText(dropdown.itemText, dropdown.captionText);
+            MaterialEditorDropdownCaptionFitter.Configure(dropdown);
         }
 
         internal static void ReapplyTheme(
@@ -109,8 +110,8 @@ namespace MaterialEditorAPI
 
             if (dropdown != null)
             {
-                ApplyDropdownText(dropdown.captionText, null);
-                ApplyDropdownText(dropdown.itemText, dropdown.captionText);
+                ApplyDropdownCaptionText(dropdown.captionText);
+                ApplyDropdownItemText(dropdown.itemText, dropdown.captionText);
             }
 
             var items = popupRoot.GetComponentsInChildren<Toggle>(true);
@@ -122,29 +123,49 @@ namespace MaterialEditorAPI
             }
         }
 
-        private static void ApplyDropdownText(Text text, Text renderingSource)
+        private static void ApplyDropdownCaptionText(Text text)
         {
             if (text == null)
                 return;
 
             MaterialEditorPanelTextStyles.ApplyText(text, MaterialEditorTextRole.Input);
-            MaterialEditorPanelTextStyles.ApplyTextRendering(text, renderingSource);
+            MaterialEditorPanelTextStyles.ApplyTextRendering(text, null);
             text.maskable = true;
             text.raycastTarget = false;
             text.fontSize = MaterialEditorLayout.DropdownFontSize;
-            // Dropdown captions and popup entries occupy fixed-height rows.
-            // Best Fit makes otherwise identical controls render at different
-            // sizes and can visibly rescale pooled rows as their content changes.
-            // Keep one stable type size and let the existing row bounds truncate
-            // text that does not fit.
             text.resizeTextForBestFit = false;
             text.resizeTextMinSize = MaterialEditorLayout.DropdownFontSize;
             text.resizeTextMaxSize = MaterialEditorLayout.DropdownFontSize;
-            // Older uGUI versions discard the only generated line when its
-            // font metrics are slightly taller than a compact caption rect.
-            // Overflow preserves that line; long values remain available via tooltip.
             text.horizontalOverflow = HorizontalWrapMode.Wrap;
             text.verticalOverflow = VerticalWrapMode.Overflow;
+            ApplyDropdownTextInsets(text);
+        }
+
+        private static void ApplyDropdownItemText(
+            Text text,
+            Text renderingSource)
+        {
+            if (text == null)
+                return;
+
+            MaterialEditorPanelTextStyles.ApplyText(
+                text,
+                MaterialEditorTextRole.Input);
+            MaterialEditorPanelTextStyles.ApplyTextRendering(
+                text,
+                renderingSource);
+            text.maskable = true;
+            text.raycastTarget = false;
+            MaterialEditorTextFitting.ApplyAdaptiveSingleLine(
+                text,
+                MaterialEditorLayout.DropdownFontSize);
+            ApplyDropdownTextInsets(text);
+        }
+
+        private static void ApplyDropdownTextInsets(Text text)
+        {
+            if (text == null)
+                return;
 
             var rect = text.rectTransform;
             rect.offsetMin = new Vector2(
@@ -175,7 +196,7 @@ namespace MaterialEditorAPI
             {
                 toggle.graphic.color = MaterialEditorTheme.Colors.SelectedText;
             }
-            ApplyDropdownText(text, null);
+            ApplyDropdownItemText(text, null);
 
             var state = toggle.GetComponent<MaterialEditorDropdownItemStyle>()
                         ?? toggle.gameObject.AddComponent<MaterialEditorDropdownItemStyle>();

@@ -53,15 +53,23 @@ namespace MaterialEditorAPI
 
         internal void ToggleSelectionPanels()
         {
-            var renameWasVisible = _session.RenameListVisible;
-            _session.RenameListVisible = false;
-            var visible =
-                renameWasVisible || !_session.SelectionPanelsVisible;
+            if (_session.RenameListVisible)
+            {
+                _session.RenameListVisible = false;
+                if (_session.SelectionPanelsVisible)
+                {
+                    _session.SelectionPanelsVisible = false;
+                    PersistSelectionPanelsVisible(false);
+                }
+                ApplyPanelState();
+                ReleaseRenameContext();
+                return;
+            }
+
+            var visible = !_session.SelectionPanelsVisible;
             _session.SelectionPanelsVisible = visible;
             PersistSelectionPanelsVisible(visible);
             ApplyPanelState();
-            if (renameWasVisible)
-                ReleaseRenameContext();
         }
 
         internal void CloseRenamePanel()
