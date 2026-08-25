@@ -32,7 +32,6 @@
     <Compile Include="$(MSBuildThisFileDirectory)CopyContainer.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)CubemapContentKey.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)CubemapBackgroundRead.cs" />
-    <Compile Include="$(MSBuildThisFileDirectory)Cubemap\OriginalState\CubemapMaterialIdentity.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)Cubemap\OriginalState\CubemapOriginalSnapshot.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)Cubemap\OriginalState\CubemapOriginalState.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)CubemapProjection.cs" />
