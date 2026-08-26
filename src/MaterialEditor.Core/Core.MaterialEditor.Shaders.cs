@@ -98,81 +98,70 @@ namespace KK_Plugins.MaterialEditor
             string sourceId)
         {
             if (materialEditorElement == null) return;
-            var performanceSample = MaterialEditorPerformance.Start(
-                MaterialEditorPerformanceMetric.ManifestParsing);
-            try
+            Action<string> metadataWarning = message => Logger.LogWarning(
+                "Material Editor metadata in '" + (sourceId ?? "unknown source") + "': " + message);
+            var schemaVersion = ShaderPropertyMetadataParser.ReadSchemaVersion(
+                materialEditorElement,
+                metadataWarning);
+            var tooltipCatalog = LoadTooltipCatalogs(
+                materialEditorElement,
+                sourceId ?? "unknown source");
+            var shaderElements = materialEditorElement.GetElementsByTagName("Shader");
+            foreach (var shaderElementObj in shaderElements)
             {
-                Action<string> metadataWarning = message => Logger.LogWarning(
-                    "Material Editor metadata in '" + (sourceId ?? "unknown source") + "': " + message);
-                var schemaVersion = ShaderPropertyMetadataParser.ReadSchemaVersion(
-                    materialEditorElement,
-                    metadataWarning);
-                var tooltipCatalog = LoadTooltipCatalogs(
-                    materialEditorElement,
-                    sourceId ?? "unknown source");
-                var shaderElements = materialEditorElement.GetElementsByTagName("Shader");
-                foreach (var shaderElementObj in shaderElements)
+                if (shaderElementObj != null)
                 {
-                    if (shaderElementObj != null)
+                    var shaderElement = (XmlElement)shaderElementObj;
+                    string shaderName = shaderElement.GetAttribute("Name");
+                    var shaderMetadata = tooltipCatalog.ResolveShader(shaderName);
+                    ShaderUiMetadataRegistry.SetShader(shaderName, shaderMetadata);
+
+                    if (LoadedShaders.ContainsKey(shaderName))
                     {
-                        var shaderElement = (XmlElement)shaderElementObj;
-                        string shaderName = shaderElement.GetAttribute("Name");
-                        var shaderMetadata = tooltipCatalog.ResolveShader(shaderName);
-                        ShaderUiMetadataRegistry.SetShader(shaderName, shaderMetadata);
+                        Destroy(LoadedShaders[shaderName].Shader);
+                        LoadedShaders.Remove(shaderName);
+                    }
+                    var shader = LoadShader(shaderName, shaderElement.GetAttribute("AssetBundle"), shaderElement.GetAttribute("Asset"));
+                    LoadedShaders[shaderName] = new ShaderData(shader, shaderName, shaderElement.GetAttribute("RenderQueue"), shaderElement.GetAttribute("ShaderOptimization"));
 
-                        if (LoadedShaders.ContainsKey(shaderName))
-                        {
-                            Destroy(LoadedShaders[shaderName].Shader);
-                            LoadedShaders.Remove(shaderName);
-                        }
-                        var shader = LoadShader(shaderName, shaderElement.GetAttribute("AssetBundle"), shaderElement.GetAttribute("Asset"));
-                        LoadedShaders[shaderName] = new ShaderData(shader, shaderName, shaderElement.GetAttribute("RenderQueue"), shaderElement.GetAttribute("ShaderOptimization"));
+                    XMLShaderProperties[shaderName] = new Dictionary<string, ShaderPropertyData>();
+                    if (shader != null && shader.name != shaderName)
+                    {
+                        XMLShaderProperties[shader.name] = new Dictionary<string, ShaderPropertyData>();
+                        ShaderUiMetadataRegistry.SetShader(shader.name, shaderMetadata);
+                    }
 
-                        XMLShaderProperties[shaderName] = new Dictionary<string, ShaderPropertyData>();
-                        if (shader != null && shader.name != shaderName)
+                    var shaderPropertyElements = shaderElement.GetElementsByTagName("Property");
+                    var declarationOrder = 0;
+                    foreach (var shaderPropertyElementObj in shaderPropertyElements)
+                    {
+                        if (shaderPropertyElementObj != null)
                         {
-                            XMLShaderProperties[shader.name] = new Dictionary<string, ShaderPropertyData>();
-                            ShaderUiMetadataRegistry.SetShader(shader.name, shaderMetadata);
-                        }
-
-                        var shaderPropertyElements = shaderElement.GetElementsByTagName("Property");
-                        var declarationOrder = 0;
-                        foreach (var shaderPropertyElementObj in shaderPropertyElements)
-                        {
-                            if (shaderPropertyElementObj != null)
+                            var shaderPropertyElement = (XmlElement)shaderPropertyElementObj;
+                            ShaderPropertyData shaderPropertyData;
+                            if (!ShaderPropertyData.TryParse(
+                                    shaderPropertyElement,
+                                    metadataWarning,
+                                    out shaderPropertyData,
+                                    schemaVersion))
                             {
-                                var shaderPropertyElement = (XmlElement)shaderPropertyElementObj;
-                                ShaderPropertyData shaderPropertyData;
-                                if (!ShaderPropertyData.TryParse(
-                                        shaderPropertyElement,
-                                        metadataWarning,
-                                        out shaderPropertyData,
-                                        schemaVersion))
-                                {
-                                    declarationOrder++;
-                                    continue;
-                                }
-
-                                shaderPropertyData.DeclarationOrder = declarationOrder++;
-                                ShaderPropertyFallbacks.MergeInto(
-                                    XMLShaderProperties["default"],
-                                    shaderPropertyData,
-                                    sourceId,
-                                    message => Logger.LogWarning(
-                                        "Material Editor fallback: " + message));
-                                XMLShaderProperties[shaderName][shaderPropertyData.Name] = shaderPropertyData;
-                                if (shader != null && shader.name != shaderName)
-                                    XMLShaderProperties[shader.name][shaderPropertyData.Name] = shaderPropertyData;
+                                declarationOrder++;
+                                continue;
                             }
+
+                            shaderPropertyData.DeclarationOrder = declarationOrder++;
+                            ShaderPropertyFallbacks.MergeInto(
+                                XMLShaderProperties["default"],
+                                shaderPropertyData,
+                                sourceId,
+                                message => Logger.LogWarning(
+                                    "Material Editor fallback: " + message));
+                            XMLShaderProperties[shaderName][shaderPropertyData.Name] = shaderPropertyData;
+                            if (shader != null && shader.name != shaderName)
+                                XMLShaderProperties[shader.name][shaderPropertyData.Name] = shaderPropertyData;
                         }
                     }
                 }
-            }
-            finally
-            {
-                MaterialEditorPerformance.Stop(
-                    MaterialEditorPerformanceMetric.ManifestParsing,
-                    performanceSample);
             }
         }
 

@@ -89,8 +89,6 @@ namespace MaterialEditorAPI
                     0);
             }
 
-            var performanceSample = MaterialEditorPerformance.Start(
-                MaterialEditorPerformanceMetric.ConditionalEvaluation);
             try
             {
                 if (values == null || values.Count == 0)
@@ -168,12 +166,6 @@ namespace MaterialEditorAPI
                     0,
                     0,
                     0);
-            }
-            finally
-            {
-                MaterialEditorPerformance.Stop(
-                    MaterialEditorPerformanceMetric.ConditionalEvaluation,
-                    performanceSample);
             }
         }
     }

@@ -10,18 +10,7 @@ namespace MaterialEditorAPI
             out byte[] pngData,
             out string error)
         {
-            var startedAt = MaterialEditorPerformance.Start(
-                MaterialEditorPerformanceMetric.CubemapExport);
-            try
-            {
-                return TryExportCore(cubemap, out pngData, out error);
-            }
-            finally
-            {
-                MaterialEditorPerformance.Stop(
-                    MaterialEditorPerformanceMetric.CubemapExport,
-                    startedAt);
-            }
+            return TryExportCore(cubemap, out pngData, out error);
         }
 
         private static bool TryExportCore(

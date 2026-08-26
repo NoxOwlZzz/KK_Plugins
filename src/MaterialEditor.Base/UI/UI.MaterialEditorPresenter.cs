@@ -86,98 +86,72 @@ namespace MaterialEditorAPI
             IList<Renderer> rendererSource,
             IList<Projector> projectorSource)
         {
-            var rebuildSample = MaterialEditorPerformance.Start(
-                MaterialEditorPerformanceMetric.PresentationRebuild);
-            try
+            var allRenderers = rendererSource;
+            var allProjectors = projectorSource;
+            var rendererFilter = new List<string>();
+            var propertyFilter = new List<string>();
+            IList<Renderer> renderers;
+            IList<Projector> projectors;
+            Dictionary<string, Material> materials;
+            IList<MaterialEditorFilterPattern> preparedPropertyFilter;
+            MaterialEditorFilter.Parse(
+                filter,
+                rendererFilter,
+                propertyFilter);
+            var rendererPatterns = MaterialEditorFilter.Prepare(
+                rendererFilter);
+            var propertyPatterns = MaterialEditorFilter.Prepare(
+                propertyFilter);
+            renderers = SelectRenderers(allRenderers, rendererPatterns);
+            projectors = rendererPatterns.Count == 0
+                ? null
+                : SelectProjectors(allProjectors, rendererPatterns);
+            materials = SelectMaterials(
+                gameObject,
+                allRenderers,
+                renderers,
+                rendererPatterns);
+
+            preparedPropertyFilter = propertyPatterns;
+
+            var presentation = new MaterialEditorPresentation(
+                NextPresentationToken());
+            presentation.HasActiveFilter =
+                rendererFilter.Count != 0 || propertyFilter.Count != 0;
+            presentation.HasPropertyFilter = propertyFilter.Count != 0;
+
+            foreach (var renderer in renderers)
+                AddRendererRows(presentation, gameObject, data, renderer);
+
+            foreach (var material in materials.Values)
             {
-                var allRenderers = rendererSource;
-                var allProjectors = projectorSource;
-                var rendererFilter = new List<string>();
-                var propertyFilter = new List<string>();
-                IList<Renderer> renderers;
-                IList<Projector> projectors;
-                Dictionary<string, Material> materials;
-                IList<MaterialEditorFilterPattern> preparedPropertyFilter;
-                var filteringSample = MaterialEditorPerformance.Start(
-                    MaterialEditorPerformanceMetric.Filtering);
-                try
-                {
-                    MaterialEditorFilter.Parse(
-                        filter,
-                        rendererFilter,
-                        propertyFilter);
-                    var rendererPatterns = MaterialEditorFilter.Prepare(
-                        rendererFilter);
-                    var propertyPatterns = MaterialEditorFilter.Prepare(
-                        propertyFilter);
-                    renderers = SelectRenderers(allRenderers, rendererPatterns);
-                    projectors = rendererPatterns.Count == 0
-                        ? null
-                        : SelectProjectors(allProjectors, rendererPatterns);
-                    materials = SelectMaterials(
-                        gameObject,
-                        allRenderers,
-                        renderers,
-                        rendererPatterns);
-
-                    preparedPropertyFilter = propertyPatterns;
-                }
-                finally
-                {
-                    MaterialEditorPerformance.Stop(
-                        MaterialEditorPerformanceMetric.Filtering,
-                        filteringSample);
-                }
-
-                var presentation = new MaterialEditorPresentation(
-                    NextPresentationToken());
-                presentation.HasActiveFilter =
-                    rendererFilter.Count != 0 || propertyFilter.Count != 0;
-                presentation.HasPropertyFilter = propertyFilter.Count != 0;
-                var rows = presentation.Rows;
-
-                foreach (var renderer in renderers)
-                    AddRendererRows(presentation, gameObject, data, renderer);
-
-                foreach (var material in materials.Values)
-                {
-                    _materialSections.AddRows(new MaterialSectionContext(
-                        _editService,
-                        presentation,
-                        gameObject,
-                        data,
-                        filter,
-                        allRenderers,
-                        preparedPropertyFilter,
-                        material,
-                        null));
-                }
-
-                foreach (var projector in rendererFilter.Count == 0 ? allProjectors : projectors)
-                {
-                    _materialSections.AddRows(new MaterialSectionContext(
-                        _editService,
-                        presentation,
-                        gameObject,
-                        data,
-                        filter,
-                        allRenderers,
-                        preparedPropertyFilter,
-                        projector.material,
-                        projector));
-                }
-
-                MaterialEditorPerformance.Increment(
-                    MaterialEditorPerformanceMetric.RowModelCreation,
-                    rows.Count);
-                return presentation;
+                _materialSections.AddRows(new MaterialSectionContext(
+                    _editService,
+                    presentation,
+                    gameObject,
+                    data,
+                    filter,
+                    allRenderers,
+                    preparedPropertyFilter,
+                    material,
+                    null));
             }
-            finally
+
+            foreach (var projector in rendererFilter.Count == 0 ? allProjectors : projectors)
             {
-                MaterialEditorPerformance.Stop(
-                    MaterialEditorPerformanceMetric.PresentationRebuild,
-                    rebuildSample);
+                _materialSections.AddRows(new MaterialSectionContext(
+                    _editService,
+                    presentation,
+                    gameObject,
+                    data,
+                    filter,
+                    allRenderers,
+                    preparedPropertyFilter,
+                    projector.material,
+                    projector));
             }
+
+            return presentation;
         }
 
         private int NextPresentationToken()

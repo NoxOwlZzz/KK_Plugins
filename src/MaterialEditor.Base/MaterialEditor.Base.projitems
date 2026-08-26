@@ -20,8 +20,6 @@
     <Compile Include="$(MSBuildThisFileDirectory)MaterialEditorEditServiceFacade.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)MaterialEditorExtension.Contracts.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)MaterialEditorExtension.Registry.cs" />
-    <Compile Include="$(MSBuildThisFileDirectory)PerformanceInstrumentation.cs" />
-    <Compile Include="$(MSBuildThisFileDirectory)PerformanceUnityProfiler.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)Manifest\ManifestPropertyConditions.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)Manifest\ManifestPropertyModels.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)Manifest\ManifestPropertyMetadataParser.cs" />
@@ -82,7 +80,6 @@
     <Compile Include="$(MSBuildThisFileDirectory)UI\UI.WindowBounds.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)UI\UI.ResponsiveLayout.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)UI\UI.CategoryNavigator.cs" />
-    <Compile Include="$(MSBuildThisFileDirectory)UI\UI.CategoryInteractionDiagnostics.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)UI\UI.CategoryNavigationEntryBinding.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)UI\UI.MaterialEditorPresenter.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)UI\UI.MaterialEditorFilter.cs" />

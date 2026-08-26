@@ -228,8 +228,6 @@ namespace MaterialEditorAPI
             _renameListVisible = renameListVisible;
             CategoryNavigator?.SetVisible(categoriesVisible);
             UpdateRightPanelVisibility();
-            MaterialEditorPerformance.Increment(
-                MaterialEditorPerformanceMetric.LayoutInvalidations);
             ApplySettings();
         }
 
@@ -348,16 +346,11 @@ namespace MaterialEditorAPI
 
             CategoryNavigator = new CategoryNavigatorView(
                 MainPanel.transform,
-                VirtualList.ScrollRect.content,
                 _responsiveLayout.LeftPanelWidth,
                 navigateToCategory,
                 toggleCategory);
             VirtualList.ViewportAnchorIndexChanged += rowIndex =>
-            {
-                CategoryNavigator.SetViewportAnchor(
-                    rowIndex,
-                    VirtualList.ViewportAnchorIsProgrammatic);
-            };
+                CategoryNavigator.SetViewportAnchor(rowIndex);
 
             BuildSelectionPanels();
             BuildRenamePanel();

@@ -51,60 +51,49 @@ namespace MaterialEditorAPI
         {
             if (propertyElement == null)
                 throw new ArgumentNullException(nameof(propertyElement));
-            var performanceSample = MaterialEditorPerformance.Start(
-                MaterialEditorPerformanceMetric.MetadataNormalization);
-            try
+            var metadata = new ShaderPropertyUiMetadata
             {
-                var metadata = new ShaderPropertyUiMetadata
-                {
-                    DisplayName = ReadAttribute(propertyElement, "DisplayName"),
-                    TooltipText = ReadAttribute(propertyElement, "Tooltip"),
-                    Group = ReadAttribute(propertyElement, "Group")
-                };
-                var context = GetPropertyContext(propertyElement);
+                DisplayName = ReadAttribute(propertyElement, "DisplayName"),
+                TooltipText = ReadAttribute(propertyElement, "Tooltip"),
+                Group = ReadAttribute(propertyElement, "Group")
+            };
+            var context = GetPropertyContext(propertyElement);
 
-                ParseOrder(propertyElement, metadata, context, warning);
-                ParseCategoryOrder(propertyElement, metadata, context, warning);
-                ParseVectorComponentCount(propertyElement, metadata, context, warning);
-                metadata.EditorId = ParseEditor(propertyElement, metadata, context, warning);
-                metadata.ShowIf = ParseConditionAttribute(propertyElement, "ShowIf", context, warning);
-                if (propertyElement.HasAttribute("Invert"))
-                {
-                    metadata.Invert = ParseBooleanAttribute(
-                        propertyElement,
-                        "Invert",
-                        false,
-                        context,
-                        warning);
-                    metadata.OffValue = metadata.Invert ? 1f : 0f;
-                    metadata.OnValue = metadata.Invert ? 0f : 1f;
-                }
-                else
-                {
-                    // Compatibility for local schema-2 manifests authored before
-                    // PR #401. New manifests should use Invert with fixed 0/1 values.
-                    metadata.OffValue = ParseFloatAttribute(
-                        propertyElement, "OffValue", 0f, context, warning);
-                    metadata.OnValue = ParseFloatAttribute(
-                        propertyElement, "OnValue", 1f, context, warning);
-                }
-                ParseEnumOptions(propertyElement, metadata, context, warning);
-
-                if (metadata.EditorId == MaterialEditorPropertyEditorIds.Enum
-                    && metadata.EnumOptions.Count == 0)
-                {
-                    Warn(warning, context + " declares the Enum editor without a valid Enums attribute or legacy Option elements; using its type editor instead.");
-                    metadata.EditorId = null;
-                }
-
-                return metadata;
-            }
-            finally
+            ParseOrder(propertyElement, metadata, context, warning);
+            ParseCategoryOrder(propertyElement, metadata, context, warning);
+            ParseVectorComponentCount(propertyElement, metadata, context, warning);
+            metadata.EditorId = ParseEditor(propertyElement, metadata, context, warning);
+            metadata.ShowIf = ParseConditionAttribute(propertyElement, "ShowIf", context, warning);
+            if (propertyElement.HasAttribute("Invert"))
             {
-                MaterialEditorPerformance.Stop(
-                    MaterialEditorPerformanceMetric.MetadataNormalization,
-                    performanceSample);
+                metadata.Invert = ParseBooleanAttribute(
+                    propertyElement,
+                    "Invert",
+                    false,
+                    context,
+                    warning);
+                metadata.OffValue = metadata.Invert ? 1f : 0f;
+                metadata.OnValue = metadata.Invert ? 0f : 1f;
             }
+            else
+            {
+                // Compatibility for local schema-2 manifests authored before
+                // PR #401. New manifests should use Invert with fixed 0/1 values.
+                metadata.OffValue = ParseFloatAttribute(
+                    propertyElement, "OffValue", 0f, context, warning);
+                metadata.OnValue = ParseFloatAttribute(
+                    propertyElement, "OnValue", 1f, context, warning);
+            }
+            ParseEnumOptions(propertyElement, metadata, context, warning);
+
+            if (metadata.EditorId == MaterialEditorPropertyEditorIds.Enum
+                && metadata.EnumOptions.Count == 0)
+            {
+                Warn(warning, context + " declares the Enum editor without a valid Enums attribute or legacy Option elements; using its type editor instead.");
+                metadata.EditorId = null;
+            }
+
+            return metadata;
         }
 
         internal static bool TryParseCondition(

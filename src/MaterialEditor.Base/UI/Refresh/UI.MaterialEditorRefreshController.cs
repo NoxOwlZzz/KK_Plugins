@@ -134,13 +134,7 @@ namespace MaterialEditorAPI
                 return;
             }
 
-            MaterialEditorPerformance.Increment(
-                MaterialEditorPerformanceMetric.RefreshRequests);
-            if (!_presentationInvalidation.RequestSearch())
-            {
-                MaterialEditorPerformance.Increment(
-                    MaterialEditorPerformanceMetric.RefreshCoalesced);
-            }
+            _presentationInvalidation.RequestSearch();
             TryStartPresentationInvalidationWorker();
         }
 
@@ -157,13 +151,7 @@ namespace MaterialEditorAPI
             // A valid condition edit is newer than a pending shader rebuild.
             // Search remains dominant inside the shared presentation batch.
             CancelDeferredPopulate();
-            MaterialEditorPerformance.Increment(
-                MaterialEditorPerformanceMetric.RefreshRequests);
-            if (!_presentationInvalidation.RequestCondition(handle))
-            {
-                MaterialEditorPerformance.Increment(
-                    MaterialEditorPerformanceMetric.RefreshCoalesced);
-            }
+            _presentationInvalidation.RequestCondition(handle);
             TryStartPresentationInvalidationWorker();
         }
 
@@ -349,8 +337,6 @@ namespace MaterialEditorAPI
             if (grouped.Count == 0)
                 return;
 
-            MaterialEditorPerformance.Increment(
-                MaterialEditorPerformanceMetric.RefreshExecuted);
             var visibilityChanged = false;
             foreach (var entry in grouped)
             {
@@ -374,8 +360,6 @@ namespace MaterialEditorAPI
 
         private void ApplySearchRefresh()
         {
-            MaterialEditorPerformance.Increment(
-                MaterialEditorPerformanceMetric.RefreshExecuted);
             _host.PopulateListCoreForRefresh(
                 _host.CurrentGameObject,
                 _host.CurrentData,

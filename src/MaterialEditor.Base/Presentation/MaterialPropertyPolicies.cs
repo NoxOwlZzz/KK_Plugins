@@ -14,8 +14,6 @@ namespace MaterialEditorAPI
                 return true;
             if (resolveValue == null)
                 return fallback;
-            var performanceSample = MaterialEditorPerformance.Start(
-                MaterialEditorPerformanceMetric.ConditionalEvaluation);
             try
             {
                 var value = resolveValue(condition.PropertyName);
@@ -24,12 +22,6 @@ namespace MaterialEditorAPI
             catch
             {
                 return fallback;
-            }
-            finally
-            {
-                MaterialEditorPerformance.Stop(
-                    MaterialEditorPerformanceMetric.ConditionalEvaluation,
-                    performanceSample);
             }
         }
     }
@@ -56,13 +48,9 @@ namespace MaterialEditorAPI
 
         internal float? Resolve(string propertyName)
         {
-            MaterialEditorPerformance.Increment(
-                MaterialEditorPerformanceMetric.ConditionResolveCalls);
             float? value;
             if (_values != null && _values.TryGetValue(propertyName, out value))
             {
-                MaterialEditorPerformance.Increment(
-                    MaterialEditorPerformanceMetric.ConditionCacheHits);
                 return value;
             }
 
@@ -178,6 +166,26 @@ namespace MaterialEditorAPI
                 default:
                     throw new ArgumentOutOfRangeException(nameof(componentIndex));
             }
+        }
+    }
+
+    internal static class MaterialEditorMixedStatePerformance
+    {
+        internal static int GetComponentCopyCount(
+            IList<bool> source,
+            int destinationLength)
+        {
+            if (source == null)
+                return 0;
+            return Math.Min(source.Count, destinationLength);
+        }
+
+        internal static bool HasMixed(bool[] values, int count)
+        {
+            for (var index = 0; index < count; index++)
+                if (values[index])
+                    return true;
+            return false;
         }
     }
 }

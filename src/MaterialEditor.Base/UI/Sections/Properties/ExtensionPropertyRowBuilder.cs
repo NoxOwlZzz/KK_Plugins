@@ -206,26 +206,12 @@ namespace MaterialEditorAPI
 
         private static bool[] CopyMixedComponents(IList<bool> source)
         {
-            var performanceSample = MaterialEditorPerformance.Start(
-                MaterialEditorPerformanceMetric.MixedStateCopies);
-            try
-            {
-                var result = new bool[4];
-                var copyCount = MaterialEditorMixedStatePerformance
-                    .GetComponentCopyCount(source, result.Length);
-                for (var index = 0; index < copyCount; index++)
-                    result[index] = source[index];
-                MaterialEditorPerformance.Increment(
-                    MaterialEditorPerformanceMetric.MixedComponentsCopied,
-                    copyCount);
-                return result;
-            }
-            finally
-            {
-                MaterialEditorPerformance.Stop(
-                    MaterialEditorPerformanceMetric.MixedStateCopies,
-                    performanceSample);
-            }
+            var result = new bool[4];
+            var copyCount = MaterialEditorMixedStatePerformance
+                .GetComponentCopyCount(source, result.Length);
+            for (var index = 0; index < copyCount; index++)
+                result[index] = source[index];
+            return result;
         }
     }
 }

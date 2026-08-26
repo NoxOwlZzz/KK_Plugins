@@ -353,8 +353,6 @@ namespace MaterialEditorAPI
                     ActiveUi?.ReleaseTransientUiContent();
                 else if (!wasVisible)
                     ActiveUi?.RestoreTransientUiContent();
-                if (wasVisible && !value)
-                    LogPerformanceSummaryOnWindowClose();
             }
         }
 
@@ -512,8 +510,6 @@ namespace MaterialEditorAPI
             }
             if (target.RowIndex >= 0)
                 VirtualList.ScrollToIndex(target.RowIndex);
-            _windowView?.CategoryNavigator?.CompleteNavigationDiagnostic(
-                target.Id);
         }
 
         private void ToggleCategory(CategoryNavigationTarget target)
@@ -534,8 +530,6 @@ namespace MaterialEditorAPI
             if (presentation == null || VirtualList == null)
                 return;
 
-            var childRowsWereCreated = section != null
-                                       && section.ChildRowsCreated;
             int replaceStartIndex;
             int removeCount;
             IList<RowModel> replacementRows;
@@ -547,12 +541,6 @@ namespace MaterialEditorAPI
                     out replacementRows))
                 return;
 
-            if (!childRowsWereCreated && section.ChildRowsCreated)
-            {
-                MaterialEditorPerformance.Increment(
-                    MaterialEditorPerformanceMetric.RowModelCreation,
-                    section.CachedChildRowCount);
-            }
             VirtualList.ReplaceRange(
                 replaceStartIndex,
                 removeCount,
@@ -599,8 +587,6 @@ namespace MaterialEditorAPI
                 VirtualList.ScrollToIndex(target.RowIndex);
             else
                 VirtualList.PublishViewportAnchor();
-            _windowView?.CategoryNavigator?.CompleteNavigationDiagnostic(
-                categoryId);
         }
 
         /// <summary>

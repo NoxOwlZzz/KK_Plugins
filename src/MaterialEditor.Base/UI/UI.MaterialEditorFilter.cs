@@ -12,8 +12,6 @@ namespace MaterialEditorAPI
 
         internal MaterialEditorFilterPattern(string filter)
         {
-            MaterialEditorPerformance.Increment(
-                MaterialEditorPerformanceMetric.FilterPatternBuilds);
             var pattern =
                 "^.*"
                 + Regex.Escape(filter).Replace("\\?", ".").Replace("\\*", ".*")
@@ -23,20 +21,7 @@ namespace MaterialEditorAPI
 
         internal bool Matches(string text)
         {
-            MaterialEditorPerformance.Increment(
-                MaterialEditorPerformanceMetric.FilterMatchCalls);
-            var performanceSample = MaterialEditorPerformance.Start(
-                MaterialEditorPerformanceMetric.Search);
-            try
-            {
-                return _regex.IsMatch(text);
-            }
-            finally
-            {
-                MaterialEditorPerformance.Stop(
-                    MaterialEditorPerformanceMetric.Search,
-                    performanceSample);
-            }
+            return _regex.IsMatch(text);
         }
     }
 

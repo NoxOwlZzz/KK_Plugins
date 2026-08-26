@@ -43,8 +43,6 @@ namespace MaterialEditorAPI
                 using (var sha256 = SHA256.Create())
                     value = Convert.ToBase64String(sha256.ComputeHash(pngData));
                 key = new MaterialEditorCubemapContentKey(pngData, value);
-                MaterialEditorPerformance.Increment(
-                    MaterialEditorPerformanceMetric.TextureHashing);
                 return true;
             }
             catch (Exception exception)

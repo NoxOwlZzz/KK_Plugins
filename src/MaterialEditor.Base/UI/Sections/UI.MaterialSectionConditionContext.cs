@@ -118,21 +118,10 @@ namespace MaterialEditorAPI
                 IEnumerable<MaterialEditorPropertyDescriptor> descriptors,
                 ICollection<string> requestedSources)
         {
-            var performanceSample = MaterialEditorPerformance.Start(
-                MaterialEditorPerformanceMetric.ConditionSourceKindBuilds);
-            try
-            {
-                return MaterialConditionSourceCatalog.Build(
-                    definitions,
-                    descriptors,
-                    requestedSources);
-            }
-            finally
-            {
-                MaterialEditorPerformance.Stop(
-                    MaterialEditorPerformanceMetric.ConditionSourceKindBuilds,
-                    performanceSample);
-            }
+            return MaterialConditionSourceCatalog.Build(
+                definitions,
+                descriptors,
+                requestedSources);
         }
 
         private static HashSet<string> BuildConditionDependencies(
@@ -223,8 +212,6 @@ namespace MaterialEditorAPI
                 var material = materials[index];
                 if (material == null)
                     continue;
-                MaterialEditorPerformance.Increment(
-                    MaterialEditorPerformanceMetric.ConditionMaterialReads);
                 try
                 {
                     if (kind == MaterialConditionSourceKind.Keyword)

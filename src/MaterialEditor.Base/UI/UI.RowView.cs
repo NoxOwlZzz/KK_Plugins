@@ -13,8 +13,6 @@ namespace MaterialEditorAPI
 
         internal void Initialize(RowBinder binder)
         {
-            MaterialEditorPerformance.Increment(
-                MaterialEditorPerformanceMetric.RowViewCreation);
             _binder = binder ?? GetComponent<RowBinder>();
 
             RowLayoutCatalog.Restore(gameObject);

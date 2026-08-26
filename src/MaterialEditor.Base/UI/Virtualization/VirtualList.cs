@@ -74,10 +74,6 @@ namespace MaterialEditorAPI
             IEnumerable<RowModel> items,
             bool publishViewportAnchor)
         {
-            MaterialEditorPerformance.Increment(
-                MaterialEditorPerformanceMetric.CacheInvalidations);
-            MaterialEditorPerformance.Increment(
-                MaterialEditorPerformanceMetric.VisibleRowsInvalidations);
             SuspendRowListeners();
             _viewportRestoreVersion++;
             _viewportRestorePending = false;
@@ -113,10 +109,6 @@ namespace MaterialEditorAPI
             if (removeCount == 0 && replacementCount == 0)
                 return;
 
-            MaterialEditorPerformance.Increment(
-                MaterialEditorPerformanceMetric.CacheInvalidations);
-            MaterialEditorPerformance.Increment(
-                MaterialEditorPerformanceMetric.VisibleRowsInvalidations);
             SuspendRowListeners();
             _viewportRestoreVersion++;
             _viewportRestorePending = false;
@@ -276,8 +268,6 @@ namespace MaterialEditorAPI
                     && !_viewportRestorePending
                     && previousViewportAnchor != _viewportAnchorIndex)
                 {
-                    MaterialEditorPerformance.Increment(
-                        MaterialEditorPerformanceMetric.ViewportManualSelections);
                 }
             }
             // How many items are not visible in current view
@@ -322,8 +312,6 @@ namespace MaterialEditorAPI
                 _viewPool.ActiveCapacity);
 
             // Needed after changing _verticalLayoutGroup.padding since it doesn't make the object dirty
-            MaterialEditorPerformance.Increment(
-                MaterialEditorPerformanceMetric.LayoutInvalidations);
             LayoutRebuilder.MarkLayoutForRebuild(_verticalLayoutGroup.GetComponent<RectTransform>());
         }
 
@@ -421,8 +409,6 @@ namespace MaterialEditorAPI
             if (_models.Count == 0)
                 return;
 
-            MaterialEditorPerformance.Increment(
-                MaterialEditorPerformanceMetric.ViewportProgrammaticSelections);
             index = Mathf.Clamp(index, 0, _models.Count - 1);
             var viewport = ScrollRect.viewport != null
                 ? ScrollRect.viewport

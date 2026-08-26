@@ -309,23 +309,16 @@ namespace MaterialEditorAPI
                 _descriptorProviderGeneration++;
                 _descriptorProviderSnapshot = null;
             }
-            MaterialEditorPerformance.Increment(
-                MaterialEditorPerformanceMetric.ProviderRegistrations);
             return new Registration(() =>
             {
-                bool removed;
                 lock (Sync)
                 {
-                    removed = DescriptorProviders.Remove(registration);
-                    if (removed)
+                    if (DescriptorProviders.Remove(registration))
                     {
                         _descriptorProviderGeneration++;
                         _descriptorProviderSnapshot = null;
                     }
                 }
-                if (removed)
-                    MaterialEditorPerformance.Increment(
-                        MaterialEditorPerformanceMetric.ProviderRemovals);
             });
         }
 
@@ -370,44 +363,27 @@ namespace MaterialEditorAPI
             MaterialEditorPropertyContext context)
         {
             ProviderRegistration[] providers;
-            var snapshotBuilt = false;
-            var snapshotSample = 0L;
-            try
+            lock (Sync)
             {
-                lock (Sync)
+                if (_descriptorProviderSnapshot == null
+                    || _descriptorProviderSnapshotGeneration
+                    != _descriptorProviderGeneration)
                 {
-                    if (_descriptorProviderSnapshot == null
-                        || _descriptorProviderSnapshotGeneration
-                        != _descriptorProviderGeneration)
-                    {
-                        snapshotBuilt = true;
-                        snapshotSample = MaterialEditorPerformance.Start(
-                            MaterialEditorPerformanceMetric.ProviderSnapshotBuilds);
-                        _descriptorProviderSnapshot = DescriptorProviders
-                            .OrderByDescending(entry => entry.Priority)
-                            .ThenBy(entry => entry.Sequence)
-                            .ToArray();
-                        _descriptorProviderSnapshotGeneration =
-                            _descriptorProviderGeneration;
-                    }
-                    providers = _descriptorProviderSnapshot;
+                    _descriptorProviderSnapshot = DescriptorProviders
+                        .OrderByDescending(entry => entry.Priority)
+                        .ThenBy(entry => entry.Sequence)
+                        .ToArray();
+                    _descriptorProviderSnapshotGeneration =
+                        _descriptorProviderGeneration;
                 }
-            }
-            finally
-            {
-                if (snapshotBuilt)
-                    MaterialEditorPerformance.Stop(
-                        MaterialEditorPerformanceMetric.ProviderSnapshotBuilds,
-                        snapshotSample);
+                providers = _descriptorProviderSnapshot;
             }
 
             var result = new List<MaterialEditorPropertyDescriptor>();
             var keys = new HashSet<string>(StringComparer.Ordinal);
             foreach (var registration in providers)
             {
-                IList<MaterialEditorPropertyDescriptor> descriptors;
-                var providerSample = MaterialEditorPerformance.Start(
-                    MaterialEditorPerformanceMetric.ProviderCalls);
+                IEnumerable<MaterialEditorPropertyDescriptor> descriptors;
                 try
                 {
                     var provided = registration.Provider(context);
@@ -420,18 +396,9 @@ namespace MaterialEditorAPI
                     LogError($"property descriptor provider '{registration.OwnerId}'", ex);
                     continue;
                 }
-                finally
-                {
-                    MaterialEditorPerformance.Stop(
-                        MaterialEditorPerformanceMetric.ProviderCalls,
-                        providerSample);
-                }
 
                 if (descriptors == null)
                     continue;
-                MaterialEditorPerformance.Increment(
-                    MaterialEditorPerformanceMetric.ProviderEnumeratedDescriptors,
-                    descriptors.Count);
                 foreach (var descriptor in descriptors)
                 {
                     if (descriptor == null)
@@ -468,8 +435,6 @@ namespace MaterialEditorAPI
             if (registration == null)
                 return null;
 
-            var providerSample = MaterialEditorPerformance.Start(
-                MaterialEditorPerformanceMetric.EditorFactoryCalls);
             try
             {
                 return registration.Factory(context, descriptor);
@@ -480,12 +445,6 @@ namespace MaterialEditorAPI
                     $"property editor '{descriptor.EditorId}' from '{registration.OwnerId}'",
                     ex);
                 return null;
-            }
-            finally
-            {
-                MaterialEditorPerformance.Stop(
-                    MaterialEditorPerformanceMetric.EditorFactoryCalls,
-                    providerSample);
             }
         }
 

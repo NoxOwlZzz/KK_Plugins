@@ -63,20 +63,9 @@ namespace KK_Plugins.MaterialEditor
 
         internal static TextureContainer CreateTextureContainer(byte[] data)
         {
-            var performanceSample = MaterialEditorPerformance.Start(
-                MaterialEditorPerformanceMetric.TextureHashing);
-            try
-            {
-                // TextureContainerManager.Acquire computes the content hash used by
-                // its shared backing store. Keep the production operation intact.
-                return new TextureContainer(data);
-            }
-            finally
-            {
-                MaterialEditorPerformance.Stop(
-                    MaterialEditorPerformanceMetric.TextureHashing,
-                    performanceSample);
-            }
+            // TextureContainerManager.Acquire computes the content hash used by
+            // its shared backing store. Keep the production operation intact.
+            return new TextureContainer(data);
         }
 
         /// <summary>
@@ -84,18 +73,7 @@ namespace KK_Plugins.MaterialEditor
         /// </summary>
         public void Save(PluginData pluginData, string key, object data, bool isCharaController)
         {
-            var performanceSample = MaterialEditorPerformance.Start(
-                MaterialEditorPerformanceMetric.Save);
-            try
-            {
-                SaveBundled(pluginData, key, data, isCharaController);
-            }
-            finally
-            {
-                MaterialEditorPerformance.Stop(
-                    MaterialEditorPerformanceMetric.Save,
-                    performanceSample);
-            }
+            SaveBundled(pluginData, key, data, isCharaController);
         }
 
         /// <summary>
@@ -104,56 +82,45 @@ namespace KK_Plugins.MaterialEditor
         /// </summary>
         public T Load<T>(PluginData pluginData, string key, bool isCharaController)
         {
-            var performanceSample = MaterialEditorPerformance.Start(
-                MaterialEditorPerformanceMetric.Load);
+            object loaded = DefaultData();
             try
             {
-                object loaded = DefaultData();
-                try
-                {
-                    if (pluginData?.data == null)
-                        return (T)loaded;
+                if (pluginData?.data == null)
+                    return (T)loaded;
 
-                    if (pluginData.version > 2)
-                    {
-                        MaterialEditorPluginBase.Logger.LogWarning(
-                            $"[MaterialEditor] Texture save format version {pluginData.version} is not supported; "
-                            + "the texture data was left untouched and skipped.");
-                        return (T)loaded;
-                    }
-
-                    if (pluginData.data.TryGetValue(key, out var bundledData) && bundledData != null)
-                        loaded = LoadBundled(pluginData, key, bundledData, isCharaController);
-#if !EC
-                    else if (pluginData.data.TryGetValue(DedupedTexSavePrefix + key, out var dedupedData)
-                             && dedupedData != null)
-                        loaded = LoadDeduped(pluginData, key, dedupedData, isCharaController);
-#endif
-                    else if (pluginData.data.TryGetValue(LocalTexSavePrefix + key, out var localData)
-                             && localData != null)
-                        loaded = LoadLocal(pluginData, key, localData, isCharaController);
-                }
-                catch (System.Exception ex)
+                if (pluginData.version > 2)
                 {
-                    MaterialEditorPluginBase.Logger.LogError(ex);
                     MaterialEditorPluginBase.Logger.LogWarning(
-                        "[MaterialEditor] Texture data could not be loaded; continuing without those textures.");
-                    loaded = DefaultData();
+                        $"[MaterialEditor] Texture save format version {pluginData.version} is not supported; "
+                        + "the texture data was left untouched and skipped.");
+                    return (T)loaded;
                 }
 
-                if (loaded is T typed)
-                    return typed;
-
-                MaterialEditorPluginBase.Logger.LogWarning(
-                    "[MaterialEditor] Texture data had an unexpected type; continuing without those textures.");
-                return (T)DefaultData();
+                if (pluginData.data.TryGetValue(key, out var bundledData) && bundledData != null)
+                    loaded = LoadBundled(pluginData, key, bundledData, isCharaController);
+#if !EC
+                else if (pluginData.data.TryGetValue(DedupedTexSavePrefix + key, out var dedupedData)
+                         && dedupedData != null)
+                    loaded = LoadDeduped(pluginData, key, dedupedData, isCharaController);
+#endif
+                else if (pluginData.data.TryGetValue(LocalTexSavePrefix + key, out var localData)
+                         && localData != null)
+                    loaded = LoadLocal(pluginData, key, localData, isCharaController);
             }
-            finally
+            catch (System.Exception ex)
             {
-                MaterialEditorPerformance.Stop(
-                    MaterialEditorPerformanceMetric.Load,
-                    performanceSample);
+                MaterialEditorPluginBase.Logger.LogError(ex);
+                MaterialEditorPluginBase.Logger.LogWarning(
+                    "[MaterialEditor] Texture data could not be loaded; continuing without those textures.");
+                loaded = DefaultData();
             }
+
+            if (loaded is T typed)
+                return typed;
+
+            MaterialEditorPluginBase.Logger.LogWarning(
+                "[MaterialEditor] Texture data had an unexpected type; continuing without those textures.");
+            return (T)DefaultData();
         }
 
         private static void SaveBundled(PluginData pluginData, string key, object dictRaw, bool isCharaController = false)

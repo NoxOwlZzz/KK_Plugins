@@ -34,14 +34,5 @@ namespace MaterialEditorAPI
                 return true;
             }
         }
-
-        internal static void ResetForTests()
-        {
-            lock (Sync)
-            {
-                Keys.Clear();
-                Order.Clear();
-            }
-        }
     }
 }

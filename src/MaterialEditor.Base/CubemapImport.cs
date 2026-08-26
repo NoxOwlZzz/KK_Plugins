@@ -121,8 +121,6 @@ namespace MaterialEditorAPI
             Texture2D source = null;
             Cubemap result = null;
             MaterialEditorRadianceHdrDecodeOperation hdrDecode = null;
-            var startedAt = MaterialEditorPerformance.Start(
-                MaterialEditorPerformanceMetric.CubemapImportDecode);
             try
             {
                 Color32[] sourcePixels = null;
@@ -182,9 +180,6 @@ namespace MaterialEditorAPI
             }
             finally
             {
-                MaterialEditorPerformance.Stop(
-                    MaterialEditorPerformanceMetric.CubemapImportDecode,
-                    startedAt);
                 if (result != null)
                     UnityEngine.Object.Destroy(result);
                 if (hdrDecode != null)
@@ -215,8 +210,6 @@ namespace MaterialEditorAPI
                 return false;
             }
 
-            var startedAt = MaterialEditorPerformance.Start(
-                MaterialEditorPerformanceMetric.CubemapImportSampling);
             try
             {
                 var remainingRows = maxRows;
@@ -317,12 +310,6 @@ namespace MaterialEditorAPI
                 error = "Cubemap conversion failed: " + exception.Message;
                 Dispose();
                 return false;
-            }
-            finally
-            {
-                MaterialEditorPerformance.Stop(
-                    MaterialEditorPerformanceMetric.CubemapImportSampling,
-                    startedAt);
             }
         }
 

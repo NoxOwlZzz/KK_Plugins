@@ -74,8 +74,6 @@ namespace MaterialEditorAPI
             int selectedIndex;
             if (projectionChanged)
             {
-                MaterialEditorPerformance.Increment(
-                    MaterialEditorPerformanceMetric.DropdownOptionRebuilds);
                 selectedIndex = RebuildProjection(options, value, kind);
                 _projectionSourceCount = sourceCount;
                 _projectionSourceFingerprint = sourceFingerprint;

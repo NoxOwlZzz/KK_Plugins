@@ -15,27 +15,21 @@ namespace MaterialEditorAPI
         private readonly Text _shaderText;
         private readonly Image _shaderHeader;
         private readonly ScrollRect _scrollRect;
-        private readonly RectTransform _centralScrollContent;
         private MaterialEditorPresentation _presentation;
         private Entry _activeEntry;
         private string _sectionId;
         private int _viewportAnchor = -1;
-        private bool _viewportAnchorProgrammatic;
-        private string _pendingClickedStableKey;
-        private string _pendingNavigationKey;
         private bool _deferredPresentationRebuild;
         private bool _visible;
 
         internal CategoryNavigatorView(
             Transform parent,
-            RectTransform centralScrollContent,
             float width,
             Action<CategoryNavigationTarget> navigate,
             Action<CategoryNavigationTarget> toggle)
         {
             _navigate = navigate;
             _toggle = toggle;
-            _centralScrollContent = centralScrollContent;
 
             Panel = MaterialEditorControlFactory.CreatePanel(
                 "CategoryNavigatorPanel",
@@ -175,8 +169,7 @@ namespace MaterialEditorAPI
             _deferredPresentationRebuild = false;
             ApplyViewportAnchor(
                 _viewportAnchor,
-                true,
-                _viewportAnchorProgrammatic);
+                true);
         }
 
         internal void ReleasePresentation()
@@ -184,7 +177,6 @@ namespace MaterialEditorAPI
             _presentation = null;
             _sectionId = null;
             _deferredPresentationRebuild = false;
-            ClearPendingNavigationDiagnostic();
             _materialText.text = string.Empty;
             _shaderText.text = string.Empty;
             TooltipBinding.Bind(_materialText.gameObject, null, null);
@@ -195,17 +187,10 @@ namespace MaterialEditorAPI
 
         internal void SetViewportAnchor(int rowIndex)
         {
-            SetViewportAnchor(rowIndex, false);
-        }
-
-        internal void SetViewportAnchor(int rowIndex, bool programmatic)
-        {
-            _viewportAnchorProgrammatic = programmatic;
             var forceRebuild = _deferredPresentationRebuild;
             _deferredPresentationRebuild = false;
-            ApplyViewportAnchor(rowIndex, forceRebuild, programmatic);
+            ApplyViewportAnchor(rowIndex, forceRebuild);
         }
-
         internal void SetVisible(bool visible)
         {
             if (_visible == visible)
@@ -217,8 +202,7 @@ namespace MaterialEditorAPI
 
         private void ApplyViewportAnchor(
             int rowIndex,
-            bool forceRebuild,
-            bool programmatic)
+            bool forceRebuild)
         {
             _viewportAnchor = rowIndex;
             var section = _presentation?.FindSectionAtRow(rowIndex);
@@ -241,9 +225,7 @@ namespace MaterialEditorAPI
             UpdateVisibility();
             if (forceRebuild || section.Id != _sectionId)
                 Rebuild(section);
-            UpdateHighlight(
-                section.FindCategoryAtRow(rowIndex),
-                programmatic);
+            UpdateHighlight(section.FindCategoryAtRow(rowIndex));
         }
 
         private void UpdateVisibility()
@@ -375,12 +357,10 @@ namespace MaterialEditorAPI
             navigateLayout.minWidth = 0f;
             navigateLayout.preferredWidth = 0f;
             navigateLayout.flexibleWidth = 1f;
-            var navigatorEntryIndex = _entries.Count;
-            Entry entry = null;
             var binding = new CategoryNavigationEntryBinding(
-                target => NavigateToEntry(entry, target),
-                target => ToggleEntry(entry, target));
-            entry = new Entry(
+                NavigateToEntry,
+                ToggleEntry);
+            var entry = new Entry(
                 root,
                 activeMarker,
                 rootButton,
@@ -388,9 +368,7 @@ namespace MaterialEditorAPI
                 collapseText,
                 navigate,
                 navigateText,
-                binding,
-                navigatorEntryIndex,
-                navigatorEntryIndex + 1);
+                binding);
             collapse.onClick.AddListener(binding.InvokeToggle);
             navigate.onClick.AddListener(binding.InvokeNavigate);
             rootButton.onClick.AddListener(binding.InvokeNavigate);
@@ -431,40 +409,22 @@ namespace MaterialEditorAPI
             entry.Root.gameObject.SetActive(true);
         }
 
-        private void ToggleEntry(
-            Entry entry,
-            CategoryNavigationTarget target)
+        private void ToggleEntry(CategoryNavigationTarget target)
         {
-            SetPendingNavigationDiagnostic(target);
-            LogEntryDiagnostic("toggle", entry, target, false);
             _toggle(target);
         }
 
-        private void NavigateToEntry(
-            Entry entry,
-            CategoryNavigationTarget target)
+        private void NavigateToEntry(CategoryNavigationTarget target)
         {
-            SetPendingNavigationDiagnostic(target);
-            LogEntryDiagnostic("navigate", entry, target, false);
             _navigate(target);
         }
 
-        private void UpdateHighlight(
-            CategoryNavigationTarget active,
-            bool programmatic)
+        private void UpdateHighlight(CategoryNavigationTarget active)
         {
             if (_activeEntry != null
                 && active != null
                 && _activeEntry.Target.Id == active.Id)
-            {
-                if (programmatic
-                    && _pendingNavigationKey == active.Id)
-                    LogHighlightDiagnostic(
-                        _activeEntry,
-                        active,
-                        programmatic);
                 return;
-            }
 
             SetEntryActive(_activeEntry, false);
             _activeEntry = null;
@@ -479,89 +439,9 @@ namespace MaterialEditorAPI
 
                 _activeEntry = entry;
                 SetEntryActive(_activeEntry, true);
-                if (_pendingNavigationKey == null
-                    || (programmatic
-                        && _pendingNavigationKey == active.Id))
-                {
-                    LogHighlightDiagnostic(
-                        _activeEntry,
-                        active,
-                        programmatic);
-                }
                 return;
             }
         }
-
-        internal void CompleteNavigationDiagnostic(string categoryId)
-        {
-            if (_pendingNavigationKey == categoryId)
-                ClearPendingNavigationDiagnostic();
-        }
-
-        private void SetPendingNavigationDiagnostic(
-            CategoryNavigationTarget target)
-        {
-            if (!CategoryInteractionDiagnostics.Enabled)
-                return;
-
-            _pendingClickedStableKey = target.Id;
-            _pendingNavigationKey = target.Id;
-        }
-
-        private void ClearPendingNavigationDiagnostic()
-        {
-            _pendingClickedStableKey = null;
-            _pendingNavigationKey = null;
-        }
-
-        private void LogEntryDiagnostic(
-            string phase,
-            Entry entry,
-            CategoryNavigationTarget target,
-            bool programmatic)
-        {
-            if (!CategoryInteractionDiagnostics.Enabled)
-                return;
-
-            CategoryInteractionDiagnostics.Log(
-                phase,
-                target.RowIndex,
-                entry.NavigatorEntryIndex,
-                target.Id,
-                entry.ListenerKey,
-                target.Id,
-                target.Id,
-                _activeEntry?.Target?.Id,
-                entry.Root.rectTransform,
-                _scrollRect.content,
-                _centralScrollContent,
-                programmatic);
-        }
-
-        private void LogHighlightDiagnostic(
-            Entry entry,
-            CategoryNavigationTarget target,
-            bool programmatic)
-        {
-            if (!CategoryInteractionDiagnostics.Enabled)
-                return;
-
-            CategoryInteractionDiagnostics.Log(
-                "highlight",
-                target.RowIndex,
-                entry.NavigatorEntryIndex,
-                target.Id,
-                entry.ListenerKey,
-                _pendingClickedStableKey,
-                _pendingNavigationKey,
-                target.Id,
-                entry.Root.rectTransform,
-                _scrollRect.content,
-                _centralScrollContent,
-                programmatic);
-            ClearPendingNavigationDiagnostic();
-        }
-
         private static void SetEntryActive(Entry entry, bool active)
         {
             if (entry == null)
@@ -597,9 +477,7 @@ namespace MaterialEditorAPI
                 Text collapseLabel,
                 Button navigateButton,
                 Text label,
-                CategoryNavigationEntryBinding binding,
-                int navigatorEntryIndex,
-                int listenerKey)
+                CategoryNavigationEntryBinding binding)
             {
                 Root = root;
                 ActiveMarker = activeMarker;
@@ -609,8 +487,6 @@ namespace MaterialEditorAPI
                 NavigateButton = navigateButton;
                 Label = label;
                 Binding = binding;
-                NavigatorEntryIndex = navigatorEntryIndex;
-                ListenerKey = listenerKey;
             }
 
             internal Image Root { get; }
@@ -621,8 +497,6 @@ namespace MaterialEditorAPI
             internal Button NavigateButton { get; }
             internal Text Label { get; }
             internal CategoryNavigationEntryBinding Binding { get; }
-            internal int NavigatorEntryIndex { get; }
-            internal int ListenerKey { get; }
             internal CategoryNavigationTarget Target => Binding.Target;
         }
     }

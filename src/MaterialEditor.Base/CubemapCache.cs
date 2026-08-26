@@ -421,14 +421,10 @@ namespace MaterialEditorAPI
                 {
                     existing.References++;
                     lease = new MaterialEditorCubemapLease(key, existing.Cubemap);
-                    MaterialEditorPerformance.Increment(
-                        MaterialEditorPerformanceMetric.CubemapCacheHits);
                     return true;
                 }
             }
 
-            MaterialEditorPerformance.Increment(
-                MaterialEditorPerformanceMetric.CubemapCacheMisses);
             MaterialEditorCubemapMemoryReservation memoryReservation;
             if (!MaterialEditorCubemapMemoryBudget.TryReserveConversion(
                     estimatedPeakBytes,

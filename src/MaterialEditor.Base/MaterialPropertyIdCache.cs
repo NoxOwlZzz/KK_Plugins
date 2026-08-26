@@ -44,8 +44,6 @@ namespace MaterialEditorAPI
                 return handle;
 
             var fullName = string.Concat("_", cacheKey);
-            MaterialEditorPerformance.Increment(
-                MaterialEditorPerformanceMetric.PropertyToIdCalls);
             handle = new MaterialPropertyHandle(
                 fullName,
                 Shader.PropertyToID(fullName));
@@ -59,12 +57,5 @@ namespace MaterialEditorAPI
             return handle;
         }
 
-        internal static int Count => Handles.Count;
-
-        internal static void ResetForTests()
-        {
-            Handles.Clear();
-            InsertionOrder.Clear();
-        }
     }
 }

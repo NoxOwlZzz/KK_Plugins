@@ -95,79 +95,68 @@ namespace MaterialEditorAPI
 
         internal static void Refresh(Action<string> warning = null)
         {
-            var performanceSample = MaterialEditorPerformance.Start(
-                MaterialEditorPerformanceMetric.PropertyOrganization);
-            try
+            unchecked
             {
-                unchecked
-                {
-                    Generation++;
-                }
-                PropertyOrganization.Clear();
-                var emitWarning = warning ?? LogOrganizationWarning;
-                foreach (var shader in XMLShaderProperties)
-                {
-                    var declared = shader.Value
-                        .Select((item, index) => new DeclaredProperty
-                        {
-                            Definition = item.Value,
-                            FallbackOrder = index
-                        })
-                        .Where(item => !item.Definition.Hidden)
-                        .ToList();
-
-                    // The legacy default dictionary is a cross-shader union used
-                    // by non-UI persistence and API paths. Its shader-specific
-                    // grouping metadata and Keyword declarations are not safe to
-                    // present for an unknown shader, so build a conservative UI
-                    // view without changing the underlying dictionary.
-                    if (string.Equals(
-                            shader.Key,
-                            DefaultShaderKey,
-                            StringComparison.Ordinal))
-                    {
-                        PropertyOrganization[shader.Key] =
-                            CreateDefaultFallbackCategories(declared);
-                        continue;
-                    }
-
-                    var categories = declared
-                        .GroupBy(item => GetCategoryId(item.Definition))
-                        .Select(group => CreateCategory(
-                            shader.Key,
-                            group.Key,
-                            group,
-                            emitWarning))
-                        .OrderBy(category => category.Name == UncategorizedName ? 1 : 0)
-                        .ThenBy(category => category.Order.HasValue ? 0 : 1)
-                        .ThenBy(category => category.Order ?? 0)
-                        .ThenBy(category => category.DeclarationOrder)
-                        .ThenBy(category => category.Name)
-                        .Select(category => new OrganizedPropertyCategory(
-                            category.Id,
-                            category.Name,
-                            category.DeclarationOrder,
-                            SortProperties(
-                                category.Properties.Where(item =>
-                                    !SortPropertiesByCategory.Value
-                                    || string.IsNullOrEmpty(
-                                        item.Definition.SubcategoryId))),
-                            OrganizeSubcategories(
-                                shader.Key,
-                                category.Id,
-                                category.Properties,
-                                emitWarning),
-                            SortProperties(category.Properties)))
-                        .ToList();
-
-                    PropertyOrganization[shader.Key] = categories;
-                }
+                Generation++;
             }
-            finally
+            PropertyOrganization.Clear();
+            var emitWarning = warning ?? LogOrganizationWarning;
+            foreach (var shader in XMLShaderProperties)
             {
-                MaterialEditorPerformance.Stop(
-                    MaterialEditorPerformanceMetric.PropertyOrganization,
-                    performanceSample);
+                var declared = shader.Value
+                    .Select((item, index) => new DeclaredProperty
+                    {
+                        Definition = item.Value,
+                        FallbackOrder = index
+                    })
+                    .Where(item => !item.Definition.Hidden)
+                    .ToList();
+
+                // The legacy default dictionary is a cross-shader union used
+                // by non-UI persistence and API paths. Its shader-specific
+                // grouping metadata and Keyword declarations are not safe to
+                // present for an unknown shader, so build a conservative UI
+                // view without changing the underlying dictionary.
+                if (string.Equals(
+                        shader.Key,
+                        DefaultShaderKey,
+                        StringComparison.Ordinal))
+                {
+                    PropertyOrganization[shader.Key] =
+                        CreateDefaultFallbackCategories(declared);
+                    continue;
+                }
+
+                var categories = declared
+                    .GroupBy(item => GetCategoryId(item.Definition))
+                    .Select(group => CreateCategory(
+                        shader.Key,
+                        group.Key,
+                        group,
+                        emitWarning))
+                    .OrderBy(category => category.Name == UncategorizedName ? 1 : 0)
+                    .ThenBy(category => category.Order.HasValue ? 0 : 1)
+                    .ThenBy(category => category.Order ?? 0)
+                    .ThenBy(category => category.DeclarationOrder)
+                    .ThenBy(category => category.Name)
+                    .Select(category => new OrganizedPropertyCategory(
+                        category.Id,
+                        category.Name,
+                        category.DeclarationOrder,
+                        SortProperties(
+                            category.Properties.Where(item =>
+                                !SortPropertiesByCategory.Value
+                                || string.IsNullOrEmpty(
+                                    item.Definition.SubcategoryId))),
+                        OrganizeSubcategories(
+                            shader.Key,
+                            category.Id,
+                            category.Properties,
+                            emitWarning),
+                        SortProperties(category.Properties)))
+                    .ToList();
+
+                PropertyOrganization[shader.Key] = categories;
             }
         }
 

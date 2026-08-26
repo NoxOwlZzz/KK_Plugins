@@ -86,52 +86,33 @@ namespace MaterialEditorAPI
                 && ReferenceEquals(item, _currentModel)
                 && _bindingActive)
                 return;
-            var bindSample = MaterialEditorPerformance.Start(
-                MaterialEditorPerformanceMetric.Bind);
-            try
+            InitializeControls();
+            _currentModel = item;
+
+            ClearListeners();
+            _bindingActive = true;
+            if (item == null
+                || item.ItemType != RowModel.RowItemType.EnumProperty)
             {
-                InitializeControls();
-                var previousModel = _currentModel;
-                if (previousModel != null
-                    && item != null
-                    && !ReferenceEquals(previousModel, item))
-                {
-                    MaterialEditorPerformance.Increment(
-                        MaterialEditorPerformanceMetric.RowViewReuse);
-                }
-                _currentModel = item;
-
-                ClearListeners();
-                _bindingActive = true;
-                if (item == null
-                    || item.ItemType != RowModel.RowItemType.EnumProperty)
-                {
-                    _controls.Enum.OptionCache.ReleaseContext();
-                }
-                if (item == null
-                    || item.ItemType != RowModel.RowItemType.Shader)
-                {
-                    _controls.Shader.OptionCache.ReleaseContext();
-                }
-                _controls.HideAll();
-
-                if (item == null)
-                    return;
-
-                IRowTypeBinder handler;
-                if (_registry.TryGet(item.ItemType, out handler))
-                    handler.Bind(item, _listeners);
-                _controls.SetHierarchyDepth(
-                    item.ItemType,
-                    item.HierarchyDepth);
-                _controls.SetEnabled(item.ItemType, item.Enabled);
+                _controls.Enum.OptionCache.ReleaseContext();
             }
-            finally
+            if (item == null
+                || item.ItemType != RowModel.RowItemType.Shader)
             {
-                MaterialEditorPerformance.Stop(
-                    MaterialEditorPerformanceMetric.Bind,
-                    bindSample);
+                _controls.Shader.OptionCache.ReleaseContext();
             }
+            _controls.HideAll();
+
+            if (item == null)
+                return;
+
+            IRowTypeBinder handler;
+            if (_registry.TryGet(item.ItemType, out handler))
+                handler.Bind(item, _listeners);
+            _controls.SetHierarchyDepth(
+                item.ItemType,
+                item.HierarchyDepth);
+            _controls.SetEnabled(item.ItemType, item.Enabled);
         }
 
         internal void SuspendListeners()
@@ -193,18 +174,7 @@ namespace MaterialEditorAPI
             if (!_bindingActive)
                 return;
 
-            var unbindSample = MaterialEditorPerformance.Start(
-                MaterialEditorPerformanceMetric.Unbind);
-            try
-            {
-                _listeners.Clear();
-            }
-            finally
-            {
-                MaterialEditorPerformance.Stop(
-                    MaterialEditorPerformanceMetric.Unbind,
-                    unbindSample);
-            }
+            _listeners.Clear();
         }
 
     }

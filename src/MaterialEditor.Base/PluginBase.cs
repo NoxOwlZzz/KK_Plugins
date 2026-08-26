@@ -150,14 +150,6 @@ namespace MaterialEditorAPI
         /// Whether to sort shader properties by their category
         /// </summary>
         public static ConfigEntry<bool> SortPropertiesByCategory { get; set; }
-        /// <summary>Enable development timing and threshold logging.</summary>
-        internal static ConfigEntry<bool> PerformanceDiagnostics { get; private set; }
-        /// <summary>Enable internal operation counters without threshold logging.</summary>
-        internal static ConfigEntry<bool> PerformanceCountersEnabled { get; private set; }
-        /// <summary>Minimum duration reported by development timing logs.</summary>
-        internal static ConfigEntry<float> PerformanceLogThresholdMs { get; private set; }
-        /// <summary>Write an internal counter summary when the editor window closes.</summary>
-        internal static ConfigEntry<bool> PerformanceSummaryOnClose { get; private set; }
         /// <summary>
         /// Controls the max value of the slider for this projector property
         /// </summary>
@@ -316,39 +308,6 @@ namespace MaterialEditorAPI
             SortPropertiesByType = Config.Bind("Config", "Sort Properties by Type", true, "Whether to sort shader properties by their types.");
             SortPropertiesByName = Config.Bind("Config", "Sort Properties by Name", true, "Whether to sort shader properties by their names.");
             SortPropertiesByCategory = Config.Bind("Config", "Sort Properties by Category", true, "Whether to sort shader properties by their category.");
-            PerformanceDiagnostics = Config.Bind(
-                "Performance",
-                "PerformanceDiagnostics",
-                false,
-                new ConfigDescription(
-                    "Enable internal Material Editor timing diagnostics and Unity Profiler samples.",
-                    null,
-                    new ConfigurationManagerAttributes { IsAdvanced = true }));
-            PerformanceCountersEnabled = Config.Bind(
-                "Performance",
-                "PerformanceCountersEnabled",
-                false,
-                new ConfigDescription(
-                    "Enable internal Material Editor operation counters.",
-                    null,
-                    new ConfigurationManagerAttributes { IsAdvanced = true }));
-            PerformanceLogThresholdMs = Config.Bind(
-                "Performance",
-                "PerformanceLogThresholdMs",
-                5f,
-                new ConfigDescription(
-                    "Minimum elapsed milliseconds for a performance diagnostic log entry.",
-                    new AcceptableValueRange<float>(0f, 60000f),
-                    new ConfigurationManagerAttributes { IsAdvanced = true }));
-            PerformanceSummaryOnClose = Config.Bind(
-                "Performance",
-                "PerformanceSummaryOnClose",
-                false,
-                new ConfigDescription(
-                    "Write an internal performance counter summary when the Material Editor window closes.",
-                    null,
-                    new ConfigurationManagerAttributes { IsAdvanced = true }));
-            ConfigurePerformanceDiagnostics();
             ConvertNormalmapsOnExport = Config.Bind("Config", "Convert Normalmaps On Export", true, new ConfigDescription("When enabled, normalmaps get converted from DXT5 compressed (red) normals back to normal OpenGL (blue/purple) normals"));
 
             // Everything in these games is 10x the size of KK/KKS
@@ -376,9 +335,6 @@ namespace MaterialEditorAPI
             SortPropertiesByType.SettingChanged += (object sender, EventArgs e) => PropertyOrganizer.Refresh();
             SortPropertiesByName.SettingChanged += (object sender, EventArgs e) => PropertyOrganizer.Refresh();
             SortPropertiesByCategory.SettingChanged += (object sender, EventArgs e) => PropertyOrganizer.Refresh();
-            PerformanceDiagnostics.SettingChanged += PerformanceSettingsChanged;
-            PerformanceCountersEnabled.SettingChanged += PerformanceSettingsChanged;
-            PerformanceLogThresholdMs.SettingChanged += PerformanceSettingsChanged;
             SetExportPath();
 
             ResourceRedirection.RegisterAssetLoadedHook(HookBehaviour.OneCallbackPerResourceLoaded, AssetLoadedHook);
@@ -405,69 +361,6 @@ namespace MaterialEditorAPI
                        StringComparison.OrdinalIgnoreCase)
                 ? MaterialEditorThemeMode.Dark
                 : MaterialEditorThemeMode.Legacy;
-        }
-
-        private static void PerformanceSettingsChanged(object sender, EventArgs eventArgs)
-        {
-            ConfigurePerformanceDiagnostics();
-        }
-
-        private static void ConfigurePerformanceDiagnostics()
-        {
-            var diagnosticsEnabled = PerformanceDiagnostics != null
-                                     && PerformanceDiagnostics.Value;
-            var countersEnabled = PerformanceCountersEnabled != null
-                                  && PerformanceCountersEnabled.Value;
-            var threshold = PerformanceLogThresholdMs == null
-                ? 5d
-                : PerformanceLogThresholdMs.Value;
-            MaterialEditorPerformance.Configure(
-                diagnosticsEnabled,
-                countersEnabled,
-                threshold,
-                diagnosticsEnabled
-                    ? (Action<MaterialEditorPerformanceMetric, double>)LogSlowPerformanceSample
-                    : null,
-                diagnosticsEnabled ? MaterialEditorUnityProfiler.Instance : null);
-        }
-
-        private static void LogSlowPerformanceSample(
-            MaterialEditorPerformanceMetric metric,
-            double elapsedMilliseconds)
-        {
-            Logger?.LogMessage(
-                "[MaterialEditor performance] "
-                + MaterialEditorPerformance.GetMetricName(metric)
-                + ": "
-                + elapsedMilliseconds.ToString("F3", CultureInfo.InvariantCulture)
-                + " ms");
-        }
-
-        internal static void LogPerformanceSummaryOnWindowClose()
-        {
-            if (PerformanceSummaryOnClose == null
-                || !PerformanceSummaryOnClose.Value
-                || !MaterialEditorPerformance.Enabled)
-                return;
-
-            var snapshot = MaterialEditorPerformance.CaptureSnapshot();
-            foreach (MaterialEditorPerformanceMetric metric in Enum.GetValues(
-                         typeof(MaterialEditorPerformanceMetric)))
-            {
-                if (metric == MaterialEditorPerformanceMetric.Count)
-                    continue;
-                var count = snapshot.GetCount(metric);
-                if (count == 0L)
-                    continue;
-                Logger?.LogMessage(
-                    "[MaterialEditor performance summary] "
-                    + MaterialEditorPerformance.GetMetricName(metric)
-                    + " count="
-                    + count.ToString(CultureInfo.InvariantCulture)
-                    + " elapsedMs="
-                    + snapshot.GetElapsedMilliseconds(metric)
-                        .ToString("F3", CultureInfo.InvariantCulture));
-            }
         }
 
         /// <summary>
@@ -514,77 +407,66 @@ namespace MaterialEditorAPI
 
         private static void LoadXML()
         {
-            var performanceSample = MaterialEditorPerformance.Start(
-                MaterialEditorPerformanceMetric.ManifestParsing);
-            try
-            {
-                XMLShaderProperties["default"] = new Dictionary<string, ShaderPropertyData>();
-                ShaderPropertyFallbacks.Reset();
+            XMLShaderProperties["default"] = new Dictionary<string, ShaderPropertyData>();
+            ShaderPropertyFallbacks.Reset();
 
-                using (Stream stream = Assembly.GetExecutingAssembly().GetManifestResourceStream($"{nameof(MaterialEditorAPI)}.Resources.default.xml"))
-                    if (stream != null)
-                        using (XmlReader reader = XmlReader.Create(stream))
+            using (Stream stream = Assembly.GetExecutingAssembly().GetManifestResourceStream($"{nameof(MaterialEditorAPI)}.Resources.default.xml"))
+                if (stream != null)
+                    using (XmlReader reader = XmlReader.Create(stream))
+                    {
+                        XmlDocument doc = new XmlDocument();
+                        doc.Load(stream);
+                        XmlElement materialEditorElement = doc.DocumentElement;
+                        Action<string> metadataWarning = message =>
+                            Logger?.LogWarning("Material Editor default metadata: " + message);
+                        var schemaVersion = ShaderPropertyMetadataParser.ReadSchemaVersion(
+                            materialEditorElement,
+                            metadataWarning);
+
+                        var shaderElements = materialEditorElement.GetElementsByTagName("Shader");
+                        foreach (var shaderElementObj in shaderElements)
                         {
-                            XmlDocument doc = new XmlDocument();
-                            doc.Load(stream);
-                            XmlElement materialEditorElement = doc.DocumentElement;
-                            Action<string> metadataWarning = message =>
-                                Logger?.LogWarning("Material Editor default metadata: " + message);
-                            var schemaVersion = ShaderPropertyMetadataParser.ReadSchemaVersion(
-                                materialEditorElement,
-                                metadataWarning);
-
-                            var shaderElements = materialEditorElement.GetElementsByTagName("Shader");
-                            foreach (var shaderElementObj in shaderElements)
+                            if (shaderElementObj != null)
                             {
-                                if (shaderElementObj != null)
+                                var shaderElement = (XmlElement)shaderElementObj;
                                 {
-                                    var shaderElement = (XmlElement)shaderElementObj;
+                                    string shaderName = shaderElement.GetAttribute("Name");
+
+                                    XMLShaderProperties[shaderName] = new Dictionary<string, ShaderPropertyData>();
+
+                                    var shaderPropertyElements = shaderElement.GetElementsByTagName("Property");
+                                    var declarationOrder = 0;
+                                    foreach (var shaderPropertyElementObj in shaderPropertyElements)
                                     {
-                                        string shaderName = shaderElement.GetAttribute("Name");
-
-                                        XMLShaderProperties[shaderName] = new Dictionary<string, ShaderPropertyData>();
-
-                                        var shaderPropertyElements = shaderElement.GetElementsByTagName("Property");
-                                        var declarationOrder = 0;
-                                        foreach (var shaderPropertyElementObj in shaderPropertyElements)
+                                        if (shaderPropertyElementObj != null)
                                         {
-                                            if (shaderPropertyElementObj != null)
+                                            var shaderPropertyElement = (XmlElement)shaderPropertyElementObj;
                                             {
-                                                var shaderPropertyElement = (XmlElement)shaderPropertyElementObj;
+                                                ShaderPropertyData shaderPropertyData;
+                                                if (!ShaderPropertyData.TryParse(
+                                                        shaderPropertyElement,
+                                                        metadataWarning,
+                                                        out shaderPropertyData,
+                                                        schemaVersion))
                                                 {
-                                                    ShaderPropertyData shaderPropertyData;
-                                                    if (!ShaderPropertyData.TryParse(
-                                                            shaderPropertyElement,
-                                                            metadataWarning,
-                                                            out shaderPropertyData,
-                                                            schemaVersion))
-                                                    {
-                                                        declarationOrder++;
-                                                        continue;
-                                                    }
-
-                                                    shaderPropertyData.DeclarationOrder = declarationOrder++;
-                                                    ShaderPropertyFallbacks.MergeInto(
-                                                        XMLShaderProperties["default"],
-                                                        shaderPropertyData,
-                                                        "MaterialEditor.API default",
-                                                        message => Logger?.LogWarning(
-                                                            "Material Editor fallback: " + message));
+                                                    declarationOrder++;
+                                                    continue;
                                                 }
+
+                                                shaderPropertyData.DeclarationOrder = declarationOrder++;
+                                                ShaderPropertyFallbacks.MergeInto(
+                                                    XMLShaderProperties["default"],
+                                                    shaderPropertyData,
+                                                    "MaterialEditor.API default",
+                                                    message => Logger?.LogWarning(
+                                                        "Material Editor fallback: " + message));
                                             }
                                         }
                                     }
                                 }
                             }
                         }
-            }
-            finally
-            {
-                MaterialEditorPerformance.Stop(
-                    MaterialEditorPerformanceMetric.ManifestParsing,
-                    performanceSample);
-            }
+                    }
         }
 
         internal virtual void WatchTexChanges_SettingChanged(object sender, EventArgs e)
@@ -635,18 +517,7 @@ namespace MaterialEditorAPI
 
         internal static byte[] EncodeTextureToPng(Texture2D texture)
         {
-            var performanceSample = MaterialEditorPerformance.Start(
-                MaterialEditorPerformanceMetric.TextureEncoding);
-            try
-            {
-                return texture.EncodeToPNG();
-            }
-            finally
-            {
-                MaterialEditorPerformance.Stop(
-                    MaterialEditorPerformanceMetric.TextureEncoding,
-                    performanceSample);
-            }
+            return texture.EncodeToPNG();
         }
 
         internal static void SaveTex(Texture tex, string path, RenderTextureFormat rtf = RenderTextureFormat.Default, RenderTextureReadWrite cs = RenderTextureReadWrite.Default)

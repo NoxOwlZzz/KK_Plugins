@@ -685,12 +685,8 @@ namespace KK_Plugins.MaterialEditor
 
         public void RefreshClothesMainTex()
         {
-            MaterialEditorPerformance.Increment(
-                MaterialEditorPerformanceMetric.RefreshRequests);
             if (!_clothesMainTexRefreshGate.TryRequest())
             {
-                MaterialEditorPerformance.Increment(
-                    MaterialEditorPerformanceMetric.RefreshCoalesced);
                 return;
             }
             try
@@ -711,8 +707,6 @@ namespace KK_Plugins.MaterialEditor
             yield return new WaitForEndOfFrame();
             try
             {
-                MaterialEditorPerformance.Increment(
-                    MaterialEditorPerformanceMetric.RefreshExecuted);
                 for (var i = 0; i < MaterialTexturePropertyList.Count; i++)
                 {
                     var property = MaterialTexturePropertyList[i];
@@ -784,12 +778,8 @@ namespace KK_Plugins.MaterialEditor
         /// </summary>
         public void RefreshBodyMainTex()
         {
-            MaterialEditorPerformance.Increment(
-                MaterialEditorPerformanceMetric.RefreshRequests);
             if (!_bodyMainTexRefreshGate.TryRequest())
             {
-                MaterialEditorPerformance.Increment(
-                    MaterialEditorPerformanceMetric.RefreshCoalesced);
                 return;
             }
             try
@@ -810,8 +800,6 @@ namespace KK_Plugins.MaterialEditor
             yield return new WaitForEndOfFrame();
             try
             {
-                MaterialEditorPerformance.Increment(
-                    MaterialEditorPerformanceMetric.RefreshExecuted);
                 for (var i = 0; i < MaterialTexturePropertyList.Count; i++)
                 {
                     var property = MaterialTexturePropertyList[i];

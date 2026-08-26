@@ -26,14 +26,10 @@ namespace MaterialEditorAPI
 
         internal MaterialConditionValueSnapshot Resolve(string propertyName)
         {
-            MaterialEditorPerformance.Increment(
-                MaterialEditorPerformanceMetric.ConditionResolveCalls);
             MaterialConditionValueSnapshot value;
             if (_values != null
                 && _values.TryGetValue(propertyName, out value))
             {
-                MaterialEditorPerformance.Increment(
-                    MaterialEditorPerformanceMetric.ConditionCacheHits);
                 return value;
             }
 
