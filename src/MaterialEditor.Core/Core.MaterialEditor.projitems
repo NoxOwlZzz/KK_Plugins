@@ -27,7 +27,6 @@
     <Compile Include="$(MSBuildThisFileDirectory)Core.MaterialEditor.Tooltips.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)Core.MaterialEditor.Hooks.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)Core.MaterialEditor.Hooks.SiruSync.cs" />
-    <Compile Include="$(MSBuildThisFileDirectory)Core.MaterialEditor.RefreshCoalescing.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)Core.MaterialEditor.SiruSyncPolicy.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)Core.MaterialEditor.ObjectData.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)Core.MaterialEditor.TextureSaveHandler.cs" />
@@ -51,6 +50,5 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="$(MSBuildThisFileDirectory)Core.MaterialEditor.Animation.cs" />
-    <Compile Include="$(MSBuildThisFileDirectory)Core.MaterialEditor.AnimationValidation.cs" />
   </ItemGroup>
 </Project>

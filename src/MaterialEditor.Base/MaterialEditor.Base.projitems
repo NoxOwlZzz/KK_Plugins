@@ -24,7 +24,7 @@
     <Compile Include="$(MSBuildThisFileDirectory)Manifest\ManifestPropertyModels.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)Manifest\ManifestPropertyMetadataParser.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)Manifest\ShaderPropertyEditorPolicy.cs" />
-    <Compile Include="$(MSBuildThisFileDirectory)Manifest\ShaderPropertyFallbackPolicy.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)ShaderPropertyFallbackPolicy.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)Presentation\MaterialPropertyPolicies.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)ConfigurationManagerAttributes.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)CopyContainer.cs" />
@@ -52,7 +52,6 @@
     <Compile Include="$(MSBuildThisFileDirectory)UI\Assets\MaterialEditorAssetWorkflow.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)UI\UI.RepositoryContract.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)UI\UI.SessionState.cs" />
-    <Compile Include="$(MSBuildThisFileDirectory)UI\Lifecycle\UI.MaterialEditorInterpolableSelectionState.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)UI\Lifecycle\UI.MaterialEditorTargetLifecycle.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)UI\UI.SelectionController.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)UI\UI.Theme.cs" />
@@ -122,15 +121,10 @@
     <Compile Include="$(MSBuildThisFileDirectory)UI\UI.RowViewFactory.FloatKeyword.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)UI\UI.RowViewFactory.EnumVectorToggle.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)UI\UI.LabelClick.cs" />
-    <Compile Include="$(MSBuildThisFileDirectory)UI\Refresh\UI.DeferredRefreshCoordinator.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)UI\Refresh\UI.PresentationInvalidationCoordinator.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)UI\Refresh\UI.MaterialEditorRefreshController.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)UI\Conditions\UI.MaterialConditionValues.cs" />
-    <Compile Include="$(MSBuildThisFileDirectory)UI\Conditions\UI.ConditionSnapshotCache.cs" />
-    <Compile Include="$(MSBuildThisFileDirectory)UI\Conditions\UI.ConditionSourceCatalog.cs" />
-    <Compile Include="$(MSBuildThisFileDirectory)UI\Conditions\UI.ConditionInvalidationModels.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)UI\Conditions\UI.ConditionDependencyGraph.cs" />
-    <Compile Include="$(MSBuildThisFileDirectory)UI\Conditions\UI.ConditionWarningCache.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)UI\UI.ListenerScope.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)UI\UI.RowBinding.Common.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)UI\UI.EnumDropdownOptionCache.cs" />

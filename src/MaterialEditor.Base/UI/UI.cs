@@ -599,7 +599,7 @@ namespace MaterialEditorAPI
         }
 
         /// <summary>
-        /// Hacky workaround to wait for the dropdown fade to complete before refreshing
+        /// Defers rebuilding the material list until the dropdown fade has completed.
         /// </summary>
         protected IEnumerator PopulateListCoroutine(
             GameObject go,
