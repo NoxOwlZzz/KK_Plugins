@@ -25,8 +25,7 @@ namespace MaterialEditorAPI
         }
     }
 
-    // Pure production filter shared by the Unity presenter and the standalone
-    // harness. This preserves the legacy wildcard and tokenization behavior.
+    // Wildcard and token filter shared by the Unity presenter and non-Unity callers.
     internal static class MaterialEditorFilter
     {
         private static readonly MaterialEditorFilterPattern[] EmptyPatterns =

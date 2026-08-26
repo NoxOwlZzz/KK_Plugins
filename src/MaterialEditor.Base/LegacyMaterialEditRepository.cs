@@ -97,11 +97,10 @@ namespace MaterialEditorAPI
         public void RemoveMaterialColorProperty(object data, Material material, string propertyName, GameObject gameObject) =>
             _ui.RemoveMaterialColorProperty(data, material, propertyName, gameObject);
 
-        // Deliberate compatibility bridge: MaterialEditorUI predates native vector persistence, but
-        // Color and Vector4 are both lossless four-float storage. Legacy implementations persist the
-        // value under the color key; repository-backed builds migrate that key in memory when schema
-        // metadata identifies the property as Vector. SetVector is applied last to preserve runtime
-        // vector semantics, while old MaterialEditorUI subclasses remain binary compatible.
+        // Color and Vector4 are lossless four-float storage. Implementations using the Color API
+        // store vector data under the color key; repository-backed builds migrate that key in memory
+        // when schema metadata identifies a Vector. SetVector runs last to preserve vector semantics
+        // and binary compatibility.
         public Vector4? GetMaterialVectorPropertyValueOriginal(object data, Material material, string propertyName, GameObject gameObject)
         {
             var value = _ui.GetMaterialColorPropertyValueOriginal(data, material, propertyName, gameObject);

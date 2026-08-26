@@ -63,8 +63,8 @@ namespace KK_Plugins.MaterialEditor
 
         internal static TextureContainer CreateTextureContainer(byte[] data)
         {
-            // TextureContainerManager.Acquire computes the content hash used by
-            // its shared backing store. Keep the production operation intact.
+            // TextureContainer acquisition computes the content hash used by its
+            // shared backing store.
             return new TextureContainer(data);
         }
 

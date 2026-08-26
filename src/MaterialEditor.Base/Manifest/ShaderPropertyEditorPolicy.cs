@@ -92,8 +92,8 @@ namespace MaterialEditorAPI
                 || editorId == MaterialEditorPropertyEditorIds.Vector3
                 || editorId == MaterialEditorPropertyEditorIds.Vector4)
             {
-                // Color remains accepted as a deliberate compatibility bridge
-                // for manifests that previously stored four-float data as Color.
+                // Color is accepted as a compatibility representation for
+                // four-float Vector metadata.
                 return propertyType == ShaderPropertyType.Vector
                        || propertyType == ShaderPropertyType.Color;
             }

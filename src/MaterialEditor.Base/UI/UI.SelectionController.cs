@@ -252,8 +252,8 @@ namespace MaterialEditorAPI
 
         private static void PersistSelectionPanelsVisible(bool visible)
         {
-            // Preserve both existing keys as compatibility aliases while the
-            // UI exposes one joint Renderers/Materials visibility state.
+            // Both configuration keys alias the joint Renderers/Materials
+            // visibility state.
             if (MaterialEditorPluginBase.RenderersPanelOpen != null
                 && MaterialEditorPluginBase.RenderersPanelOpen.Value != visible)
             {

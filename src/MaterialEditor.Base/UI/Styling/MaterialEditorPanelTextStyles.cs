@@ -1,3 +1,4 @@
+using System;
 using UILib;
 using UnityEngine;
 using UnityEngine.UI;
@@ -32,11 +33,9 @@ namespace MaterialEditorAPI
             if (panel == null)
                 return;
 
-            // Graphic colors are multiplied by CanvasRenderer tint. A
-            // Selectable transition from the previous theme can leave that
-            // tint behind, which made the Legacy palette render light content
-            // as effectively transparent. Panels own their semantic color, so
-            // always reset the renderer multiplier before applying it.
+            // CanvasRenderer tint multiplies the Graphic color. Reset it before
+            // applying the semantic panel color so theme transitions cannot retain
+            // a stale tint.
             panel.canvasRenderer.SetColor(Color.white);
             panel.canvasRenderer.SetAlpha(
                 MaterialEditorTheme.States.VisibleAlpha);
@@ -104,11 +103,9 @@ namespace MaterialEditorAPI
                     panel.color = TransparentRowColor;
                     break;
                 case MaterialEditorPanelRole.RowBackdrop:
-                    // The backdrop owns the visible pre-401 row surface while
-                    // the ListEntry Image remains an invisible stencil source.
-                    // Its RectTransform follows hierarchy depth, so nested
-                    // rows keep a visible inset in Legacy. Dark already draws
-                    // its surface through the active semantic row panel.
+                    // RowBackdrop draws the Light row surface while ListEntry remains
+                    // an invisible stencil source. Following hierarchy depth preserves
+                    // nested-row indentation; Dark draws through the semantic row panel.
                     panel.color = MaterialEditorTheme.Mode
                                   == MaterialEditorThemeMode.Legacy
                         ? RowColor
@@ -116,10 +113,9 @@ namespace MaterialEditorAPI
                     break;
                 case MaterialEditorPanelRole.RowStencilMask:
                 {
-                    // Keep the stencil source opaque but out of the color
-                    // buffer. RowBackdrop now owns the visible Legacy edge and
-                    // can be inset independently without moving or weakening
-                    // the mask used to clip the active row controls.
+                    // Keep the stencil source opaque but hidden from color output.
+                    // RowBackdrop draws the Light edge independently of the mask
+                    // that clips the active row controls.
                     var mask = panel.GetComponent<Mask>();
                     panel.color = Color.white;
                     if (mask != null)
@@ -300,6 +296,179 @@ namespace MaterialEditorAPI
                 default:
                     return TextAnchor.MiddleLeft;
             }
+        }
+    }
+
+    internal static class MaterialEditorTextFitting
+    {
+        private const float WidthSafetyMargin = 0.5f;
+        private static readonly TextGenerator WidthGenerator =
+            new TextGenerator();
+
+        internal static void ApplyAdaptiveSingleLine(
+            Text text,
+            int maximumFontSize)
+        {
+            if (text == null)
+                return;
+
+            var fitter =
+                text.GetComponent<MaterialEditorAdaptiveTextFitter>()
+                ?? text.gameObject.AddComponent<MaterialEditorAdaptiveTextFitter>();
+            fitter.Configure(text, maximumFontSize);
+        }
+
+        internal static float MeasurePreferredWidth(
+            Text text,
+            string value,
+            int fontSize)
+        {
+            if (text == null || text.font == null)
+                return 0f;
+
+            var settings = text.GetGenerationSettings(Vector2.zero);
+            settings.resizeTextForBestFit = false;
+            settings.fontSize = Mathf.Max(1, fontSize);
+            settings.horizontalOverflow = HorizontalWrapMode.Overflow;
+            settings.verticalOverflow = VerticalWrapMode.Overflow;
+            return WidthGenerator.GetPreferredWidth(
+                       value ?? string.Empty,
+                       settings)
+                   / text.pixelsPerUnit;
+        }
+
+        internal static int ResolveFontSize(
+            Text text,
+            string value,
+            float availableWidth,
+            int minimumFontSize,
+            int maximumFontSize)
+        {
+            var safeMaximum = Mathf.Max(1, maximumFontSize);
+            var safeMinimum = Mathf.Clamp(
+                minimumFontSize,
+                1,
+                safeMaximum);
+            var usableWidth = Mathf.Max(
+                0f,
+                availableWidth - WidthSafetyMargin);
+            if (text == null || text.font == null || usableWidth <= 0f)
+                return safeMinimum;
+
+            var low = safeMinimum;
+            var high = safeMaximum;
+            var best = safeMinimum;
+            while (low <= high)
+            {
+                var candidate = (low + high) / 2;
+                if (MeasurePreferredWidth(text, value, candidate)
+                    <= usableWidth)
+                {
+                    best = candidate;
+                    low = candidate + 1;
+                }
+                else
+                {
+                    high = candidate - 1;
+                }
+            }
+
+            return best;
+        }
+    }
+
+    [DisallowMultipleComponent]
+    internal sealed class MaterialEditorAdaptiveTextFitter : MonoBehaviour
+    {
+        [SerializeField] private Text _text;
+        [SerializeField] private int _maximumFontSize;
+        private string _lastText;
+        private float _lastWidth = -1f;
+        private Font _lastFont;
+        private FontStyle _lastFontStyle;
+        private int _lastAppliedFontSize = -1;
+        private bool _dirty = true;
+
+        internal void Configure(Text text, int maximumFontSize)
+        {
+            _text = text;
+            _maximumFontSize = Mathf.Max(1, maximumFontSize);
+            _dirty = true;
+            Refresh(true);
+        }
+
+        internal void RefreshNow()
+        {
+            _dirty = true;
+            Refresh(true);
+        }
+
+        private void OnEnable()
+        {
+            _dirty = true;
+            Refresh(true);
+        }
+
+        private void OnRectTransformDimensionsChange()
+        {
+            _dirty = true;
+            if (isActiveAndEnabled)
+                Refresh(true);
+        }
+
+        private void LateUpdate()
+        {
+            Refresh(false);
+        }
+
+        private void Refresh(bool force)
+        {
+            if (_text == null)
+                return;
+
+            var value = _text.text ?? string.Empty;
+            var width = Mathf.Max(0f, _text.rectTransform.rect.width);
+            if (!force
+                && !_dirty
+                && string.Equals(value, _lastText, StringComparison.Ordinal)
+                && Mathf.Approximately(width, _lastWidth)
+                && _text.font == _lastFont
+                && _text.fontStyle == _lastFontStyle
+                && _text.fontSize == _lastAppliedFontSize
+                && !_text.resizeTextForBestFit
+                && _text.horizontalOverflow == HorizontalWrapMode.Wrap
+                && _text.verticalOverflow == VerticalWrapMode.Overflow)
+                return;
+
+            var safeMaximum = Mathf.Max(1, _maximumFontSize);
+            var safeMinimum = Mathf.Min(
+                MaterialEditorTheme.Typography.AdaptiveMinimumFontSize,
+                safeMaximum);
+            var fontSize = width > 0f
+                ? MaterialEditorTextFitting.ResolveFontSize(
+                    _text,
+                    value,
+                    width,
+                    safeMinimum,
+                    safeMaximum)
+                : safeMaximum;
+
+            _text.resizeTextForBestFit = false;
+            _text.resizeTextMinSize = safeMinimum;
+            _text.resizeTextMaxSize = safeMaximum;
+            _text.fontSize = fontSize;
+            _text.horizontalOverflow = HorizontalWrapMode.Wrap;
+            // The size is calculated for one line. Overflow avoids the Unity
+            // 5.6 zero-glyph bug caused by Best Fit with vertical truncation.
+            _text.verticalOverflow = VerticalWrapMode.Overflow;
+            _text.SetVerticesDirty();
+
+            _lastText = value;
+            _lastWidth = width;
+            _lastFont = _text.font;
+            _lastFontStyle = _text.fontStyle;
+            _lastAppliedFontSize = fontSize;
+            _dirty = false;
         }
     }
 }

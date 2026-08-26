@@ -15,8 +15,7 @@ namespace MaterialEditorAPI
     {
         private readonly MaterialEditorUI _host;
         private readonly MaterialEditService _editService;
-        // The legacy UI allowed one watched texture globally. Keep the same
-        // cross-host ownership while moving that state out of MaterialEditorUI.
+        // Texture watching is process-wide so all UI hosts share one active watcher.
         private static FileSystemWatcher _textureWatcher;
         private bool _disposed;
 

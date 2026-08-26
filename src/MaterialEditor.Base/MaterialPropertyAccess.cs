@@ -3,9 +3,9 @@ using UnityEngine;
 namespace MaterialEditorAPI
 {
     /// <summary>
-    /// Centralizes target-specific Material overload availability. PlayHome's Unity
-    /// version lacks the integer texture offset/scale overloads; all other audited
-    /// material operations use the cached integer ID on every supported target.
+    /// Provides target-specific Material property access. PlayHome's Unity version
+    /// lacks the integer texture offset/scale overloads; other operations use cached
+    /// property IDs on every supported target.
     /// </summary>
     internal static class MaterialPropertyAccess
     {

@@ -29,8 +29,8 @@ namespace MaterialEditorAPI
             headerButton.targetGraphic = panel;
             MaterialEditorStyles.ApplyPropertyCategoryButton(headerButton);
 
-            // Keep the legacy object name while making the glyph a passive
-            // indicator. The panel itself is now the only clickable surface.
+            // PropertyCategoryCollapseButton remains the lookup name used by UI
+            // hooks. The glyph is passive; the panel is the sole clickable surface.
             var collapseIndicator = MaterialEditorControlFactory.CreateText(
                 "PropertyCategoryCollapseButton",
                 panel.transform,
@@ -148,11 +148,9 @@ namespace MaterialEditorAPI
                 parent,
                 ItemColor,
                 true);
-            // The pre-401 offset/scale row did not insert spacing between every
-            // coordinate label and input. Applying the generic 2 px control
-            // spacing ten times shifts OffsetX into the Timeline ("O") column.
-            // Keep this row's historical compact geometry; the explicit group
-            // spacer below is the sole separation between Offset and Scale.
+            // The coordinate labels and inputs must fit without shifting OffsetX
+            // into the Timeline ("O") column. Use zero inter-control spacing; the
+            // explicit group spacer is the sole Offset/Scale separation.
             panel.GetComponent<HorizontalLayoutGroup>().spacing = 0f;
 
             var label = MaterialEditorControlFactory.CreateText(

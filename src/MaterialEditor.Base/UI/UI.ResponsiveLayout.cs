@@ -350,53 +350,83 @@ namespace MaterialEditorAPI
         }
     }
 
-    internal static class VirtualListCachePolicy
+
+    internal enum MaterialEditorWindowDragMode
     {
-        internal static int MaximumViewCount
+        NoLimits,
+        KeepHeaderInside,
+        KeepWholeWindowInside
+    }
+
+    internal struct MaterialEditorWindowDragBounds
+    {
+        internal MaterialEditorWindowDragBounds(
+            float minimumX,
+            float maximumX,
+            float minimumY,
+            float maximumY)
         {
-            get
+            MinimumX = minimumX;
+            MaximumX = maximumX;
+            MinimumY = minimumY;
+            MaximumY = maximumY;
+        }
+
+        internal float MinimumX { get; }
+        internal float MaximumX { get; }
+        internal float MinimumY { get; }
+        internal float MaximumY { get; }
+
+        internal void Clamp(ref float x, ref float y)
+        {
+            x = Clamp(x, MinimumX, MaximumX);
+            y = Clamp(y, MinimumY, MaximumY);
+        }
+
+        private static float Clamp(float value, float minimum, float maximum)
+        {
+            if (maximum < minimum)
+                return maximum;
+            if (value < minimum)
+                return minimum;
+            if (value > maximum)
+                return maximum;
+            return value;
+        }
+    }
+
+    internal static class MaterialEditorWindowBoundsPolicy
+    {
+        internal static MaterialEditorWindowDragMode FromLegacy(
+            bool preventDragout)
+        {
+            return preventDragout
+                ? MaterialEditorWindowDragMode.KeepHeaderInside
+                : MaterialEditorWindowDragMode.NoLimits;
+        }
+
+        internal static void ClampDragOffset(
+            MaterialEditorWindowDragMode mode,
+            MaterialEditorWindowDragBounds headerBounds,
+            MaterialEditorWindowDragBounds wholeBounds,
+            ref float x,
+            ref float y)
+        {
+            switch (mode)
             {
-                var maximumMainHeight =
-                    MaterialEditorTheme.Metrics.CanvasReferenceHeight
-                    * (1f - 2f
-                        * MaterialEditorTheme.Metrics.ResponsiveOuterMarginFraction);
-                var maximumViewportHeight = Math.Max(
-                    0f,
-                    maximumMainHeight
-                    - MaterialEditorTheme.Metrics.TopBarHeight
-                    - MaterialEditorTheme.Metrics.Margin * 1.5f);
-                return UnboundedViewCount(
-                    maximumViewportHeight,
-                    MaterialEditorTheme.Metrics.RowHeight);
+                case MaterialEditorWindowDragMode.KeepHeaderInside:
+                    headerBounds.Clamp(ref x, ref y);
+                    break;
+                case MaterialEditorWindowDragMode.KeepWholeWindowInside:
+                    wholeBounds.Clamp(ref x, ref y);
+                    break;
             }
         }
 
-        internal static int RequiredViewCount(
-            float viewportHeight,
-            float rowHeight,
-            int modelCount)
+        internal static bool ToLegacyBoolean(
+            MaterialEditorWindowDragMode mode)
         {
-            if (modelCount <= 0
-                || viewportHeight <= 0f
-                || rowHeight <= 0f
-                || float.IsNaN(viewportHeight)
-                || float.IsInfinity(viewportHeight)
-                || float.IsNaN(rowHeight)
-                || float.IsInfinity(rowHeight))
-                return 0;
-
-            return Math.Min(
-                modelCount,
-                Math.Min(
-                    MaximumViewCount,
-                    UnboundedViewCount(viewportHeight, rowHeight)));
-        }
-
-        private static int UnboundedViewCount(
-            float viewportHeight,
-            float rowHeight)
-        {
-            return (int)Math.Ceiling(viewportHeight / rowHeight) + 1;
+            return mode != MaterialEditorWindowDragMode.NoLimits;
         }
     }
 }

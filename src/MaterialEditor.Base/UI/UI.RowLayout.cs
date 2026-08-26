@@ -19,8 +19,8 @@ namespace MaterialEditorAPI
             if (!buttonObject.activeSelf)
                 buttonObject.SetActive(true);
 
-            // Timeline owns a stable historical column. Incompatible rows keep
-            // the 20 px slot in layout, but expose no glyph or hit target.
+            // Timeline reserves a fixed 20 px column. Incompatible rows preserve
+            // the slot but expose no glyph or hit target.
             var visibility = button.GetComponent<CanvasGroup>()
                              ?? buttonObject.AddComponent<CanvasGroup>();
             visibility.alpha = visible

@@ -34,10 +34,10 @@ namespace MaterialEditorAPI
 
         internal static MaterialPropertyHandle Get(string propertyName)
         {
-            // Interpolation in the legacy call sites converted both null and empty to
-            // "_". Use the unprefixed value as the key so a hit creates no new string.
-            // Unity Material/Shader access is main-thread-only, so this cache follows
-            // the same ownership instead of placing a Monitor on every hot-path hit.
+            // Null and empty property names both map to "_". Cache the unprefixed
+            // input so hits avoid allocating prefixed strings. Unity Material/Shader
+            // access is main-thread-only, so the cache follows the same ownership
+            // without placing a Monitor on every hot-path hit.
             var cacheKey = propertyName ?? string.Empty;
             MaterialPropertyHandle handle;
             if (Handles.TryGetValue(cacheKey, out handle))

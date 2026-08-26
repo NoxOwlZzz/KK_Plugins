@@ -2,18 +2,6 @@ using UnityEngine;
 
 namespace MaterialEditorAPI
 {
-    internal enum MaterialEditorVisualState
-    {
-        Default,
-        Hovered,
-        Pressed,
-        Selected,
-        Focused,
-        Disabled,
-        Mixed,
-        Modified
-    }
-
     internal enum MaterialEditorThemeMode
     {
         Legacy,
@@ -35,9 +23,8 @@ namespace MaterialEditorAPI
     }
 
 
-    // Dynamic visual tokens for the programmatic uGUI surface. Legacy is the
-    // default and reproduces the palette used immediately before the UI
-    // redesign; Dark remains an opt-in presentation of the same semantic roles.
+    // Dynamic visual tokens for the programmatic uGUI surface. Light is the
+    // default; Dark is an opt-in presentation of the same semantic roles.
     internal static class MaterialEditorTheme
     {
         private static MaterialEditorThemeMode _mode =

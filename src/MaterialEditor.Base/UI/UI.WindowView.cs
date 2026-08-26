@@ -66,9 +66,8 @@ namespace MaterialEditorAPI
             Window.gameObject.SetActive(true);
             ApplySettings();
             _topBar.PrepareForDisplay(filter);
-            // Legacy is the startup mode, so no configuration-change event is
-            // raised for it. Reapply semantics after activation just as the Dark
-            // toggle does, then let the shared coordinator settle render caches.
+            // Startup does not raise a theme configuration event. Apply the current
+            // theme after activation, then let the coordinator settle render caches.
             ApplyTheme();
         }
 

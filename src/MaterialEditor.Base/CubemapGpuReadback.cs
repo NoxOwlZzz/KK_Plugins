@@ -42,10 +42,8 @@ namespace MaterialEditorAPI
             var previous = RenderTexture.active;
             try
             {
-                // Keep the existing project-dependent color behavior until the
-                // CPU/GPU paths are compared on every supported Unity target.
-                // Selecting Linear or sRGB here without that evidence can alter
-                // exported values; Default is therefore an explicit test gate.
+                // Default preserves the project's configured color-space behavior.
+                // Forcing Linear or sRGB can change exported values across Unity targets.
                 temporary = RenderTexture.GetTemporary(
                     cubemap.width,
                     cubemap.width,

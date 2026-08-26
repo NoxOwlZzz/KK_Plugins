@@ -5,9 +5,8 @@ using ShaderPropertyData = MaterialEditorAPI.MaterialEditorPluginBase.ShaderProp
 namespace MaterialEditorAPI
 {
     /// <summary>
-    /// Owns provenance and diagnostics for the legacy cross-shader fallback
-    /// catalog. Assignment deliberately remains last-loaded-wins for backward
-    /// compatibility; this class only makes semantic conflicts observable.
+    /// Tracks source provenance and reports semantic conflicts in the cross-shader
+    /// fallback catalog. Entries use deterministic last-loaded-wins precedence.
     /// </summary>
     internal sealed class ShaderPropertyFallbackMergeState
     {
@@ -62,8 +61,7 @@ namespace MaterialEditorAPI
                 }
             }
 
-            // Preserve the legacy behavior exactly: the most recently loaded
-            // definition replaces the previous fallback definition.
+            // The most recently loaded definition is the active fallback.
             fallbackProperties[fallback.Name] = fallback;
             _sourceByProperty[fallback.Name] = incomingSource;
             return fallback;

@@ -73,9 +73,9 @@ namespace MaterialEditorAPI
             groupObject.transform.SetParent(parent, false);
 
             var layout = groupObject.GetComponent<HorizontalLayoutGroup>();
-            // RGBA used one compact 316 px editor block before the UI redesign.
-            // Keep its channels gapless so the common Timeline/editor anchor is
-            // not shifted left by the eight extra children in this row.
+            // RGBA shares the compact 316 px editor budget. Keep its channels
+            // gapless so the common Timeline/editor anchor is not shifted by
+            // the eight child elements.
             layout.padding = new RectOffset(
                 0,
                 (int)MaterialEditorTheme.Spacing.Control,

@@ -77,8 +77,8 @@ namespace MaterialEditorAPI
             }
             else
             {
-                // Compatibility for local schema-2 manifests authored before
-                // PR #401. New manifests should use Invert with fixed 0/1 values.
+                // Schema-2 manifests without Invert may define their Boolean
+                // endpoints explicitly through OffValue and OnValue.
                 metadata.OffValue = ParseFloatAttribute(
                     propertyElement, "OffValue", 0f, context, warning);
                 metadata.OnValue = ParseFloatAttribute(
@@ -312,8 +312,8 @@ namespace MaterialEditorAPI
                 return;
             }
 
-            // Compatibility for local schema-2 manifests authored before
-            // PR #401. Enums takes precedence whenever it is present.
+            // Enums is authoritative when present; otherwise schema-2 manifests
+            // may declare their values through child Option elements.
             var values = new HashSet<float>();
             foreach (XmlNode child in element.ChildNodes)
             {

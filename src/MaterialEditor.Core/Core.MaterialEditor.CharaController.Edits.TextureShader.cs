@@ -62,9 +62,8 @@ namespace KK_Plugins.MaterialEditor
                 return;
             }
 
-            // The legacy implementation has one pending import slot. If it is
-            // replaced before Update, complete the displaced request as failed
-            // instead of leaving its UI permanently waiting for a result.
+            // Only one import can wait for Update. Replacing it completes the
+            // displaced request as failed so its UI cannot wait indefinitely.
             if (FileToSet != null)
                 TextureImportCompleted?.Invoke(false);
 
