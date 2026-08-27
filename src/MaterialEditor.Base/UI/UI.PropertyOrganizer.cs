@@ -28,8 +28,8 @@ namespace MaterialEditorAPI
         internal int DeclarationOrder { get; }
         internal IList<ShaderPropertyData> DirectProperties { get; }
         internal IList<OrganizedPropertySubcategory> Subcategories { get; }
-        // Flat compatibility view for consumers that do not render the
-        // optional second grouping level.
+        // Flat view for consumers that do not render the optional second
+        // grouping level.
         internal IList<ShaderPropertyData> Properties { get; }
     }
 
@@ -112,7 +112,7 @@ namespace MaterialEditorAPI
                     .Where(item => !item.Definition.Hidden)
                     .ToList();
 
-                // The legacy default dictionary is a cross-shader union used
+                // The default dictionary is a cross-shader union used
                 // by non-UI persistence and API paths. Its shader-specific
                 // grouping metadata and Keyword declarations are not safe to
                 // present for an unknown shader, so build a conservative UI

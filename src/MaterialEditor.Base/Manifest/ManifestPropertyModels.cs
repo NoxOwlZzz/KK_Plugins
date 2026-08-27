@@ -6,7 +6,6 @@ namespace MaterialEditorAPI
     /// <summary>One numeric option displayed by an enum property editor.</summary>
     public sealed class MaterialEditorEnumOption
     {
-        /// <summary>Create an enum option.</summary>
         public MaterialEditorEnumOption(float value, string displayName)
         {
             Value = value;
@@ -15,15 +14,12 @@ namespace MaterialEditorAPI
                 : displayName;
         }
 
-        /// <summary>Numeric shader value represented by this option.</summary>
         public float Value { get; }
-        /// <summary>Label shown in the enum dropdown.</summary>
         public string DisplayName { get; }
     }
 
     /// <summary>
-    /// Parsed optional metadata for one manifest property. This type remains
-    /// independent from Unity so parsing and policy behavior can be tested directly.
+    /// Unity-independent metadata parsed for one manifest property.
     /// </summary>
     internal sealed class ShaderPropertyUiMetadata
     {

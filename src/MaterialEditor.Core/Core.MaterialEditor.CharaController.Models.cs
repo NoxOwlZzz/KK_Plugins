@@ -354,16 +354,10 @@ namespace KK_Plugins.MaterialEditor
             }
         }
 
-        /// <summary>
-        /// Data storage class for vector properties
-        /// </summary>
         [Serializable]
         [MessagePackObject]
         public class MaterialVectorProperty
         {
-            /// <summary>
-            /// Type of the object
-            /// </summary>
             [Key("ObjectType")]
             public ObjectType ObjectType;
             /// <summary>
@@ -376,37 +370,15 @@ namespace KK_Plugins.MaterialEditor
             /// </summary>
             [Key("Slot")]
             public int Slot;
-            /// <summary>
-            /// Name of the material
-            /// </summary>
             [Key("MaterialName")]
             public string MaterialName;
-            /// <summary>
-            /// Name of the property
-            /// </summary>
             [Key("Property")]
             public string Property;
-            /// <summary>
-            /// Value
-            /// </summary>
             [Key("Value")]
             public Vector4 Value;
-            /// <summary>
-            /// Original value
-            /// </summary>
             [Key("ValueOriginal")]
             public Vector4 ValueOriginal;
 
-            /// <summary>
-            /// Data storage class for vector properties
-            /// </summary>
-            /// <param name="objectType">Type of the object</param>
-            /// <param name="coordinateIndex">Coordinate index, always 0 except in Koikatsu</param>
-            /// <param name="slot">Slot of the accessory, hair, or clothing</param>
-            /// <param name="materialName">Name of the material</param>
-            /// <param name="property">Name of the property</param>
-            /// <param name="value">Value</param>
-            /// <param name="valueOriginal">Original value</param>
             public MaterialVectorProperty(ObjectType objectType, int coordinateIndex, int slot, string materialName, string property, Vector4 value, Vector4 valueOriginal)
             {
                 ObjectType = objectType;
@@ -526,16 +498,10 @@ namespace KK_Plugins.MaterialEditor
             }
         }
 
-        /// <summary>
-        /// Data storage class for native Cubemap properties.
-        /// </summary>
         [Serializable]
         [MessagePackObject]
         public class MaterialCubemapProperty
         {
-            /// <summary>
-            /// Type of the object.
-            /// </summary>
             [Key("ObjectType")]
             public ObjectType ObjectType;
             /// <summary>
@@ -548,14 +514,8 @@ namespace KK_Plugins.MaterialEditor
             /// </summary>
             [Key("Slot")]
             public int Slot;
-            /// <summary>
-            /// Name of the material.
-            /// </summary>
             [Key("MaterialName")]
             public string MaterialName;
-            /// <summary>
-            /// Name of the Cubemap property.
-            /// </summary>
             [Key("Property")]
             public string Property;
             /// <summary>
@@ -577,15 +537,6 @@ namespace KK_Plugins.MaterialEditor
                 }
             }
 
-            /// <summary>
-            /// Creates a persisted native Cubemap property edit.
-            /// </summary>
-            /// <param name="objectType">Type of the object.</param>
-            /// <param name="coordinateIndex">Coordinate index containing the object.</param>
-            /// <param name="slot">Slot containing the object.</param>
-            /// <param name="materialName">Name of the material.</param>
-            /// <param name="property">Name of the Cubemap property.</param>
-            /// <param name="texID">ID of the encoded Cubemap source.</param>
             public MaterialCubemapProperty(
                 ObjectType objectType,
                 int coordinateIndex,

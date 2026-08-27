@@ -206,7 +206,7 @@ namespace MaterialEditorAPI
                                         // A supported repository reports the
                                         // real persistence/application result.
                                         // Do not reinterpret failure as a reason
-                                        // to retry through the legacy file API.
+                                        // to retry through the file-path API.
                                         return _editService.SetMaterialCubemap(
                                             data,
                                             material,
@@ -216,13 +216,13 @@ namespace MaterialEditorAPI
                                             gameObject);
                                     }
 
-                                    // External/legacy repositories only expose
-                                    // the original file-path API. Current Chara
+                                    // Repositories without preloaded-data support expose only
+                                    // the file-path API. Built-in Chara
                                     // and Studio repositories use the byte seam,
                                     // so they do not repeat disk IO here.
                                     MaterialEditorPluginBase.Logger?.LogWarning(
                                         "The active Material Editor repository does not support "
-                                        + "preloaded Cubemap data; using its legacy file import path.");
+                                        + "preloaded Cubemap data; using its file import path.");
                                     _editService.SetMaterialCubemap(
                                         data,
                                         material,

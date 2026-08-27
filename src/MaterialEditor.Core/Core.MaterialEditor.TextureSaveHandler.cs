@@ -8,9 +8,8 @@ using System.IO;
 namespace KK_Plugins.MaterialEditor
 {
     /// <summary>
-    /// Compatibility texture persistence for KKAPI versions before the local-texture API.
-    /// New saves always use Material Editor's original bundled version-1 format. The
-    /// version-2 local and deduplicated formats remain readable for forward compatibility.
+    /// Reads local and deduplicated version-2 texture data.
+    /// Writes the bundled version-1 format supported by the installed runtime.
     /// </summary>
     internal sealed class TextureSaveHandler
     {
@@ -69,7 +68,7 @@ namespace KK_Plugins.MaterialEditor
         }
 
         /// <summary>
-        /// Saves textures in the legacy bundled format understood by the installed runtime.
+        /// Writes textures in the bundled version-1 format.
         /// </summary>
         public void Save(PluginData pluginData, string key, object data, bool isCharaController)
         {

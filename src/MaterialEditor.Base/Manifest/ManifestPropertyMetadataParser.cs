@@ -89,7 +89,7 @@ namespace MaterialEditorAPI
             if (metadata.EditorId == MaterialEditorPropertyEditorIds.Enum
                 && metadata.EnumOptions.Count == 0)
             {
-                Warn(warning, context + " declares the Enum editor without a valid Enums attribute or legacy Option elements; using its type editor instead.");
+                Warn(warning, context + " declares the Enum editor without a valid Enums attribute or Option elements; using its type editor instead.");
                 metadata.EditorId = null;
             }
 

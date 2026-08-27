@@ -4,8 +4,7 @@ using UnityEngine;
 namespace MaterialEditorAPI
 {
     /// <summary>
-    /// Compatibility facade shared by the focused import, export and GPU
-    /// readback source files.
+    /// Shared facade for Cubemap import, export and GPU readback.
     /// </summary>
     internal static partial class MaterialEditorCubemapConversion
     {

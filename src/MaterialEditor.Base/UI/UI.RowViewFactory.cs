@@ -10,7 +10,7 @@ namespace MaterialEditorAPI
         internal static GameObject CreateTemplate(Transform parent)
         {
             // ListEntry is only the clipping source. A separate backdrop owns
-            // the visible Legacy row edge so hierarchy depth can inset the
+            // the visible Light row edge so hierarchy depth can inset the
             // surface without changing the mask or the Dark layout.
             var contentList = MaterialEditorControlFactory.CreateRowStencilMaskPanel(
                 "ListEntry",

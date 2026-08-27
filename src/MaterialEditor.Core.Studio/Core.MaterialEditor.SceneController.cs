@@ -422,7 +422,7 @@ namespace KK_Plugins.MaterialEditor
                     GameObject go = ExtractGameObject(loadedItems, loadedProperty.ID, out var objID);
                     if (go != null)
                     {
-                        // Native vector data is authoritative if a transitional save contains both keys.
+                        // Native Vector data takes precedence when both representations exist.
                         MaterialColorPropertyList.RemoveAll(x => x.ID == objID && x.MaterialName == loadedProperty.MaterialName && x.Property == loadedProperty.Property);
                         MaterialVectorPropertyList.RemoveAll(x => x.ID == objID && x.MaterialName == loadedProperty.MaterialName && x.Property == loadedProperty.Property);
                         if (SetVector(go, loadedProperty.MaterialName, loadedProperty.Property, loadedProperty.Value)

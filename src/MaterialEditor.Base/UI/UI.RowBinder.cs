@@ -201,7 +201,7 @@ namespace MaterialEditorAPI
 
         // An allocation-free semantic scan is active only while the window
         // Canvas is active. It covers same-count item replacement and field
-        // mutation in the legacy public CopyData lists used by extensions.
+        // mutation in the public CopyData lists used by extensions.
         private void Update()
         {
             if (_snapshot.Capture(MaterialEditorPluginBase.CopyData))

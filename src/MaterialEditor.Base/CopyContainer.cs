@@ -8,37 +8,13 @@ namespace MaterialEditorAPI
     /// </summary>
     public class CopyContainer
     {
-        /// <summary>
-        /// List of float property edits
-        /// </summary>
         public List<MaterialFloatProperty> MaterialFloatPropertyList = new List<MaterialFloatProperty>();
-        /// <summary>
-        /// List of keyword property edits
-        /// </summary>
         public List<MaterialKeywordProperty> MaterialKeywordPropertyList = new List<MaterialKeywordProperty>();
-        /// <summary>
-        /// List of color property edits
-        /// </summary>
         public List<MaterialColorProperty> MaterialColorPropertyList = new List<MaterialColorProperty>();
-        /// <summary>
-        /// List of vector property edits
-        /// </summary>
         public List<MaterialVectorProperty> MaterialVectorPropertyList = new List<MaterialVectorProperty>();
-        /// <summary>
-        /// List of texture property edits
-        /// </summary>
         public List<MaterialTextureProperty> MaterialTexturePropertyList = new List<MaterialTextureProperty>();
-        /// <summary>
-        /// List of Cubemap property edits
-        /// </summary>
         public List<MaterialCubemapProperty> MaterialCubemapPropertyList = new List<MaterialCubemapProperty>();
-        /// <summary>
-        /// List of shader edits
-        /// </summary>
         public List<MaterialShader> MaterialShaderList = new List<MaterialShader>();
-        /// <summary>
-        /// List of projector edits
-        /// </summary>
         public List<ProjectorProperty> ProjectorPropertyList = new List<ProjectorProperty>();
 
         /// <summary>
@@ -162,25 +138,11 @@ namespace MaterialEditorAPI
             }
         }
 
-        /// <summary>
-        /// Data storage class for vector properties
-        /// </summary>
         public class MaterialVectorProperty
         {
-            /// <summary>
-            /// Name of the property
-            /// </summary>
             public string Property;
-            /// <summary>
-            /// Value
-            /// </summary>
             public Vector4 Value;
 
-            /// <summary>
-            /// Data storage class for vector properties
-            /// </summary>
-            /// <param name="property">Name of the property</param>
-            /// <param name="value">Value</param>
             public MaterialVectorProperty(string property, Vector4 value)
             {
                 Property = property;
@@ -226,25 +188,14 @@ namespace MaterialEditorAPI
             }
         }
 
-        /// <summary>
-        /// Data storage class for Cubemap properties
-        /// </summary>
         public class MaterialCubemapProperty
         {
-            /// <summary>
-            /// Name of the property
-            /// </summary>
             public string Property;
             /// <summary>
-            /// Byte array containing the Cubemap source image
+            /// Encoded PNG or Radiance HDR Cubemap source data.
             /// </summary>
             public byte[] Data;
 
-            /// <summary>
-            /// Data storage class for Cubemap properties
-            /// </summary>
-            /// <param name="property">Name of the property</param>
-            /// <param name="data">Byte array containing the Cubemap source image</param>
             public MaterialCubemapProperty(string property, byte[] data = null)
             {
                 Property = property;

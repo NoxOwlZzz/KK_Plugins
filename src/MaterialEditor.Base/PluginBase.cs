@@ -97,8 +97,8 @@ namespace MaterialEditorAPI
         public static ConfigEntry<bool> PreventDragout { get; set; }
         /// <summary>
         /// Defines which visible part of the Material Editor window remains
-        /// recoverable while dragging. The public Boolean entry above remains
-        /// available as a live compatibility mirror.
+        /// recoverable while dragging. It is synchronized with the public
+        /// <see cref="PreventDragout"/> compatibility entry.
         /// </summary>
         internal static ConfigEntry<MaterialEditorWindowDragMode> WindowDragMode
         {
@@ -175,7 +175,7 @@ namespace MaterialEditorAPI
         /// </summary>
         public static ConfigEntry<bool> ConvertNormalmapsOnExport { get; set; }
         /// <summary>
-        /// Compatibility path used to read legacy local texture data. If empty, defaults to {LocalTexturePathDefault}
+        /// Optional path for reading version-2 local texture data. Empty uses {LocalTexturePathDefault}.
         /// </summary>
         internal static ConfigEntry<string> ConfigLocalTexturePath { get; set; }
 
@@ -281,7 +281,7 @@ namespace MaterialEditorAPI
                 "Prevent Window Dragout",
                 true,
                 new ConfigDescription(
-                    "Legacy compatibility setting mirrored with Window Drag Limits. False selects NoLimits; true selects KeepHeaderInside.",
+                    "Compatibility alias synchronized with Window Drag Limits: false selects NoLimits; true selects KeepHeaderInside.",
                     null,
                     new ConfigurationManagerAttributes { Browsable = false }));
             WindowDragMode = Config.Bind(
@@ -637,12 +637,12 @@ namespace MaterialEditorAPI
             /// Category of the shader property.
             /// </summary>
             public string Category;
-            // The flat attribute is retained when a nested declaration is
-            // cloned into the global legacy fallback catalog.
+            // Preserve the flat Category attribute when a nested declaration
+            // is cloned into the shared default-property catalog.
             internal string CategoryBeforeHierarchy;
             // Stable presentation hierarchy read from optional schema-2
-            // Category/Subcategory parents. Category remains the legacy flat
-            // grouping/display value for older manifests and consumers.
+            // Category/Subcategory parents. Category remains the flat
+            // grouping/display value for consumers without hierarchy support.
             internal string CategoryId;
             internal string CategoryDisplayName;
             internal bool HasExplicitCategoryDisplayName;
@@ -798,7 +798,7 @@ namespace MaterialEditorAPI
                 {
                     warning?.Invoke(
                         "Shader property '" + propertyName
-                        + "' uses the legacy Type 'Dropdown'; use Type 'Enum' with the Enums attribute in new manifests.");
+                        + "' uses Type 'Dropdown'; use Type 'Enum' with the Enums attribute.");
                 }
 
                 string min = null;
@@ -856,7 +856,7 @@ namespace MaterialEditorAPI
                     {
                         warning?.Invoke(
                             "Shader property '" + propertyName
-                            + "' uses fixed Boolean values 0 and 1; legacy OffValue/OnValue attributes were ignored. Use Invert=\"true\" to swap them.");
+                            + "' uses fixed Boolean values 0 and 1; OffValue/OnValue attributes are ignored. Use Invert=\"true\" to swap them.");
                     }
                     metadata.OffValue = metadata.Invert ? 1f : 0f;
                     metadata.OnValue = metadata.Invert ? 0f : 1f;
@@ -887,7 +887,7 @@ namespace MaterialEditorAPI
                     warning?.Invoke(
                         "Shader property '" + propertyName + "' declares Type '"
                         + declaredPropertyType
-                        + "' as an enum without a valid Enums attribute or legacy Option elements; "
+                        + "' as an enum without a valid Enums attribute or Option elements; "
                         + "the Float editor will be used.");
                     metadata.EditorId = null;
                 }

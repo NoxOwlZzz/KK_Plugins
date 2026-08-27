@@ -40,7 +40,7 @@ namespace MaterialEditorAPI
                 MaterialEditorPanelRole.RowStencilMask);
             var mask = panel.GetComponent<Mask>()
                        ?? panel.gameObject.AddComponent<Mask>();
-            // CreatePanel applied the role before Mask existed.
+            // Reapply the role after adding Mask to configure its stencil graphic.
             MaterialEditorStyles.ApplyPanel(
                 panel,
                 MaterialEditorPanelRole.RowStencilMask);

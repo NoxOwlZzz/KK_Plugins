@@ -5,7 +5,7 @@ using System.Runtime.CompilerServices;
 namespace MaterialEditorAPI
 {
     // Cross-window notification for copy operations routed through the stable
-    // edit facade. Direct mutations of the legacy public lists are detected by
+    // edit facade. Direct mutations of the public CopyData lists are detected by
     // MaterialEditorClipboardSnapshot without allocations while a window is active.
     internal static class MaterialEditorClipboardState
     {
@@ -338,7 +338,7 @@ namespace MaterialEditorAPI
     }
 
     /// <summary>
-    /// Temporarily presents legacy paste backends with non-null, null-free
+    /// Temporarily presents paste repositories with non-null, null-free
     /// lists and restores the public clipboard references on every exit path.
     /// </summary>
     internal sealed class MaterialEditorClipboardPasteLease : IDisposable

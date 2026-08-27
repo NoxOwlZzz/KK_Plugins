@@ -279,47 +279,21 @@ namespace KK_Plugins.MaterialEditor
             }
         }
 
-        /// <summary>
-        /// Data storage class for vector properties
-        /// </summary>
         [Serializable]
         [MessagePackObject]
         public class MaterialVectorProperty
         {
-            /// <summary>
-            /// ID of the item
-            /// </summary>
             [Key("ID")]
             public int ID;
-            /// <summary>
-            /// Name of the material
-            /// </summary>
             [Key("MaterialName")]
             public string MaterialName;
-            /// <summary>
-            /// Name of the property
-            /// </summary>
             [Key("Property")]
             public string Property;
-            /// <summary>
-            /// Value
-            /// </summary>
             [Key("Value")]
             public Vector4 Value;
-            /// <summary>
-            /// Original value
-            /// </summary>
             [Key("ValueOriginal")]
             public Vector4 ValueOriginal;
 
-            /// <summary>
-            /// Data storage class for vector properties
-            /// </summary>
-            /// <param name="id">ID of the item</param>
-            /// <param name="materialName">Name of the material</param>
-            /// <param name="property">Name of the property</param>
-            /// <param name="value">Value</param>
-            /// <param name="valueOriginal">Original value</param>
             public MaterialVectorProperty(int id, string materialName, string property, Vector4 value, Vector4 valueOriginal)
             {
                 ID = id;
@@ -414,9 +388,6 @@ namespace KK_Plugins.MaterialEditor
             public bool NullCheck() => TexID == null && Offset == null && Scale == null;
         }
 
-        /// <summary>
-        /// Data storage class for native Cubemap properties.
-        /// </summary>
         [Serializable]
         [MessagePackObject]
         public class MaterialCubemapProperty
@@ -427,15 +398,9 @@ namespace KK_Plugins.MaterialEditor
             [Key("ID")]
             public int ID;
 
-            /// <summary>
-            /// Name of the material.
-            /// </summary>
             [Key("MaterialName")]
             public string MaterialName;
 
-            /// <summary>
-            /// Name of the Cubemap property.
-            /// </summary>
             [Key("Property")]
             public string Property;
 
@@ -458,13 +423,6 @@ namespace KK_Plugins.MaterialEditor
                 }
             }
 
-            /// <summary>
-            /// Creates a persisted native Cubemap property edit.
-            /// </summary>
-            /// <param name="id">ID of the Studio object.</param>
-            /// <param name="materialName">Name of the material.</param>
-            /// <param name="property">Name of the Cubemap property.</param>
-            /// <param name="texID">ID of the encoded Cubemap source.</param>
             public MaterialCubemapProperty(
                 int id,
                 string materialName,

@@ -12,7 +12,7 @@ namespace MaterialEditorAPI
         internal const string AllExpanded = MaterialEditorTheme.Glyphs.AllExpanded;
     }
 
-    // Compatibility adapter retained for the existing row construction code.
+    // Adapts semantic styles to the row-construction entry points.
     internal static class RowStyle
     {
         internal static void Apply(GameObject rowTemplate)

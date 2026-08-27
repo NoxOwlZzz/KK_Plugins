@@ -55,7 +55,7 @@ namespace MaterialEditorAPI
                         "Shared default property '" + fallback.Name
                         + "' has conflicting semantic metadata between '"
                         + previousSource + "' and '" + incomingSource
-                        + "'. Historical last-loaded precedence is preserved; '"
+                        + "'. Last-loaded precedence applies; '"
                         + incomingSource + "' wins. Changed fields: "
                         + string.Join(", ", differences.ToArray()) + ".");
                 }

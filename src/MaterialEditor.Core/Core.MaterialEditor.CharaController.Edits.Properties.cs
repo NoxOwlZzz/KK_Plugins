@@ -291,8 +291,8 @@ namespace KK_Plugins.MaterialEditor
         }
 
         /// <summary>
-        /// Convert a legacy color-backed vector override to the native vector list in memory.
-        /// Native vector data wins if a transitional save contains both keys.
+        /// Migrates a Color-backed vector override to native Vector storage in memory.
+        /// Native Vector data takes precedence when both representations exist.
         /// </summary>
         private MaterialVectorProperty MigrateLegacyMaterialVectorProperty(int slot, ObjectType objectType, string materialName, string propertyName, GameObject go)
         {
@@ -338,10 +338,10 @@ namespace KK_Plugins.MaterialEditor
         private void RemoveLegacyMaterialVectorDuplicates()
         {
             MaterialVectorPropertyList.RemoveAll(vector => vector.Value == vector.ValueOriginal);
-            // Legacy Color entries are removed by MigrateLegacyMaterialVectorProperty
+            // Color-backed Vector entries are removed by MigrateLegacyMaterialVectorProperty
             // only after the active shader manifest confirms that the property is a
             // Vector. Keeping Color entries here prevents a stale Vector entry from
-            // discarding a newer Color edit when a manifest is downgraded or changed.
+            // discarding a newer Color edit when the manifest metadata changes.
         }
 
     }

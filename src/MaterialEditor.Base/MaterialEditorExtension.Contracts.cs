@@ -258,7 +258,6 @@ namespace MaterialEditorAPI
     /// <summary>Semantic float-backed enum property editor.</summary>
     public sealed class MaterialEditorEnumPropertyEditor : MaterialEditorPropertyEditor
     {
-        /// <summary>Create an enum editor definition.</summary>
         public MaterialEditorEnumPropertyEditor(
             float value,
             float originalValue,
@@ -282,13 +281,10 @@ namespace MaterialEditorAPI
             Reset = reset ?? throw new ArgumentNullException(nameof(reset));
         }
 
-        /// <summary>Current numeric value.</summary>
         public float Value { get; }
-        /// <summary>Original numeric value.</summary>
         public float OriginalValue { get; }
         /// <summary>Whether multiple extension targets currently have different values.</summary>
         public bool IsMixed { get; set; }
-        /// <summary>Available enum options.</summary>
         public IList<MaterialEditorEnumOption> Options { get; }
         /// <summary>Called after the user selects a value.</summary>
         public Action<float> ValueChanged { get; }
@@ -301,7 +297,6 @@ namespace MaterialEditorAPI
     /// <summary>Semantic vector property editor.</summary>
     public sealed class MaterialEditorVectorPropertyEditor : MaterialEditorPropertyEditor
     {
-        /// <summary>Create a vector editor definition.</summary>
         public MaterialEditorVectorPropertyEditor(
             Vector4 value,
             Vector4 originalValue,
@@ -344,7 +339,6 @@ namespace MaterialEditorAPI
     /// <summary>Semantic float-backed toggle property editor.</summary>
     public sealed class MaterialEditorTogglePropertyEditor : MaterialEditorPropertyEditor
     {
-        /// <summary>Create a float-backed toggle editor definition.</summary>
         public MaterialEditorTogglePropertyEditor(
             float value,
             float originalValue,
@@ -361,15 +355,11 @@ namespace MaterialEditorAPI
             Reset = reset ?? throw new ArgumentNullException(nameof(reset));
         }
 
-        /// <summary>Current numeric value.</summary>
         public float Value { get; }
-        /// <summary>Original numeric value.</summary>
         public float OriginalValue { get; }
         /// <summary>Whether multiple extension targets currently have different values.</summary>
         public bool IsMixed { get; set; }
-        /// <summary>Numeric off value.</summary>
         public float OffValue { get; }
-        /// <summary>Numeric on value.</summary>
         public float OnValue { get; }
         /// <summary>Called after the user toggles the value.</summary>
         public Action<float> ValueChanged { get; }

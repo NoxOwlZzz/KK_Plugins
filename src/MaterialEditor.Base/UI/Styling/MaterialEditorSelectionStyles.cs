@@ -531,7 +531,7 @@ namespace MaterialEditorAPI
             graphic.color = MaterialEditorTheme.Colors.TintIdentity;
             // SetColor already carries the complete RGBA value. Calling
             // SetAlpha afterwards destroys semantic alpha (notably the
-            // half-alpha Legacy category and transparent navigation rows).
+            // half-alpha Light category and transparent navigation rows).
             graphic.canvasRenderer.SetColor(effectiveColor);
             graphic.SetMaterialDirty();
             graphic.SetVerticesDirty();

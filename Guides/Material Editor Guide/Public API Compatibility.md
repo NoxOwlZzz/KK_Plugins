@@ -1,6 +1,6 @@
 # Material Editor Public API Compatibility
 
-This document defines the compatibility boundary for the Material Editor modernization work.
+This document defines the compatibility boundary for the Material Editor public API.
 
 ## Baseline
 
@@ -10,7 +10,7 @@ The authoritative machine-readable API list is:
 
 - `src/MaterialEditor.API/PublicAPI.Shipped.txt`
 
-It contains the 234 public symbols emitted by `src/MaterialEditor.API/API.MaterialEditor.csproj` at the baseline commit. `PublicAPI.Unshipped.txt` records reviewed additions that have not been included in a release yet.
+It contains the public symbols emitted by `src/MaterialEditor.API/API.MaterialEditor.csproj` at the baseline commit. `PublicAPI.Unshipped.txt` records additions that have not been included in a release yet.
 
 `Microsoft.CodeAnalysis.PublicApiAnalyzers` runs when the API project is built. The build fails when a public symbol is added without being declared, when a shipped symbol is removed, or when the API files are missing or invalid.
 
@@ -44,7 +44,7 @@ The baseline currently contains these public types:
 - `MaterialEditorAPI.Export`
 - `MaterialEditorAPI.FloatLabelDragTrigger`
 
-Reviewed additions currently recorded in `PublicAPI.Unshipped.txt` include the semantic extension surface:
+`PublicAPI.Unshipped.txt` records these semantic extension APIs:
 
 - `MaterialEditorExtensionApi` capability and version queries
 - renderer, material, shader, and property selection events
@@ -65,7 +65,7 @@ The exact constructors, methods, properties, fields, enum values, optional param
 
 ## Compatibility Rules
 
-The modernization work must preserve the following unless an explicitly approved breaking release says otherwise:
+Public API changes must preserve the following unless an explicitly approved breaking release says otherwise:
 
 - Existing public types and members remain present with binary-compatible signatures.
 - Existing enum member numeric values do not change.
@@ -73,7 +73,7 @@ The modernization work must preserve the following unless an explicitly approved
 - Public types do not move to a different namespace or assembly.
 - Public or protected members on `MaterialEditorPluginBase` and `MaterialEditorUI` remain available even when their implementation moves to new internal services.
 - New APIs are additive and are first declared in `PublicAPI.Unshipped.txt`.
-- Public API removals are not allowed as part of the UI modernization.
+- Public API removals require an explicitly approved breaking release.
 - Registration methods document ownership and disposal behavior; changing callback order or lifetime semantics requires compatibility review.
 - Capability flags and enum numeric values are append-only.
 - New property editor families are added as new semantic editor types rather than by exposing internal controls.
@@ -101,7 +101,5 @@ For an additive API change:
 5. Move reviewed entries to `PublicAPI.Shipped.txt` when preparing a release.
 
 Extension API usage and behavioral semantics are documented in [Extension API.md](Extension%20API.md).
-The reviewed Phase 1 surface is summarized in
-[`EXTENSION_API_CHANGES.md`](../../EXTENSION_API_CHANGES.md).
 
-Do not silence compatibility diagnostics globally. Any suppression or removed API marker requires an explicit compatibility review in the pull request.
+Do not silence compatibility diagnostics globally. Any suppression or removed API marker requires an explicit compatibility review.

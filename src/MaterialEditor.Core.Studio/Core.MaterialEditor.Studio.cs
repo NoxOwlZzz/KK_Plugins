@@ -254,7 +254,7 @@ namespace KK_Plugins.MaterialEditor
 
             // UILib.Set invokes Dropdown.RefreshShownValue on every supported
             // Unity version without notifying listeners. Keep the explicit text
-            // assignment as the old-uGUI fallback, then restore the semantic
+            // assignment as a caption fallback, then restore the semantic
             // dropdown style and its renderer tint after parent activation.
             dropdown.Set(selectedIndex);
             if (dropdown.captionText != null)

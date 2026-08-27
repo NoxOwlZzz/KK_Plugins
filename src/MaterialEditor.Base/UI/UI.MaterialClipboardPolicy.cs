@@ -205,7 +205,7 @@ namespace MaterialEditorAPI
                 return definition.Type == expectedType;
             }
 
-            // A legacy/unknown shader may not have manifest metadata. Preserve
+            // A manifest-less or unknown shader may not have property metadata. Preserve
             // the established Texture2D paste behavior, but never infer that
             // such a property is a Cubemap merely from a matching name.
             return expectedType == MaterialAPI.ShaderPropertyType.Texture;

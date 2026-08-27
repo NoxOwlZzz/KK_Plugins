@@ -868,8 +868,8 @@ namespace KK_Plugins.MaterialEditor
         }
 
         /// <summary>
-        /// Migrate color-backed vector overrides from pre-vector saves after shader overrides are active.
-        /// This is intentionally in-memory; the original save remains untouched until the user saves normally.
+        /// Migrates Color-backed Vector overrides after shader overrides are active.
+        /// Migration is in memory; persisted data changes only during a normal save.
         /// </summary>
         private void MigrateLegacyMaterialVectorProperties(bool clothes, bool accessories, bool hair, bool body)
         {

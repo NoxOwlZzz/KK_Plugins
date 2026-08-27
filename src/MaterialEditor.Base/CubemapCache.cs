@@ -272,7 +272,7 @@ namespace MaterialEditorAPI
         }
 
         /// <summary>
-        /// Synchronous compatibility acquisition using a worker-computed key.
+        /// Synchronous acquisition using a worker-computed key.
         /// This avoids hashing the same byte array again when an incremental UI
         /// import has already warmed the cache. Unity work remains main-thread.
         /// </summary>
