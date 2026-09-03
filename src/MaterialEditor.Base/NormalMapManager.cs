@@ -34,6 +34,7 @@ namespace MaterialEditorAPI
             }
 
             _normalMapSweepCountdown = NormalMapSweepIntervalFrames - 1;
+            //Sweep dead values
             _convertedNormalMap.SweepDeadValuesLittle();
         }
 

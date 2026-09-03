@@ -8,13 +8,31 @@ namespace MaterialEditorAPI
     /// </summary>
     public class CopyContainer
     {
+        /// <summary>
+        /// List of float property edits
+        /// </summary>
         public List<MaterialFloatProperty> MaterialFloatPropertyList = new List<MaterialFloatProperty>();
+        /// <summary>
+        /// List of keyword property edits
+        /// </summary>
         public List<MaterialKeywordProperty> MaterialKeywordPropertyList = new List<MaterialKeywordProperty>();
+        /// <summary>
+        /// List of color property edits
+        /// </summary>
         public List<MaterialColorProperty> MaterialColorPropertyList = new List<MaterialColorProperty>();
         public List<MaterialVectorProperty> MaterialVectorPropertyList = new List<MaterialVectorProperty>();
+        /// <summary>
+        /// List of texture property edits
+        /// </summary>
         public List<MaterialTextureProperty> MaterialTexturePropertyList = new List<MaterialTextureProperty>();
         public List<MaterialCubemapProperty> MaterialCubemapPropertyList = new List<MaterialCubemapProperty>();
+        /// <summary>
+        /// List of shader edits
+        /// </summary>
         public List<MaterialShader> MaterialShaderList = new List<MaterialShader>();
+        /// <summary>
+        /// List of projector edits
+        /// </summary>
         public List<ProjectorProperty> ProjectorPropertyList = new List<ProjectorProperty>();
 
         /// <summary>

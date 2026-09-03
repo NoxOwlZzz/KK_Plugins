@@ -39,7 +39,11 @@ namespace MaterialEditorAPI
         private bool _isOpen;
         private bool _listenersBound;
 
-        /// <summary>Add filter UI to a dropdown template exactly once.</summary>
+        /// <summary>
+        /// Add filter UI to dropdown
+        /// </summary>
+        /// <param name="target">Target dropdown</param>
+        /// <param name="persistentKeyword">Name for persistent filter. A persisted filter will continue to hold the filter after it is closed.</param>
         public static void AddFilterUI(
             Dropdown target,
             string persistentKeyword = null)
@@ -103,6 +107,7 @@ namespace MaterialEditorAPI
             clearButtonRect.offsetMax = Vector2.zero;
             clearButtonRect.sizeDelta = new Vector2(0f, filterUiHeight);
 
+            //Add layout groups/element so that items are automatically aligned
             var contentLayoutGroup = content.GetComponent<VerticalLayoutGroup>()
                                      ?? content.gameObject.AddComponent<VerticalLayoutGroup>();
             contentLayoutGroup.childForceExpandWidth = true;
@@ -128,7 +133,7 @@ namespace MaterialEditorAPI
         private void Start()
         {
             if (_filterRect == null || _filterField == null || _content == null)
-                return; // Original disabled template, not an instantiated popup.
+                return; //Not Instantiate Component
 
             _started = true;
             _isOpen = true;
@@ -418,8 +423,9 @@ namespace MaterialEditorAPI
         }
 
         /// <summary>
-        /// Place the filter above or below the runtime popup to match the
-        /// direction selected by uGUI.
+        /// Set the position of the filter UI.
+        /// The drop-down UI is displayed either up or down depending on position.
+        /// Change the position of the filter UI accordingly.
         /// </summary>
         private void SetUIPosition()
         {

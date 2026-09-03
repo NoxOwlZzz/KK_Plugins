@@ -76,7 +76,7 @@ namespace MaterialEditorAPI
         /// </summary>
         public static ConfigEntry<float> UIHeight { get; set; }
         /// <summary>
-        /// Configuration entry for width of the renderer/material lists beside the window
+        /// Configuration entry for width of the renderer/materials lists to the side of the window
         /// </summary>
         public static ConfigEntry<float> UIListWidth { get; set; }
         /// <summary>

@@ -151,6 +151,7 @@ namespace MaterialEditorAPI
             }
             else if (kind == ProjectionKind.Unknown)
             {
+                // Preserve values authored outside the declared option set.
                 Append(GetUnknownText(value), null);
                 selectedIndex = 0;
             }

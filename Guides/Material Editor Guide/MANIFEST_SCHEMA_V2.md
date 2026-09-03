@@ -1,4 +1,4 @@
-# Material Editor manifest metadata schema 2
+# Material Editor manifest schema 2
 
 Schema 2 is an additive UI-metadata layer for shader properties. It does not
 change shader property names, persistence keys, material values, or the outer

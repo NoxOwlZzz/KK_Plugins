@@ -63,6 +63,9 @@ namespace MaterialEditorAPI
                     return;
                 item.IsMixed = false;
                 item.Value = selectedValue;
+                // An explicit choice must be applied to every same-named
+                // material and remain persisted even when it equals the
+                // representative material's original value.
                 if (wasMixed)
                     MaterialEditorSemanticValuePolicy.PersistExplicitEnumSelection(
                         item.ValueOnReset,

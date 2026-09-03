@@ -10,23 +10,31 @@
   <guid>{{Mod GUID}}</guid>
   <!-- Example: <guid>my.mod</guid> -->
   <name>{{Mod name}}</name>
+  <!-- Example: <name>My Mod</name> -->
   <version>{{Mod version}}</version>
+  <!-- Example: <version>1.2.3</version> -->
   <author>{{Mod author}}</author>
+  <!-- Optional but recommended, example: <author>My Name</author> -->
   <description>{{Mod description}}</description>
+  <!-- Optional, example: <description>A long text to introduce my mod.</description> -->
   <website>{{Mod website}}</website>
+  <!-- Optional, example: <website>https://my.website.com</website> -->
 
-  <!-- Optional game restriction. -->
-  <!-- <game>Koikatsu</game> -->
+  <!-- Optional, game tag, if your mod can only run in a certain game, specify it. Otherwise, it is not necessary. -->
   <!-- <game>Koikatsu Sunshine</game> -->
+  <!-- <game>Koikatsu</game> -->
 
   <MaterialEditor SchemaVersion="2">
-    <!-- Optional tooltip catalog stored as an XML TextAsset. -->
+    <!-- Optional English tooltip catalog stored as an XML TextAsset in an AssetBundle. -->
+    <!-- Example: <TooltipCatalog AssetBundle="my_shaders/shader_assets.unity3d" Asset="material_editor_tooltips"/> -->
     <!--
     <TooltipCatalog
         AssetBundle="{{tooltip_asset_bundle_path.unity3d}}"
         Asset="{{tooltip_asset_name}}" />
     -->
 
+    <!-- A shader is defined by the following xml structure. -->
+    <!-- Example: <Shader Name="My/ShaderA" AssetBundle="my_shaders/shader_a.unity3d" Asset="asset_shader_a"> -->
     <Shader
         Name="{{ShaderName}}"
         AssetBundle="{{asset_bundle_path.unity3d}}"
@@ -197,6 +205,8 @@
         it. A matching ShowIf-false property is displayed disabled together
         with the blocking condition; search never writes or satisfies it.
       -->
+      <!-- Notes -->
+      <!-- - "True", "TRUE", "true" are all acceptable values for boolean fields. -->
     </Shader>
   </MaterialEditor>
 </manifest>

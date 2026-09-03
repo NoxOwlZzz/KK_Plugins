@@ -38,9 +38,9 @@ namespace MaterialEditorAPI
             if (setOverride == null)
                 throw new ArgumentNullException(nameof(setOverride));
 
-            // Some repositories remove an existing float override when its
-            // value matches ValueOriginal. Removing first makes an explicit
-            // Mixed-state selection persist even when it has that value.
+            // The legacy backends remove an existing float override when its
+            // value matches ValueOriginal. Removing first makes the following
+            // set create a fresh persisted entry even for that value.
             removeOverride();
             setOverride(selectedValue);
         }

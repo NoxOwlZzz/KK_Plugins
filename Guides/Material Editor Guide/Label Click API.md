@@ -65,7 +65,22 @@ Registering the same delegate more than once has no effect. Exceptions from one 
 
 Handlers must not retain Unity objects after the edited object or Material Editor window has been destroyed.
 
-## Handler context
+## Mass Shader Editor Compatibility
 
-Texture-transform handlers can read offset and scale from `args.Material` and
-`args.Name`. Shader handlers can use `args.ShiftPressed` for modified clicks.
+The API covers every Material Editor label currently hooked by Mass Shader Editor (MSE):
+
+| Existing MSE UI hook | Label API replacement |
+| --- | --- |
+| `RendererText` | `Renderer` with the renderer name |
+| `MaterialText` | `Material` with the material name |
+| `ShaderLabel` plus a search for `ShaderDropdown` | `Shader` with the current shader name |
+| `ShaderRenderQueueLabel` | `ShaderRenderQueue` with `Render Queue` |
+| `TextureLabel` | `TextureProperty` with the property name |
+| `OffsetScaleLabel` / `OffsetXText` plus child input-field searches | `TextureOffsetScale` with the owning `Material` and property name |
+| `ColorLabel` | `ColorProperty` with the property name |
+| `FloatLabel` | `FloatProperty` with the property name |
+| `KeywordLabel` | `KeywordProperty` with the property name |
+
+MSE can read texture offset and scale directly from `args.Material` and `args.Name`, so it no longer needs to inspect Material Editor input fields. Shift-click shader behavior can use `args.ShiftPressed`.
+
+The current MSE binary still uses its existing hooks. It must be updated to register this API before those hooks can be removed from MSE itself.

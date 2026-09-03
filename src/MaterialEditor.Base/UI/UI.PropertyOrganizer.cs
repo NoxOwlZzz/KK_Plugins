@@ -80,7 +80,8 @@ namespace MaterialEditorAPI
             internal List<DeclaredProperty> Properties;
         }
 
-        // Shader -> ordered category -> ordered property. Dynamic presentation
+        // Shader -> ordered categories -> ordered properties.
+        // Dynamic presentation
         // state (mode, conditions, compatibility and search) is deliberately not
         // cached here.
         internal static readonly Dictionary<string, List<OrganizedPropertyCategory>>
@@ -463,6 +464,9 @@ namespace MaterialEditorAPI
                 .OrderBy(item => item.Definition.Order.HasValue ? 0 : 1)
                 .ThenBy(item => item.Definition.Order ?? 0);
 
+            // Preserve the legacy sort settings. Declaration order provides a
+            // deterministic fallback when the configured sort keys tie or are
+            // disabled.
             if (SortPropertiesByType.Value)
                 ordered = ordered.ThenBy(item => item.Definition.Type);
             if (SortPropertiesByName.Value)

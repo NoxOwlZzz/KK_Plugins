@@ -10,7 +10,7 @@ The authoritative machine-readable API list is:
 
 - `src/MaterialEditor.API/PublicAPI.Shipped.txt`
 
-It contains the public symbols emitted by `src/MaterialEditor.API/API.MaterialEditor.csproj` at the baseline commit. `PublicAPI.Unshipped.txt` records additions that have not been included in a release yet.
+It contains the 234 public symbols emitted by `src/MaterialEditor.API/API.MaterialEditor.csproj` at the baseline commit. `PublicAPI.Unshipped.txt` records reviewed additions that have not been included in a release yet.
 
 `Microsoft.CodeAnalysis.PublicApiAnalyzers` runs when the API project is built. The build fails when a public symbol is added without being declared, when a shipped symbol is removed, or when the API files are missing or invalid.
 
@@ -44,7 +44,7 @@ The baseline currently contains these public types:
 - `MaterialEditorAPI.Export`
 - `MaterialEditorAPI.FloatLabelDragTrigger`
 
-`PublicAPI.Unshipped.txt` records these semantic extension APIs:
+Reviewed additions currently recorded in `PublicAPI.Unshipped.txt` include the semantic extension surface:
 
 - `MaterialEditorExtensionApi` capability and version queries
 - renderer, material, shader, and property selection events
@@ -102,4 +102,4 @@ For an additive API change:
 
 Extension API usage and behavioral semantics are documented in [Extension API.md](Extension%20API.md).
 
-Do not silence compatibility diagnostics globally. Any suppression or removed API marker requires an explicit compatibility review.
+Do not silence compatibility diagnostics globally. Any suppression or removed API marker requires an explicit compatibility review in the pull request.
