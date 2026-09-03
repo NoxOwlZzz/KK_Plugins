@@ -674,9 +674,11 @@ namespace MaterialEditorAPI
             System.Action<float> changeValue,
             System.Action resetValue)
         {
-            var hasRange = FloatPropertyRangePolicy.HasUsableRange(
+            var hasExplicitRange = FloatPropertyRangePolicy.HasUsableRange(
                 minValue,
                 maxValue);
+            var showSlider = hasExplicitRange
+                             || (!minValue.HasValue && !maxValue.HasValue);
             var item = new FloatPropertyRowModel(descriptor.DisplayName)
             {
                 GameObject = descriptor.GameObject,
@@ -687,12 +689,12 @@ namespace MaterialEditorAPI
                 PublicDescriptor = descriptor.PublicDescriptor,
                 Value = value,
                 OriginalValue = original,
-                HasRange = hasRange,
+                HasRange = showSlider,
                 SelectInterpolable = selectInterpolable,
                 ValueOnChange = changeValue,
                 ValueOnReset = resetValue
             };
-            if (hasRange)
+            if (hasExplicitRange)
             {
                 item.SliderMinimum = minValue.Value;
                 item.SliderMaximum = maxValue.Value;

@@ -428,7 +428,7 @@ namespace MaterialEditorAPI
             PopulateListCore(go, data, filter, null, false);
         }
 
-        private void PopulateList(
+        private void PopulateListWithAnchor(
             GameObject go,
             object data,
             string filter,
@@ -770,13 +770,13 @@ namespace MaterialEditorAPI
             TargetLifecycle.SetColorToPalette(data, material, title, value);
 
         private void SelectInterpolableButtonOnClick(
-            GameObject gameObject,
+            GameObject go,
             RowModel.RowItemType rowType,
             string materialName = "",
             string propertyName = "",
             string rendererName = "") =>
             InterpolableSelection.SelectMaterial(
-                gameObject,
+                go,
                 rowType,
                 materialName,
                 propertyName,
