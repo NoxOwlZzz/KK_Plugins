@@ -172,21 +172,16 @@ namespace KK_Plugins.MaterialEditor
             RendererCachingEnabled = Config.Bind("Config", "Renderer Cache", true, "Turning this off will fix cache related issues but may have a negative impact on performance.");
 
             // Texture saving configs
-            ConfigLocalTexturePath = Config.Bind("Textures", "Local Texture Path Override", "", new ConfigDescription($"Local textures will be exported to / imported from this folder. If empty, defaults to {LocalTexturePathDefault}.\nWARNING: If you change this, make sure to move all files to the new path!", null, new ConfigurationManagerAttributes { Order = 10, IsAdvanced = true }));
+            ConfigLocalTexturePath = Config.Bind("Textures", "Local Texture Path Override", "", new ConfigDescription("Local textures use this folder for import and export compatibility. If empty, defaults to UserData\\MaterialEditor\\_LocalTextures. If you change it, move any existing local texture files to the new path.", null, new ConfigurationManagerAttributes { Order = 10, IsAdvanced = true }));
             ConfigLocalTexturePath.SettingChanged += ConfigLocalTexturePath_SettingChanged;
             ConfigLocalTexturePath_SettingChanged(null, null);
-            var handler = new TextureSaveHandler(LocalTexturePath);
-            handler.RegisterForAudit("Material Editor", handler.LocalTexSavePrefix + MaterialEditorCharaController.TexDicSaveKey);
-
-            CharaLocalTextures.Activate();
-#if !EC
-            SceneLocalTextures.Activate();
-#endif
+            new TextureSaveHandler(LocalTexturePath);
         }
 
         internal void Main()
         {
-            MakerAPI.MakerExiting += (s, e) => MaterialEditorUI.Visible = false;
+            MakerAPI.MakerExiting += (s, e) =>
+                MaterialEditorUI.InvalidateAllTargetState();
             CharacterApi.RegisterExtraBehaviour<MaterialEditorCharaController>(PluginGUID);
             AccessoriesApi.SelectedMakerAccSlotChanged += AccessoriesApi_SelectedMakerAccSlotChanged;
             AccessoriesApi.AccessoryKindChanged += AccessoriesApi_AccessoryKindChanged;
@@ -382,20 +377,5 @@ namespace KK_Plugins.MaterialEditor
             Hooks.ClearCache(gameObject);
         }
 
-        internal static AcceptableValueBase AutoSaveTypeOptions(bool forStudio)
-        {
-            var options = new List<string> { "-" };
-            if (forStudio)
-            {
-#if !EC
-                options.AddRange(((SceneTextureSaveType[])Enum.GetValues(typeof(SceneTextureSaveType))).Select(x => x.ToString()));
-#endif
-            }
-            else
-            {
-                options.AddRange(((CharaTextureSaveType[])Enum.GetValues(typeof(CharaTextureSaveType))).Select(x => x.ToString()));
-            }
-            return new AcceptableValueList<string>(options.ToArray());
-        }
     }
 }

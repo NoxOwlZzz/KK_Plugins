@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.Events;
@@ -7,53 +7,6 @@ using static UILib.Extensions;
 
 namespace MaterialEditorAPI
 {
-    internal sealed class ListenerScope : IDisposable
-    {
-        private readonly List<Action> _removeListeners = new List<Action>();
-
-        internal void Listen(Button button, UnityAction listener)
-        {
-            button.onClick.AddListener(listener);
-            _removeListeners.Add(() => button.onClick.RemoveListener(listener));
-        }
-
-        internal void Listen(Toggle toggle, UnityAction<bool> listener)
-        {
-            toggle.onValueChanged.AddListener(listener);
-            _removeListeners.Add(() => toggle.onValueChanged.RemoveListener(listener));
-        }
-
-        internal void Listen(Dropdown dropdown, UnityAction<int> listener)
-        {
-            dropdown.onValueChanged.AddListener(listener);
-            _removeListeners.Add(() => dropdown.onValueChanged.RemoveListener(listener));
-        }
-
-        internal void Listen(InputField input, UnityAction<string> listener)
-        {
-            input.onEndEdit.AddListener(listener);
-            _removeListeners.Add(() => input.onEndEdit.RemoveListener(listener));
-        }
-
-        internal void Listen(Slider slider, UnityAction<float> listener)
-        {
-            slider.onValueChanged.AddListener(listener);
-            _removeListeners.Add(() => slider.onValueChanged.RemoveListener(listener));
-        }
-
-        internal void OnDispose(Action removeListener)
-        {
-            _removeListeners.Add(removeListener);
-        }
-
-        public void Dispose()
-        {
-            for (var i = _removeListeners.Count - 1; i >= 0; i--)
-                _removeListeners[i]();
-            _removeListeners.Clear();
-        }
-    }
-
     internal static class ChangedStateBinding
     {
         internal static void Apply(
@@ -64,10 +17,15 @@ namespace MaterialEditorAPI
             CanvasGroup panel)
         {
             label.text = text ?? string.Empty;
-            panel.gameObject.GetComponent<Image>().color =
-                changed ? MaterialEditorUI.ItemColorChanged : MaterialEditorUI.ItemColor;
+            MaterialEditorStyles.ApplyPanel(
+                panel.gameObject.GetComponent<Image>(),
+                changed
+                    ? MaterialEditorPanelRole.ModifiedRow
+                    : MaterialEditorPanelRole.PropertyRow);
             if (resetButton)
-                resetButton.interactable = changed;
+                MaterialEditorStyles.SetControlAvailability(
+                    resetButton,
+                    changed);
         }
 
         internal static void SetLabel(Text label, string text)
@@ -83,7 +41,8 @@ namespace MaterialEditorAPI
             LabelClickTrigger trigger,
             RowModel item,
             MaterialEditorLabelType labelType,
-            Func<string> getName)
+            Func<string> getName,
+            Action<UnityEngine.EventSystems.PointerEventData> onClicked = null)
         {
             Action<UnityEngine.EventSystems.PointerEventData> handler = pointerEventData =>
             {
@@ -99,6 +58,7 @@ namespace MaterialEditorAPI
                         item.Projector,
                         pointerEventData));
                 MaterialEditorExtensionRegistry.RaiseLabelSelection(item, labelType, name);
+                onClicked?.Invoke(pointerEventData);
             };
             trigger.Clicked = handler;
             listeners.OnDispose(() =>
@@ -114,7 +74,8 @@ namespace MaterialEditorAPI
         internal static void Bind(
             GameObject target,
             string tooltipText,
-            string fallbackText = null)
+            string fallbackText = null,
+            Text hintLabel = null)
         {
             if (target == null)
                 return;
@@ -130,7 +91,8 @@ namespace MaterialEditorAPI
             if (tooltip == null)
                 return;
 
-            var label = target.GetComponent<Text>()
+            var label = hintLabel
+                        ?? target.GetComponent<Text>()
                         ?? target.GetComponentInChildren<Text>(true);
             tooltip.Configure(fallbackText, text, label);
         }
@@ -181,6 +143,68 @@ namespace MaterialEditorAPI
         }
     }
 
+    // One semantic path for edits and resets from the ordinary Boolean and
+    // Keyword rows. Keeping it shared prevents those two binders from drifting.
+    internal static class BooleanPropertyRowModelBinding
+    {
+        internal static bool ApplyUserValue(RowModel item, bool value)
+        {
+            var keyword = item as KeywordPropertyRowModel;
+            if (keyword != null)
+            {
+                if (keyword.Value == value)
+                    return false;
+                keyword.Value = value;
+                if (keyword.Value == keyword.OriginalValue)
+                    keyword.ValueOnReset();
+                else
+                    keyword.ValueOnChange(keyword.Value);
+                keyword.PresentationRefresh?.Invoke();
+                return true;
+            }
+
+            var toggle = item as FloatTogglePropertyRowModel;
+            if (toggle == null)
+                return false;
+            var wasMixed = toggle.IsMixed;
+            var selectedValue =
+                MaterialEditorSemanticValuePolicy.SelectToggleValue(
+                    value,
+                    toggle.OffValue,
+                    toggle.OnValue);
+            if (!wasMixed && selectedValue == toggle.Value)
+                return false;
+            toggle.IsMixed = false;
+            toggle.Value = selectedValue;
+            if (wasMixed || toggle.Value != toggle.OriginalValue)
+                toggle.ValueOnChange(toggle.Value);
+            else
+                toggle.ValueOnReset();
+            toggle.PresentationRefresh?.Invoke();
+            return true;
+        }
+
+        internal static void Reset(RowModel item)
+        {
+            var keyword = item as KeywordPropertyRowModel;
+            if (keyword != null)
+            {
+                keyword.Value = keyword.OriginalValue;
+                keyword.ValueOnReset();
+                keyword.PresentationRefresh?.Invoke();
+                return;
+            }
+
+            var toggle = item as FloatTogglePropertyRowModel;
+            if (toggle == null)
+                return;
+            toggle.IsMixed = false;
+            toggle.Value = toggle.OriginalValue;
+            toggle.ValueOnReset();
+            toggle.PresentationRefresh?.Invoke();
+        }
+    }
+
     internal static class InputFieldBinding
     {
         internal static void BindFloat(
@@ -194,6 +218,12 @@ namespace MaterialEditorAPI
             {
                 float parsed;
                 if (!input.TryParse(value, out parsed))
+                {
+                    input.CommitValue(getValue());
+                    return;
+                }
+
+                if (parsed == getValue())
                 {
                     input.CommitValue(getValue());
                     return;
@@ -215,6 +245,12 @@ namespace MaterialEditorAPI
             {
                 int parsed;
                 if (!int.TryParse(value, out parsed))
+                {
+                    input.Set(getValue().ToString(), false);
+                    return;
+                }
+
+                if (parsed == getValue())
                 {
                     input.Set(getValue().ToString(), false);
                     return;
@@ -262,6 +298,62 @@ namespace MaterialEditorAPI
         internal bool TryGet(RowModel.RowItemType itemType, out IRowTypeBinder handler)
         {
             return _handlers.TryGetValue(itemType, out handler);
+        }
+    }
+
+    // Reusable, listener-specific teardown. It intentionally removes only callbacks
+    // installed by the current row binding and never calls RemoveAllListeners.
+    internal sealed class ListenerScope : IDisposable
+    {
+        private readonly List<Action> _removeListeners = new List<Action>();
+
+        internal void Listen(Button button, UnityAction listener)
+        {
+            button.onClick.AddListener(listener);
+            _removeListeners.Add(() => button.onClick.RemoveListener(listener));
+        }
+
+        internal void Listen(Toggle toggle, UnityAction<bool> listener)
+        {
+            toggle.onValueChanged.AddListener(listener);
+            _removeListeners.Add(() => toggle.onValueChanged.RemoveListener(listener));
+        }
+
+        internal void Listen(Dropdown dropdown, UnityAction<int> listener)
+        {
+            dropdown.onValueChanged.AddListener(listener);
+            _removeListeners.Add(() => dropdown.onValueChanged.RemoveListener(listener));
+        }
+
+        internal void Listen(InputField input, UnityAction<string> listener)
+        {
+            input.onEndEdit.AddListener(listener);
+            _removeListeners.Add(() => input.onEndEdit.RemoveListener(listener));
+        }
+
+        internal void Listen(Slider slider, UnityAction<float> listener)
+        {
+            slider.onValueChanged.AddListener(listener);
+            _removeListeners.Add(() => slider.onValueChanged.RemoveListener(listener));
+        }
+
+        internal void OnDispose(Action removeListener)
+        {
+            _removeListeners.Add(removeListener);
+        }
+
+        internal void Clear()
+        {
+            for (var i = _removeListeners.Count - 1; i >= 0; i--)
+            {
+                _removeListeners[i]();
+            }
+            _removeListeners.Clear();
+        }
+
+        public void Dispose()
+        {
+            Clear();
         }
     }
 }

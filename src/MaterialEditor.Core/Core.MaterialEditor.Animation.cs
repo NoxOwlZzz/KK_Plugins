@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Linq;
 using System.Collections.Generic;
+using MaterialEditorAPI;
 using UnityEngine;
 using MessagePack;
 
@@ -37,6 +38,10 @@ namespace KK_Plugins.MaterialEditor
     {
         static public System.Func<Property, int?> GetTexID = null;
         static public System.Action<Controller, GameObject, Property, int> UpdateTexture = null;
+        /// <summary>
+        /// Result-aware texture callback used by transactional import paths.
+        /// </summary>
+        static public System.Func<Controller, GameObject, Property, int, bool> TryUpdateTexture = null;
 
         public Controller parent;
         public MEAnimationDefine def;
@@ -65,13 +70,24 @@ namespace KK_Plugins.MaterialEditor
         /// <param name="controllerMap"></param>
         public static void UpdateAnimations(Dictionary<Property, MEAnimationController<Controller, Property>> controllerMap)
         {
-            List<Property> removed = new List<Property>();
+            if (controllerMap == null || controllerMap.Count == 0)
+                return;
+
+            List<Property> removed = null;
             float dt = Time.deltaTime;
 
             foreach (var pair in controllerMap)
             {
                 Property prop = pair.Key;
                 MEAnimationController<Controller, Property> controller = pair.Value;
+
+                if (controller == null || !IsUsable(controller.def))
+                {
+                    if (removed == null)
+                        removed = new List<Property>();
+                    removed.Add(prop);
+                    continue;
+                }
 
                 if (controller.def.parentTexID == GetTexID(prop))
                 {
@@ -81,29 +97,37 @@ namespace KK_Plugins.MaterialEditor
                 else
                 {
                     //A non-animated texture is set. Animation is finished.
+                    if (removed == null)
+                        removed = new List<Property>();
                     removed.Add(prop);
                 }
             }
 
+            if (removed == null)
+                return;
             foreach (var key in removed)
                 controllerMap.Remove(key);
         }
 
         public void UpdateAnimation(Property property, float dt = 0f)
         {
+            TryUpdateAnimation(property, dt);
+        }
+
+        /// <summary>
+        /// Advance the animation and report whether the selected frame was applied.
+        /// </summary>
+        /// <param name="property">Property whose texture is animated.</param>
+        /// <param name="dt">Elapsed time to add before selecting the frame.</param>
+        /// <returns>True when the selected frame is already current or was applied.</returns>
+        public bool TryUpdateAnimation(Property property, float dt = 0f)
+        {
+            if (!IsUsable(def))
+                return false;
+
             float time = playTime;
             float totalTime = def.totalTime;
-            time += dt;
-
-            if (!float.IsInfinity(time) && !float.IsNaN(time))
-            {
-                while (time >= totalTime)
-                    time -= totalTime;
-            }
-            else
-            {
-                time = 0f;
-            }
+            time = MEAnimationValidation.WrapTime(time + dt, totalTime);
 
             playTime = time;
 
@@ -115,19 +139,38 @@ namespace KK_Plugins.MaterialEditor
             while (left < right)
             {
                 int mid = (left + right) >> 1;
-                if (frames[mid].beginFrame + frames[mid].frames < frameCount)
+                var frame = frames[mid];
+                if (frame == null)
+                    return false;
+                if (frame.beginFrame + frame.frames < frameCount)
                     left = mid + 1;
                 else
                     right = mid;
             }
 
-            var texID = frames[left].texID;
+            var selectedFrame = frames[left];
+            if (selectedFrame == null)
+                return false;
+            var texID = selectedFrame.texID;
 
-            if (texID != curTexID)
-            {
+            if (texID == curTexID)
+                return true;
+            if (UpdateTexture != null)
                 UpdateTexture(parent, go, property, texID);
-                curTexID = texID;
-            }
+            else if (TryUpdateTexture == null
+                     || !TryUpdateTexture(parent, go, property, texID))
+                return false;
+
+            curTexID = texID;
+            return true;
+        }
+
+        private static bool IsUsable(MEAnimationDefine definition)
+        {
+            return definition != null
+                   && MEAnimationValidation.IsUsable(
+                       definition.totalTime,
+                       definition.frames == null ? 0 : definition.frames.Length);
         }
 
         /// <summary>
@@ -144,10 +187,14 @@ namespace KK_Plugins.MaterialEditor
                 if (texID.HasValue)
                     used.Add(texID.Value);
 
-                if (controllerMap.TryGetValue(prop, out var controller))
+                if (controllerMap.TryGetValue(prop, out var controller)
+                    && controller != null
+                    && controller.def != null
+                    && controller.def.frames != null)
                 {
                     foreach (var frame in controller.def.frames)
-                        used.Add(frame.texID);
+                        if (frame != null)
+                            used.Add(frame.texID);
                 }
             }
 
@@ -195,7 +242,8 @@ namespace KK_Plugins.MaterialEditor
                         try
                         {
                             tex = image.CreateTexture();
-                            framePngs.Add(tex.EncodeToPNG());
+                            framePngs.Add(
+                                MaterialEditorPluginBase.EncodeTextureToPng(tex));
                         }
                         finally
                         {
@@ -347,7 +395,8 @@ namespace KK_Plugins.MaterialEditor
                     tex.SetPixels32(pixels);
                     tex.Apply();
 
-                    meaf.texID = setAndGetTextureID(tex.EncodeToPNG());
+                    meaf.texID = setAndGetTextureID(
+                        MaterialEditorPluginBase.EncodeTextureToPng(tex));
                     animationFrames.Add(meaf);
 
                     switch (fctl.DisposeOp)
@@ -421,8 +470,13 @@ namespace KK_Plugins.MaterialEditor
             if (texIDRemapping.TryGetValue(def.parentTexID, out newTexID))
                 def.parentTexID = newTexID;
 
+            if (def.frames == null)
+                return;
+
             foreach (var frame in def.frames)
             {
+                if (frame == null)
+                    continue;
                 if (texIDRemapping.TryGetValue(frame.texID, out newTexID))
                     frame.texID = newTexID;
             }
@@ -467,6 +521,44 @@ namespace KK_Plugins.MaterialEditor
                 b = t;
             }
             return a;
+        }
+    }
+
+    internal static class MEAnimationValidation
+    {
+        internal static bool IsUsable(
+            float totalTime,
+            int frameCount)
+        {
+            return frameCount > 0
+                   && totalTime > 0f
+                   && !float.IsNaN(totalTime)
+                   && !float.IsInfinity(totalTime);
+        }
+
+        internal static float WrapTime(float time, float totalTime)
+        {
+            if (totalTime <= 0f
+                || float.IsNaN(totalTime)
+                || float.IsInfinity(totalTime))
+                return 0f;
+            if (float.IsNaN(time) || float.IsInfinity(time))
+                return 0f;
+
+            const int maxExactSubtractions = 16;
+            var subtractions = 0;
+            while (time >= totalTime && subtractions < maxExactSubtractions)
+            {
+                var next = time - totalTime;
+                if (next == time)
+                    break;
+                time = next;
+                subtractions++;
+            }
+
+            if (time >= totalTime)
+                time %= totalTime;
+            return time;
         }
     }
 }

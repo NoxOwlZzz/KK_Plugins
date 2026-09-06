@@ -5,6 +5,7 @@ using KKAPI.Maker;
 using KKAPI.Maker.UI;
 using KKAPI.Utilities;
 using MaterialEditorAPI;
+using System;
 using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
@@ -62,26 +63,82 @@ namespace KK_Plugins.MaterialEditor
             Instance = this;
             MakerAPI.MakerBaseLoaded += MakerAPI_MakerBaseLoaded;
             MakerAPI.RegisterCustomSubCategories += MakerAPI_RegisterCustomSubCategories;
-            MakerAPI.MakerFinishedLoading += (s, e) => ToggleButtonVisibility();
-            MakerAPI.ReloadCustomInterface += (s, e) =>
-            {
-                StartCoroutine(Wait());
-                IEnumerator Wait()
-                {
-                    yield return null;
-                    ToggleButtonVisibility();
-                }
-            };
-            MakerAPI.MakerExiting += (s, e) => ColorPalette = null;
-            AccessoriesApi.SelectedMakerAccSlotChanged += (s, e) => ToggleButtonVisibility();
-            AccessoriesApi.AccessoryKindChanged += (s, e) => ToggleButtonVisibility();
-            AccessoriesApi.AccessoryTransferred += (s, e) => ToggleButtonVisibility();
+            MakerAPI.MakerFinishedLoading += MakerAPI_MakerFinishedLoading;
+            MakerAPI.ReloadCustomInterface += MakerAPI_ReloadCustomInterface;
+            MakerAPI.MakerExiting += MakerAPI_MakerExiting;
+            AccessoriesApi.SelectedMakerAccSlotChanged +=
+                AccessoriesApi_SelectedMakerAccSlotChanged;
+            AccessoriesApi.AccessoryKindChanged +=
+                AccessoriesApi_AccessoryKindChanged;
+            AccessoriesApi.AccessoryTransferred +=
+                AccessoriesApi_AccessoryTransferred;
 #if KK || KKS
-            AccessoriesApi.AccessoriesCopied += (s, e) => ToggleButtonVisibility();
+            AccessoriesApi.AccessoriesCopied += AccessoriesApi_AccessoriesCopied;
 #endif
 
             Harmony.CreateAndPatchAll(typeof(MakerHooks));
         }
+
+        private void OnDestroy()
+        {
+            MakerAPI.MakerBaseLoaded -= MakerAPI_MakerBaseLoaded;
+            MakerAPI.RegisterCustomSubCategories -= MakerAPI_RegisterCustomSubCategories;
+            MakerAPI.MakerFinishedLoading -= MakerAPI_MakerFinishedLoading;
+            MakerAPI.ReloadCustomInterface -= MakerAPI_ReloadCustomInterface;
+            MakerAPI.MakerExiting -= MakerAPI_MakerExiting;
+            AccessoriesApi.SelectedMakerAccSlotChanged -=
+                AccessoriesApi_SelectedMakerAccSlotChanged;
+            AccessoriesApi.AccessoryKindChanged -=
+                AccessoriesApi_AccessoryKindChanged;
+            AccessoriesApi.AccessoryTransferred -=
+                AccessoriesApi_AccessoryTransferred;
+#if KK || KKS
+            AccessoriesApi.AccessoriesCopied -= AccessoriesApi_AccessoriesCopied;
+#endif
+
+            if (!ReferenceEquals(Instance, this))
+                return;
+            ShutdownMaterialEditorUi();
+            Instance = null;
+            MaterialEditorButton = null;
+        }
+
+        private void MakerAPI_MakerFinishedLoading(object sender, EventArgs e) =>
+            ToggleButtonVisibility();
+
+        private void MakerAPI_ReloadCustomInterface(object sender, EventArgs e) =>
+            StartCoroutine(RefreshButtonVisibilityNextFrame());
+
+        private IEnumerator RefreshButtonVisibilityNextFrame()
+        {
+            yield return null;
+            if (ReferenceEquals(Instance, this))
+                ToggleButtonVisibility();
+        }
+
+        private void MakerAPI_MakerExiting(object sender, EventArgs e)
+        {
+            InvalidateAllTargetState();
+            ColorPalette = null;
+        }
+
+        private void AccessoriesApi_SelectedMakerAccSlotChanged(
+            object sender,
+            AccessorySlotEventArgs e) => ToggleButtonVisibility();
+
+        private void AccessoriesApi_AccessoryKindChanged(
+            object sender,
+            AccessorySlotEventArgs e) => ToggleButtonVisibility();
+
+        private void AccessoriesApi_AccessoryTransferred(
+            object sender,
+            AccessoryTransferEventArgs e) => ToggleButtonVisibility();
+
+#if KK || KKS
+        private void AccessoriesApi_AccessoriesCopied(
+            object sender,
+            AccessoryCopyEventArgs e) => ToggleButtonVisibility();
+#endif
 
         private void MakerAPI_MakerBaseLoaded(object s, RegisterCustomControlsEvent e)
         {
@@ -317,7 +374,7 @@ namespace KK_Plugins.MaterialEditor
                         texData = controller.TextureDictionary[textureProperty.TexID.Value].Data;
                 }
             }
-            string ext = ImageTypeIdentifier.Identify(texData, "XXX");
+            string ext = TextureSaveHandler.IdentifyImageExtension(texData, "XXX");
             if (texData != null && ext != "XXX")
                 base.ExportTextureOriginal(mat, property, ext, texData);
             else
@@ -382,6 +439,16 @@ namespace KK_Plugins.MaterialEditor
             EditService.SetMaterialTexture(data, material, propertyName, filePath, go);
         public override void RemoveMaterialTexture(object data, Material material, string propertyName, GameObject go) =>
             EditService.RemoveMaterialTexture(data, material, propertyName, go);
+
+        /// <inheritdoc/>
+        public override bool GetMaterialCubemapValueOriginal(object data, Material material, string propertyName, GameObject go) =>
+            EditService.GetMaterialCubemapValueOriginal(data, material, propertyName, go);
+        /// <inheritdoc/>
+        public override void SetMaterialCubemap(object data, Material material, string propertyName, string filePath, GameObject go) =>
+            EditService.SetMaterialCubemap(data, material, propertyName, filePath, go);
+        /// <inheritdoc/>
+        public override void RemoveMaterialCubemap(object data, Material material, string propertyName, GameObject go) =>
+            EditService.RemoveMaterialCubemap(data, material, propertyName, go);
 
         public override Vector2? GetMaterialTextureOffsetOriginal(object data, Material material, string propertyName, GameObject go) =>
             EditService.GetMaterialTextureOffsetOriginal(data, material, propertyName, go);

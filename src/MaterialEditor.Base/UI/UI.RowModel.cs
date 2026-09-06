@@ -14,7 +14,6 @@ namespace MaterialEditorAPI
 
         internal RowItemType ItemType { get; }
         internal string LabelText { get; set; }
-        internal bool IsAdvanced { get; set; }
         internal string TooltipText { get; set; }
         internal GameObject GameObject { get; set; }
         internal object Data { get; set; }
@@ -22,8 +21,14 @@ namespace MaterialEditorAPI
         internal Material Material { get; set; }
         internal Projector Projector { get; set; }
         internal string PropertyName { get; set; }
-        internal Action PresentationRefresh { get; set; }
         internal MaterialEditorPropertyDescriptor PublicDescriptor { get; set; }
+        // Presentation-only depth. It does not alter property identity or save
+        // semantics and is reapplied on every pooled bind.
+        internal int HierarchyDepth { get; set; }
+        internal bool Enabled { get; set; } = true;
+        // Set only for values referenced by ShowIf. Binders invoke this
+        // after a user edit has completed so presentation can be rebuilt safely.
+        internal Action PresentationRefresh { get; set; }
 
         internal enum RowItemType
         {
@@ -43,7 +48,10 @@ namespace MaterialEditorAPI
             FloatProperty,
             KeywordProperty,
             EnumProperty,
-            FloatToggleProperty
+            VectorProperty,
+            FloatToggleProperty,
+            CubemapProperty,
+            PropertySubcategory
         }
     }
 

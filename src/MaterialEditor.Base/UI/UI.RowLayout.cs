@@ -1,9 +1,64 @@
-﻿using System;
+using System;
 using UnityEngine;
 using UnityEngine.UI;
 
 namespace MaterialEditorAPI
 {
+    internal static class TimelineColumnBinding
+    {
+        internal static bool Bind(
+            Button button,
+            ListenerScope listeners,
+            Action selectInterpolable)
+        {
+            if (button == null)
+                return false;
+
+            var visible = selectInterpolable != null && IsTimelineAvailable();
+            var buttonObject = button.gameObject;
+            if (!buttonObject.activeSelf)
+                buttonObject.SetActive(true);
+
+            // Timeline reserves a fixed 20 px column. Incompatible rows preserve
+            // the slot but expose no glyph or hit target.
+            var visibility = button.GetComponent<CanvasGroup>()
+                             ?? buttonObject.AddComponent<CanvasGroup>();
+            visibility.alpha = visible
+                ? MaterialEditorTheme.States.VisibleAlpha
+                : MaterialEditorTheme.States.HiddenAlpha;
+            visibility.interactable = visible;
+            visibility.blocksRaycasts = visible;
+            MaterialEditorStyles.SetControlAvailability(
+                button,
+                visible,
+                MaterialEditorControlAvailabilityMode.TimelineSlot);
+
+            var layout = button.GetComponent<RowColumnLayoutOverride>()
+                         ?? buttonObject.AddComponent<RowColumnLayoutOverride>();
+            layout.Configure(RowColumnSpec.Fixed(
+                buttonObject.name,
+                RowColumnRole.Timeline,
+                MaterialEditorLayout.InterpolableButtonWidth));
+
+            var parent = button.transform.parent as RectTransform;
+            if (parent != null)
+                LayoutRebuilder.MarkLayoutForRebuild(parent);
+
+            if (visible)
+                listeners.Listen(button, () => selectInterpolable());
+            return visible;
+        }
+
+        private static bool IsTimelineAvailable()
+        {
+#if API || EC
+            return false;
+#else
+            return TimelineCompatibilityHelper.IsTimelineAvailable();
+#endif
+        }
+    }
+
     internal enum RowColumnRole
     {
         Label,
@@ -40,6 +95,19 @@ namespace MaterialEditorAPI
             var parentRect = transform.parent as RectTransform;
             if (parentRect != null)
                 LayoutRebuilder.MarkLayoutForRebuild(parentRect);
+        }
+
+        internal void SetFixedWidth(float width)
+        {
+            if (_minWidth == width
+                && _preferredWidth == width
+                && _flexibleWidth == 0f)
+                return;
+
+            _minWidth = width;
+            _preferredWidth = width;
+            _flexibleWidth = 0f;
+            RestoreLayout();
         }
 
         public void CalculateLayoutInputHorizontal()
@@ -177,6 +245,10 @@ namespace MaterialEditorAPI
                     RowColumnRole.Editor,
                     MaterialEditorLayout.OffsetScaleInputWidth),
                 RowColumnSpec.Fixed(
+                    "OffsetScaleGroupSpacer",
+                    RowColumnRole.Auxiliary,
+                    MaterialEditorTheme.Metrics.OffsetScaleGroupSpacing),
+                RowColumnSpec.Fixed(
                     "ScaleXText",
                     RowColumnRole.Editor,
                     MaterialEditorLayout.OffsetScaleLabelXWidth),
@@ -204,41 +276,10 @@ namespace MaterialEditorAPI
                     RowColumnRole.Timeline,
                     MaterialEditorLayout.InterpolableButtonWidth),
                 RowColumnSpec.Fixed(
-                    "ColorRText",
+                    "ColorEditorGroup",
                     RowColumnRole.Editor,
-                    MaterialEditorLayout.ColorLabelWidth),
-                RowColumnSpec.Fixed(
-                    "ColorRInput",
-                    RowColumnRole.Editor,
-                    MaterialEditorLayout.ColorInputWidth),
-                RowColumnSpec.Fixed(
-                    "ColorGText",
-                    RowColumnRole.Editor,
-                    MaterialEditorLayout.ColorLabelWidth),
-                RowColumnSpec.Fixed(
-                    "ColorGInput",
-                    RowColumnRole.Editor,
-                    MaterialEditorLayout.ColorInputWidth),
-                RowColumnSpec.Fixed(
-                    "ColorBText",
-                    RowColumnRole.Editor,
-                    MaterialEditorLayout.ColorLabelWidth),
-                RowColumnSpec.Fixed(
-                    "ColorBInput",
-                    RowColumnRole.Editor,
-                    MaterialEditorLayout.ColorInputWidth),
-                RowColumnSpec.Fixed(
-                    "ColorAText",
-                    RowColumnRole.Editor,
-                    MaterialEditorLayout.ColorLabelWidth),
-                RowColumnSpec.Fixed(
-                    "ColorAInput",
-                    RowColumnRole.Editor,
-                    MaterialEditorLayout.ColorInputWidth),
-                RowColumnSpec.Fixed(
-                    "ColorEditButton",
-                    RowColumnRole.Auxiliary,
-                    MaterialEditorLayout.ColorEditButtonWidth),
+                    MaterialEditorLayout.ContentWidth
+                    + MaterialEditorTheme.Spacing.Control),
                 RowColumnSpec.Fixed(
                     "ColorResetButton",
                     RowColumnRole.Reset,
@@ -260,6 +301,97 @@ namespace MaterialEditorAPI
                     MaterialEditorLayout.FloatInputWidth),
                 RowColumnSpec.Fixed(
                     "FloatResetButton",
+                    RowColumnRole.Reset,
+                    MaterialEditorLayout.ResetButtonWidth)),
+            new RowLayoutSpec(
+                "EnumPanel",
+                RowColumnSpec.Flexible("EnumLabel", RowColumnRole.Label),
+                RowColumnSpec.Fixed(
+                    "SelectInterpolableEnumButton",
+                    RowColumnRole.Timeline,
+                    MaterialEditorLayout.InterpolableButtonWidth),
+                RowColumnSpec.Fixed(
+                    "EnumDropdown",
+                    RowColumnRole.Editor,
+                    MaterialEditorLayout.ContentWidth
+                    + MaterialEditorTheme.Spacing.Control),
+                RowColumnSpec.Fixed(
+                    "EnumResetButton",
+                    RowColumnRole.Reset,
+                    MaterialEditorLayout.ResetButtonWidth)),
+            new RowLayoutSpec(
+                "VectorPanel",
+                RowColumnSpec.Flexible("VectorLabel", RowColumnRole.Label),
+                RowColumnSpec.Fixed(
+                    "SelectInterpolableVectorButton",
+                    RowColumnRole.Timeline,
+                    MaterialEditorLayout.InterpolableButtonWidth),
+                RowColumnSpec.Fixed(
+                    "VectorXText",
+                    RowColumnRole.Editor,
+                    MaterialEditorLayout.VectorComponentLabelWidth),
+                RowColumnSpec.Fixed(
+                    "VectorXInput",
+                    RowColumnRole.Editor,
+                    MaterialEditorLayout.VectorComponentInputWidth),
+                RowColumnSpec.Fixed(
+                    "VectorYText",
+                    RowColumnRole.Editor,
+                    MaterialEditorLayout.VectorComponentLabelWidth),
+                RowColumnSpec.Fixed(
+                    "VectorYInput",
+                    RowColumnRole.Editor,
+                    MaterialEditorLayout.VectorComponentInputWidth),
+                RowColumnSpec.Fixed(
+                    "VectorZText",
+                    RowColumnRole.Editor,
+                    MaterialEditorLayout.VectorComponentLabelWidth),
+                RowColumnSpec.Fixed(
+                    "VectorZInput",
+                    RowColumnRole.Editor,
+                    MaterialEditorLayout.VectorComponentInputWidth),
+                RowColumnSpec.Fixed(
+                    "VectorWText",
+                    RowColumnRole.Editor,
+                    MaterialEditorLayout.VectorComponentLabelWidth),
+                RowColumnSpec.Fixed(
+                    "VectorWInput",
+                    RowColumnRole.Editor,
+                    MaterialEditorLayout.VectorComponentInputWidth),
+                RowColumnSpec.Fixed(
+                    "VectorResetButton",
+                    RowColumnRole.Reset,
+                    MaterialEditorLayout.ResetButtonWidth)),
+            new RowLayoutSpec(
+                "FloatTogglePanel",
+                RowColumnSpec.Flexible("FloatToggleLabel", RowColumnRole.Label),
+                RowColumnSpec.Fixed(
+                    "SelectInterpolableFloatToggleButton",
+                    RowColumnRole.Timeline,
+                    MaterialEditorLayout.InterpolableButtonWidth),
+                RowColumnSpec.Fixed(
+                    "FloatToggleToggle",
+                    RowColumnRole.Editor,
+                    MaterialEditorLayout.KeywordToggleWidth
+                    + MaterialEditorTheme.Spacing.Control),
+                RowColumnSpec.Fixed(
+                    "FloatToggleResetButton",
+                    RowColumnRole.Reset,
+                    MaterialEditorLayout.ResetButtonWidth)),
+            new RowLayoutSpec(
+                "KeywordPanel",
+                RowColumnSpec.Flexible("KeywordLabel", RowColumnRole.Label),
+                RowColumnSpec.Fixed(
+                    "EmptySpace",
+                    RowColumnRole.Timeline,
+                    MaterialEditorLayout.InterpolableButtonWidth),
+                RowColumnSpec.Fixed(
+                    "KeywordToggle",
+                    RowColumnRole.Editor,
+                    MaterialEditorLayout.KeywordToggleWidth
+                    + MaterialEditorTheme.Spacing.Control),
+                RowColumnSpec.Fixed(
+                    "KeywordResetButton",
                     RowColumnRole.Reset,
                     MaterialEditorLayout.ResetButtonWidth))
         };

@@ -10,11 +10,6 @@ internal static class Program
             ReferencesAndWhitespaceAreResolved();
             InvalidCatalogsAreRejected();
             ShaderHintDisplayPolicyIsIndependentOfStandardTooltips();
-            ManifestSchemaV2Tests.Run();
-            ShaderUiModeTests.Run();
-            UiLevelPerShaderContractTests.Run();
-            ShaderPropertyFallbackPolicyTests.Run();
-            ConditionDeferredRefreshTests.Run();
             SiruSyncPolicyTests.Run();
             Console.WriteLine("Material Editor metadata regression tests passed.");
             return 0;

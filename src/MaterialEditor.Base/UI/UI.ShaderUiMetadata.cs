@@ -12,6 +12,8 @@ namespace MaterialEditorAPI
             new Dictionary<string, string>(StringComparer.Ordinal);
         internal readonly Dictionary<string, string> PropertyTooltips =
             new Dictionary<string, string>(StringComparer.Ordinal);
+        internal readonly Dictionary<string, string> PropertyDisplayNames =
+            new Dictionary<string, string>(StringComparer.Ordinal);
 
         internal ShaderUiMetadata Clone()
         {
@@ -20,6 +22,8 @@ namespace MaterialEditorAPI
                 clone.CategoryTooltips[item.Key] = item.Value;
             foreach (var item in PropertyTooltips)
                 clone.PropertyTooltips[item.Key] = item.Value;
+            foreach (var item in PropertyDisplayNames)
+                clone.PropertyDisplayNames[item.Key] = item.Value;
             return clone;
         }
 
@@ -33,6 +37,8 @@ namespace MaterialEditorAPI
                 CategoryTooltips[item.Key] = item.Value;
             foreach (var item in other.PropertyTooltips)
                 PropertyTooltips[item.Key] = item.Value;
+            foreach (var item in other.PropertyDisplayNames)
+                PropertyDisplayNames[item.Key] = item.Value;
         }
     }
 
@@ -148,7 +154,8 @@ namespace MaterialEditorAPI
                     "Property",
                     metadata.PropertyTooltips,
                     referenceMetadata,
-                    warning);
+                    warning,
+                    metadata.PropertyDisplayNames);
                 catalog.SetShader(shaderName, metadata);
             }
             return catalog;
@@ -176,7 +183,8 @@ namespace MaterialEditorAPI
                     "Property",
                     metadata.PropertyTooltips,
                     metadata,
-                    warning);
+                    warning,
+                    metadata.PropertyDisplayNames);
                 sets[id] = metadata;
             }
             return sets;
@@ -211,13 +219,24 @@ namespace MaterialEditorAPI
             string elementName,
             IDictionary<string, string> destination,
             ShaderUiMetadata resolved,
-            Action<string> warning)
+            Action<string> warning,
+            IDictionary<string, string> propertyDisplayNames = null)
         {
             foreach (var element in ChildElements(parent, elementName))
             {
                 var name = element.GetAttribute("Name");
                 if (string.IsNullOrEmpty(name))
                     continue;
+
+                if (propertyDisplayNames != null)
+                {
+                    var displayName = element.GetAttribute("DisplayName").Trim();
+                    if (!string.IsNullOrEmpty(displayName))
+                    {
+                        propertyDisplayNames[name] = displayName;
+                        resolved.PropertyDisplayNames[name] = displayName;
+                    }
+                }
 
                 var text = ReadText(element);
                 var reference = element.GetAttribute("Ref");
@@ -320,6 +339,17 @@ namespace MaterialEditorAPI
                    && propertyName != null
                    && metadata.PropertyTooltips.TryGetValue(propertyName, out tooltip)
                 ? tooltip
+                : null;
+        }
+
+        internal static string GetPropertyDisplayName(string shaderName, string propertyName)
+        {
+            var metadata = GetShader(shaderName);
+            string displayName;
+            return metadata != null
+                   && propertyName != null
+                   && metadata.PropertyDisplayNames.TryGetValue(propertyName, out displayName)
+                ? displayName
                 : null;
         }
 

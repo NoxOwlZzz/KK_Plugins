@@ -12,9 +12,11 @@ namespace MaterialEditorAPI
             Color color,
             bool insetPropertyLabel = false)
         {
-            var panel = MaterialEditorControlFactory.CreatePanel(name, parent);
+            var panel = MaterialEditorControlFactory.CreatePanel(
+                name,
+                parent,
+                ResolvePanelRole(name, color));
             panel.gameObject.AddComponent<CanvasGroup>();
-            panel.color = color;
 
             var layout = panel.gameObject.AddComponent<HorizontalLayoutGroup>();
             layout.padding = insetPropertyLabel
@@ -26,7 +28,27 @@ namespace MaterialEditorAPI
                 : Padding;
             layout.childForceExpandWidth = false;
             layout.childAlignment = TextAnchor.MiddleLeft;
+            layout.spacing = MaterialEditorTheme.Spacing.Control;
             return panel;
+        }
+
+        private static MaterialEditorPanelRole ResolvePanelRole(
+            string name,
+            Color color)
+        {
+            if (name == "RendererPanel" || color == RendererColor)
+                return MaterialEditorPanelRole.RendererRow;
+            if (name == "MaterialPanel" || color == MaterialColor)
+                return MaterialEditorPanelRole.MaterialRow;
+            if (name == "ShaderPanel"
+                || color == MaterialEditorStyles.ShaderColor)
+                return MaterialEditorPanelRole.ShaderRow;
+            if (name == "PropertyCategoryPanel" || color == CategoryColor)
+                return MaterialEditorPanelRole.CategoryRow;
+            if (name == "PropertySubcategoryPanel"
+                || color == SubcategoryColor)
+                return MaterialEditorPanelRole.SubcategoryRow;
+            return MaterialEditorPanelRole.PropertyRow;
         }
 
         internal static Text CreateLabel(
@@ -38,9 +60,19 @@ namespace MaterialEditorAPI
         {
             var label = MaterialEditorControlFactory.CreateText(name, parent, value);
             label.alignment = TextAnchor.MiddleLeft;
-            label.color = Color.black;
+            label.color = MaterialEditorTheme.Colors.PrimaryText;
             SetWidth(label, width, flexibleWidth);
             return label;
+        }
+
+        internal static void ConfigurePropertyLabel(Text label)
+        {
+            if (label == null)
+                return;
+
+            MaterialEditorTextFitting.ApplyAdaptiveSingleLine(
+                label,
+                MaterialEditorTheme.Typography.PrimaryFontSize);
         }
 
         internal static LayoutElement SetWidth(
@@ -59,9 +91,13 @@ namespace MaterialEditorAPI
             string objectName,
             Transform parent,
             string tooltipText,
-            bool layoutOwnedBySpec = false)
+            bool layoutOwnedBySpec = false,
+            bool timelineCapable = true)
         {
-            var button = MaterialEditorControlFactory.CreateButton(objectName, parent, "O");
+            var button = MaterialEditorControlFactory.CreateButton(
+                objectName,
+                parent,
+                MaterialEditorTheme.Glyphs.Interpolable);
             if (!layoutOwnedBySpec)
                 SetWidth(button, InterpolableButtonWidth);
 
@@ -69,7 +105,7 @@ namespace MaterialEditorAPI
             TooltipManager.AddTooltip(button.gameObject, tooltipText);
 
 #if !API && !EC
-            if (TimelineCompatibilityHelper.IsTimelineAvailable())
+            if (timelineCapable && TimelineCompatibilityHelper.IsTimelineAvailable())
                 button.gameObject.SetActive(true);
 #endif
         }

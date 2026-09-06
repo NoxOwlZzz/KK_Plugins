@@ -10,6 +10,8 @@ namespace MaterialEditorAPI
         }
 
         internal string RendererName { get; set; }
+        internal bool Collapsed { get; set; }
+        internal Action<bool> CollapsedOnChange { get; set; }
         internal Action SelectInterpolable { get; set; }
         internal Action ExportUv { get; set; }
         internal Action ExportObj { get; set; }

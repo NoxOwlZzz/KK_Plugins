@@ -30,6 +30,144 @@ namespace KK_Plugins.MaterialEditor
 
     public partial class MaterialEditorCharaController
     {
+        private bool _uiLifetimePruneScheduled;
+
+        private void ScheduleDestroyedUiTargetPrune()
+        {
+            if (_uiLifetimePruneScheduled)
+                return;
+            _uiLifetimePruneScheduled = true;
+            try
+            {
+                if (StartCoroutine(PruneDestroyedUiTargetsNextFrame()) != null)
+                    return;
+            }
+            catch (Exception ex)
+            {
+                MaterialEditorPlugin.Logger?.LogWarning(
+                    "Could not schedule destroyed Material Editor target "
+                    + "cleanup; applying the safe fallback immediately: "
+                    + ex);
+            }
+
+            _uiLifetimePruneScheduled = false;
+            MaterialEditorUI.PruneDestroyedInterpolables();
+        }
+
+        private IEnumerator PruneDestroyedUiTargetsNextFrame()
+        {
+            yield return null;
+            _uiLifetimePruneScheduled = false;
+            var retainedTarget = MaterialEditorUI.RetainedTargetGameObject;
+            if (!ReferenceEquals(retainedTarget, null)
+                && retainedTarget == null)
+                MaterialEditorUI.InvalidateCurrentTarget();
+            else
+                MaterialEditorUI.PruneDestroyedInterpolables();
+        }
+
+        private bool CurrentUiTargetBelongsToCharacter()
+        {
+            var characterRoot = GetCharacterRootForUiLifetime();
+            if (ReferenceEquals(characterRoot, null))
+                return false;
+
+            var retainedTarget =
+                MaterialEditorUI.RetainedTargetGameObject;
+            return MaterialEditorTargetOwnershipPolicy.IsOwnedByRoot(
+                ReferenceEquals(retainedTarget, characterRoot),
+                MaterialEditorUI.IsGameObjectWithin(
+                    retainedTarget,
+                    characterRoot),
+                MaterialEditorUI.RetainedTargetData is ObjectData);
+        }
+
+        private bool CurrentUiTargetIsCharacterRoot()
+        {
+            var characterRoot = GetCharacterRootForUiLifetime();
+            return !ReferenceEquals(characterRoot, null)
+                   && ReferenceEquals(
+                       MaterialEditorUI.RetainedTargetGameObject,
+                       characterRoot);
+        }
+
+        private GameObject GetCharacterRootForUiLifetime()
+        {
+            try
+            {
+                var chaControl = ChaControl;
+                return ReferenceEquals(chaControl, null)
+                    ? null
+                    : chaControl.gameObject;
+            }
+            catch (MissingReferenceException)
+            {
+                return null;
+            }
+        }
+
+        private void ReleaseUiForObjectReplacement(
+            ObjectType objectType,
+            int slot)
+        {
+            ScheduleDestroyedUiTargetPrune();
+            var data = MaterialEditorUI.RetainedTargetData as ObjectData;
+            var matchesLogicalTarget = data != null
+                                       && data.ObjectType == objectType
+                                       && data.Slot == slot;
+            var retainedTarget = MaterialEditorUI.RetainedTargetGameObject;
+            var retainedTargetWasDestroyed =
+                !ReferenceEquals(retainedTarget, null)
+                && retainedTarget == null;
+            var belongsToCharacter = CurrentUiTargetBelongsToCharacter();
+
+            // Maker owns one active character. In Studio require ancestry while
+            // the target is alive so equal ObjectData slots on other characters
+            // never cross-invalidate.
+            if (matchesLogicalTarget
+                && (belongsToCharacter
+                    || MakerAPI.InsideAndLoaded
+                    || retainedTargetWasDestroyed))
+            {
+                MaterialEditorUI.InvalidateCurrentTarget();
+                return;
+            }
+
+            var targetsWholeCharacter =
+                (data != null
+                 && data.ObjectType == ObjectType.Character)
+                || CurrentUiTargetIsCharacterRoot();
+            if (targetsWholeCharacter && belongsToCharacter)
+                MaterialEditorUI.ReleaseCurrentTargetSelections();
+            MaterialEditorUI.PruneDestroyedInterpolables();
+        }
+
+        private void ReleaseUiForCharacterContentsReplacement()
+        {
+            ScheduleDestroyedUiTargetPrune();
+            var belongsToCharacter = CurrentUiTargetBelongsToCharacter();
+            var data = MaterialEditorUI.RetainedTargetData as ObjectData;
+            var retainedTarget = MaterialEditorUI.RetainedTargetGameObject;
+            var retainedTargetWasDestroyed =
+                !ReferenceEquals(retainedTarget, null)
+                && retainedTarget == null;
+            var logicalSubTarget = data != null
+                                   && data.ObjectType != ObjectType.Character;
+
+            if (logicalSubTarget
+                && (belongsToCharacter
+                    || MakerAPI.InsideAndLoaded
+                    || retainedTargetWasDestroyed))
+            {
+                MaterialEditorUI.InvalidateCurrentTarget();
+                return;
+            }
+
+            if (belongsToCharacter)
+                MaterialEditorUI.ReleaseCurrentTargetSelections();
+            MaterialEditorUI.PruneDestroyedInterpolables();
+        }
+
         internal void ClothesStateChangeEvent()
         {
             if (CoordinateChanging) return;
@@ -49,6 +187,7 @@ namespace KK_Plugins.MaterialEditor
 
             if (MakerAPI.InsideAndLoaded)
                 MaterialEditorUI.Visible = false;
+            ReleaseUiForCharacterContentsReplacement();
         }
 
         internal void ClothingCopiedEvent(int copySource, int copyDestination, List<int> copySlots)
@@ -61,7 +200,9 @@ namespace KK_Plugins.MaterialEditor
                 MaterialNamePropertyList.RemoveAll(x => x.ObjectType == ObjectType.Clothing && x.CoordinateIndex == copyDestination && x.Slot == slot);
                 MaterialFloatPropertyList.RemoveAll(x => x.ObjectType == ObjectType.Clothing && x.CoordinateIndex == copyDestination && x.Slot == slot);
                 MaterialColorPropertyList.RemoveAll(x => x.ObjectType == ObjectType.Clothing && x.CoordinateIndex == copyDestination && x.Slot == slot);
+                MaterialVectorPropertyList.RemoveAll(x => x.ObjectType == ObjectType.Clothing && x.CoordinateIndex == copyDestination && x.Slot == slot);
                 MaterialTexturePropertyList.RemoveAll(x => x.ObjectType == ObjectType.Clothing && x.CoordinateIndex == copyDestination && x.Slot == slot);
+                MaterialCubemapPropertyList.RemoveAll(x => x.ObjectType == ObjectType.Clothing && x.CoordinateIndex == copyDestination && x.Slot == slot);
                 MaterialCopyList.RemoveAll(x => x.ObjectType == ObjectType.Clothing && x.CoordinateIndex == copyDestination && x.Slot == slot);
 
                 List<MaterialShader> newAccessoryMaterialShaderList = new List<MaterialShader>();
@@ -69,7 +210,9 @@ namespace KK_Plugins.MaterialEditor
                 List<MaterialNameProperty> newAccessoryMaterialNamePropertyList = new List<MaterialNameProperty>();
                 List<MaterialFloatProperty> newAccessoryMaterialFloatPropertyList = new List<MaterialFloatProperty>();
                 List<MaterialColorProperty> newAccessoryMaterialColorPropertyList = new List<MaterialColorProperty>();
+                List<MaterialVectorProperty> newAccessoryMaterialVectorPropertyList = new List<MaterialVectorProperty>();
                 List<MaterialTextureProperty> newAccessoryMaterialTexturePropertyList = new List<MaterialTextureProperty>();
+                List<MaterialCubemapProperty> newAccessoryMaterialCubemapPropertyList = new List<MaterialCubemapProperty>();
                 List<MaterialCopy> newMaterialCopyList = new List<MaterialCopy>();
 
                 foreach (var property in MaterialShaderList.Where(x => x.ObjectType == ObjectType.Clothing && x.CoordinateIndex == copySource && x.Slot == slot))
@@ -82,8 +225,16 @@ namespace KK_Plugins.MaterialEditor
                     newAccessoryMaterialFloatPropertyList.Add(new MaterialFloatProperty(property.ObjectType, copyDestination, slot, property.MaterialName, property.Property, property.Value, property.ValueOriginal));
                 foreach (var property in MaterialColorPropertyList.Where(x => x.ObjectType == ObjectType.Clothing && x.CoordinateIndex == copySource && x.Slot == slot))
                     newAccessoryMaterialColorPropertyList.Add(new MaterialColorProperty(property.ObjectType, copyDestination, slot, property.MaterialName, property.Property, property.Value, property.ValueOriginal));
+                foreach (var property in MaterialVectorPropertyList.Where(x => x.ObjectType == ObjectType.Clothing && x.CoordinateIndex == copySource && x.Slot == slot))
+                    newAccessoryMaterialVectorPropertyList.Add(new MaterialVectorProperty(property.ObjectType, copyDestination, slot, property.MaterialName, property.Property, property.Value, property.ValueOriginal));
                 foreach (var property in MaterialTexturePropertyList.Where(x => x.ObjectType == ObjectType.Clothing && x.CoordinateIndex == copySource && x.Slot == slot))
                     newAccessoryMaterialTexturePropertyList.Add(new MaterialTextureProperty(property.ObjectType, copyDestination, slot, property.MaterialName, property.Property, property.TexID, property.Offset, property.OffsetOriginal, property.Scale, property.ScaleOriginal, property.TexAnimationDef));
+                foreach (var property in MaterialCubemapPropertyList.Where(x => x.ObjectType == ObjectType.Clothing && x.CoordinateIndex == copySource && x.Slot == slot))
+                {
+                    var copiedProperty = new MaterialCubemapProperty(property.ObjectType, copyDestination, slot, property.MaterialName, property.Property, property.TexID);
+                    copiedProperty.InheritCubemapOriginalSnapshot(property, copySource == CurrentCoordinateIndex ? FindGameObject(ObjectType.Clothing, slot) : null);
+                    newAccessoryMaterialCubemapPropertyList.Add(copiedProperty);
+                }
                 foreach (var property in MaterialCopyList.Where(x => x.ObjectType == ObjectType.Clothing && x.CoordinateIndex == copySource && x.Slot == slot))
                     newMaterialCopyList.Add(new MaterialCopy(property.ObjectType, copyDestination, slot, property.MaterialName, property.MaterialCopyName));
 
@@ -92,11 +243,18 @@ namespace KK_Plugins.MaterialEditor
                 MaterialNamePropertyList.AddRange(newAccessoryMaterialNamePropertyList);
                 MaterialFloatPropertyList.AddRange(newAccessoryMaterialFloatPropertyList);
                 MaterialColorPropertyList.AddRange(newAccessoryMaterialColorPropertyList);
+                MaterialVectorPropertyList.AddRange(newAccessoryMaterialVectorPropertyList);
                 MaterialTexturePropertyList.AddRange(newAccessoryMaterialTexturePropertyList);
+                MaterialCubemapPropertyList.AddRange(newAccessoryMaterialCubemapPropertyList);
                 MaterialCopyList.AddRange(newMaterialCopyList);
 
                 if (copyDestination == CurrentCoordinateIndex)
+                {
                     MaterialEditorUI.Visible = false;
+                    ReleaseUiForObjectReplacement(
+                        ObjectType.Clothing,
+                        slot);
+                }
 
                 ChaControl.StartCoroutine(LoadData(true, true, false));
             }
@@ -116,12 +274,27 @@ namespace KK_Plugins.MaterialEditor
             MaterialNamePropertyList.RemoveAll(x => x.ObjectType == ObjectType.Accessory && x.CoordinateIndex == CurrentCoordinateIndex && x.Slot == e.SlotIndex);
             MaterialFloatPropertyList.RemoveAll(x => x.ObjectType == ObjectType.Accessory && x.CoordinateIndex == CurrentCoordinateIndex && x.Slot == e.SlotIndex);
             MaterialColorPropertyList.RemoveAll(x => x.ObjectType == ObjectType.Accessory && x.CoordinateIndex == CurrentCoordinateIndex && x.Slot == e.SlotIndex);
+            MaterialVectorPropertyList.RemoveAll(x => x.ObjectType == ObjectType.Accessory && x.CoordinateIndex == CurrentCoordinateIndex && x.Slot == e.SlotIndex);
             MaterialTexturePropertyList.RemoveAll(x => x.ObjectType == ObjectType.Accessory && x.CoordinateIndex == CurrentCoordinateIndex && x.Slot == e.SlotIndex);
+            MaterialCubemapPropertyList.RemoveAll(x => x.ObjectType == ObjectType.Accessory && x.CoordinateIndex == CurrentCoordinateIndex && x.Slot == e.SlotIndex);
             MaterialCopyList.RemoveAll(x => x.ObjectType == ObjectType.Accessory && x.CoordinateIndex == CurrentCoordinateIndex && x.Slot == e.SlotIndex);
 
             if (MakerAPI.InsideAndLoaded)
-                if (MaterialEditorUI.Visible && MEMaker.Instance != null)
+            {
+                var refreshVisibleAccessory =
+                    MaterialEditorUI.Visible && MEMaker.Instance != null;
+                ReleaseUiForObjectReplacement(
+                    ObjectType.Accessory,
+                    e.SlotIndex);
+                if (refreshVisibleAccessory)
                     MEMaker.Instance.UpdateUIAccessory();
+            }
+            else
+            {
+                ReleaseUiForObjectReplacement(
+                    ObjectType.Accessory,
+                    e.SlotIndex);
+            }
 
 #if KK || EC || KKS
             if (MaterialEditorPlugin.RimRemover.Value)
@@ -162,7 +335,9 @@ namespace KK_Plugins.MaterialEditor
             MaterialFloatPropertyList.RemoveAll(x => x.ObjectType == ObjectType.Accessory && x.CoordinateIndex == CurrentCoordinateIndex && x.Slot == e.DestinationSlotIndex);
             MaterialKeywordPropertyList.RemoveAll(x => x.ObjectType == ObjectType.Accessory && x.CoordinateIndex == CurrentCoordinateIndex && x.Slot == e.DestinationSlotIndex);
             MaterialColorPropertyList.RemoveAll(x => x.ObjectType == ObjectType.Accessory && x.CoordinateIndex == CurrentCoordinateIndex && x.Slot == e.DestinationSlotIndex);
+            MaterialVectorPropertyList.RemoveAll(x => x.ObjectType == ObjectType.Accessory && x.CoordinateIndex == CurrentCoordinateIndex && x.Slot == e.DestinationSlotIndex);
             MaterialTexturePropertyList.RemoveAll(x => x.ObjectType == ObjectType.Accessory && x.CoordinateIndex == CurrentCoordinateIndex && x.Slot == e.DestinationSlotIndex);
+            MaterialCubemapPropertyList.RemoveAll(x => x.ObjectType == ObjectType.Accessory && x.CoordinateIndex == CurrentCoordinateIndex && x.Slot == e.DestinationSlotIndex);
             MaterialCopyList.RemoveAll(x => x.ObjectType == ObjectType.Accessory && x.CoordinateIndex == CurrentCoordinateIndex && x.Slot == e.DestinationSlotIndex);
 
             List<MaterialShader> newAccessoryMaterialShaderList = new List<MaterialShader>();
@@ -171,7 +346,9 @@ namespace KK_Plugins.MaterialEditor
             List<MaterialFloatProperty> newAccessoryMaterialFloatPropertyList = new List<MaterialFloatProperty>();
             List<MaterialKeywordProperty> newAccessoryMaterialKeywordPropertyList = new List<MaterialKeywordProperty>();
             List<MaterialColorProperty> newAccessoryMaterialColorPropertyList = new List<MaterialColorProperty>();
+            List<MaterialVectorProperty> newAccessoryMaterialVectorPropertyList = new List<MaterialVectorProperty>();
             List<MaterialTextureProperty> newAccessoryMaterialTexturePropertyList = new List<MaterialTextureProperty>();
+            List<MaterialCubemapProperty> newAccessoryMaterialCubemapPropertyList = new List<MaterialCubemapProperty>();
             List<MaterialCopy> newAccessoryMaterialCopyList = new List<MaterialCopy>();
 
             foreach (var property in MaterialShaderList.Where(x => x.ObjectType == ObjectType.Accessory && x.CoordinateIndex == CurrentCoordinateIndex && x.Slot == e.SourceSlotIndex))
@@ -186,8 +363,16 @@ namespace KK_Plugins.MaterialEditor
                 newAccessoryMaterialKeywordPropertyList.Add(new MaterialKeywordProperty(property.ObjectType, CurrentCoordinateIndex, e.DestinationSlotIndex, property.MaterialName, property.Property, property.Value, property.ValueOriginal));
             foreach (var property in MaterialColorPropertyList.Where(x => x.ObjectType == ObjectType.Accessory && x.CoordinateIndex == CurrentCoordinateIndex && x.Slot == e.SourceSlotIndex))
                 newAccessoryMaterialColorPropertyList.Add(new MaterialColorProperty(property.ObjectType, CurrentCoordinateIndex, e.DestinationSlotIndex, property.MaterialName, property.Property, property.Value, property.ValueOriginal));
+            foreach (var property in MaterialVectorPropertyList.Where(x => x.ObjectType == ObjectType.Accessory && x.CoordinateIndex == CurrentCoordinateIndex && x.Slot == e.SourceSlotIndex))
+                newAccessoryMaterialVectorPropertyList.Add(new MaterialVectorProperty(property.ObjectType, CurrentCoordinateIndex, e.DestinationSlotIndex, property.MaterialName, property.Property, property.Value, property.ValueOriginal));
             foreach (var property in MaterialTexturePropertyList.Where(x => x.ObjectType == ObjectType.Accessory && x.CoordinateIndex == CurrentCoordinateIndex && x.Slot == e.SourceSlotIndex))
                 newAccessoryMaterialTexturePropertyList.Add(new MaterialTextureProperty(property.ObjectType, CurrentCoordinateIndex, e.DestinationSlotIndex, property.MaterialName, property.Property, property.TexID, property.Offset, property.OffsetOriginal, property.Scale, property.ScaleOriginal, property.TexAnimationDef));
+            foreach (var property in MaterialCubemapPropertyList.Where(x => x.ObjectType == ObjectType.Accessory && x.CoordinateIndex == CurrentCoordinateIndex && x.Slot == e.SourceSlotIndex))
+            {
+                var copiedProperty = new MaterialCubemapProperty(property.ObjectType, CurrentCoordinateIndex, e.DestinationSlotIndex, property.MaterialName, property.Property, property.TexID);
+                copiedProperty.InheritCubemapOriginalSnapshot(property, FindGameObject(ObjectType.Accessory, e.SourceSlotIndex));
+                newAccessoryMaterialCubemapPropertyList.Add(copiedProperty);
+            }
             foreach (var property in MaterialCopyList.Where(x => x.ObjectType == ObjectType.Accessory && x.CoordinateIndex == CurrentCoordinateIndex && x.Slot == e.SourceSlotIndex))
                 newAccessoryMaterialCopyList.Add(new MaterialCopy(property.ObjectType, CurrentCoordinateIndex, e.DestinationSlotIndex, property.MaterialName, property.MaterialCopyName));
 
@@ -197,11 +382,16 @@ namespace KK_Plugins.MaterialEditor
             MaterialFloatPropertyList.AddRange(newAccessoryMaterialFloatPropertyList);
             MaterialKeywordPropertyList.AddRange(newAccessoryMaterialKeywordPropertyList);
             MaterialColorPropertyList.AddRange(newAccessoryMaterialColorPropertyList);
+            MaterialVectorPropertyList.AddRange(newAccessoryMaterialVectorPropertyList);
             MaterialTexturePropertyList.AddRange(newAccessoryMaterialTexturePropertyList);
+            MaterialCubemapPropertyList.AddRange(newAccessoryMaterialCubemapPropertyList);
             MaterialCopyList.AddRange(newAccessoryMaterialCopyList);
 
             if (MakerAPI.InsideAndLoaded)
                 MaterialEditorUI.Visible = false;
+            ReleaseUiForObjectReplacement(
+                ObjectType.Accessory,
+                e.DestinationSlotIndex);
 
             PurgeUnusedAnimation();
 
@@ -218,7 +408,9 @@ namespace KK_Plugins.MaterialEditor
                 MaterialNamePropertyList.RemoveAll(x => x.ObjectType == ObjectType.Accessory && x.CoordinateIndex == (int)e.CopyDestination && x.Slot == slot);
                 MaterialFloatPropertyList.RemoveAll(x => x.ObjectType == ObjectType.Accessory && x.CoordinateIndex == (int)e.CopyDestination && x.Slot == slot);
                 MaterialColorPropertyList.RemoveAll(x => x.ObjectType == ObjectType.Accessory && x.CoordinateIndex == (int)e.CopyDestination && x.Slot == slot);
+                MaterialVectorPropertyList.RemoveAll(x => x.ObjectType == ObjectType.Accessory && x.CoordinateIndex == (int)e.CopyDestination && x.Slot == slot);
                 MaterialTexturePropertyList.RemoveAll(x => x.ObjectType == ObjectType.Accessory && x.CoordinateIndex == (int)e.CopyDestination && x.Slot == slot);
+                MaterialCubemapPropertyList.RemoveAll(x => x.ObjectType == ObjectType.Accessory && x.CoordinateIndex == (int)e.CopyDestination && x.Slot == slot);
                 MaterialCopyList.RemoveAll(x => x.ObjectType == ObjectType.Accessory && x.CoordinateIndex == (int)e.CopyDestination && x.Slot == slot);
 
                 List<MaterialShader> newAccessoryMaterialShaderList = new List<MaterialShader>();
@@ -226,7 +418,9 @@ namespace KK_Plugins.MaterialEditor
                 List<MaterialNameProperty> newAccessoryMaterialNamePropertyList = new List<MaterialNameProperty>();
                 List<MaterialFloatProperty> newAccessoryMaterialFloatPropertyList = new List<MaterialFloatProperty>();
                 List<MaterialColorProperty> newAccessoryMaterialColorPropertyList = new List<MaterialColorProperty>();
+                List<MaterialVectorProperty> newAccessoryMaterialVectorPropertyList = new List<MaterialVectorProperty>();
                 List<MaterialTextureProperty> newAccessoryMaterialTexturePropertyList = new List<MaterialTextureProperty>();
+                List<MaterialCubemapProperty> newAccessoryMaterialCubemapPropertyList = new List<MaterialCubemapProperty>();
                 List<MaterialCopy> newAccessoryMaterialCopyList = new List<MaterialCopy>();
 
                 foreach (var property in MaterialShaderList.Where(x => x.ObjectType == ObjectType.Accessory && x.CoordinateIndex == (int)e.CopySource && x.Slot == slot))
@@ -239,8 +433,16 @@ namespace KK_Plugins.MaterialEditor
                     newAccessoryMaterialFloatPropertyList.Add(new MaterialFloatProperty(property.ObjectType, (int)e.CopyDestination, slot, property.MaterialName, property.Property, property.Value, property.ValueOriginal));
                 foreach (var property in MaterialColorPropertyList.Where(x => x.ObjectType == ObjectType.Accessory && x.CoordinateIndex == (int)e.CopySource && x.Slot == slot))
                     newAccessoryMaterialColorPropertyList.Add(new MaterialColorProperty(property.ObjectType, (int)e.CopyDestination, slot, property.MaterialName, property.Property, property.Value, property.ValueOriginal));
+                foreach (var property in MaterialVectorPropertyList.Where(x => x.ObjectType == ObjectType.Accessory && x.CoordinateIndex == (int)e.CopySource && x.Slot == slot))
+                    newAccessoryMaterialVectorPropertyList.Add(new MaterialVectorProperty(property.ObjectType, (int)e.CopyDestination, slot, property.MaterialName, property.Property, property.Value, property.ValueOriginal));
                 foreach (var property in MaterialTexturePropertyList.Where(x => x.ObjectType == ObjectType.Accessory && x.CoordinateIndex == (int)e.CopySource && x.Slot == slot))
                     newAccessoryMaterialTexturePropertyList.Add(new MaterialTextureProperty(property.ObjectType, (int)e.CopyDestination, slot, property.MaterialName, property.Property, property.TexID, property.Offset, property.OffsetOriginal, property.Scale, property.ScaleOriginal, property.TexAnimationDef));
+                foreach (var property in MaterialCubemapPropertyList.Where(x => x.ObjectType == ObjectType.Accessory && x.CoordinateIndex == (int)e.CopySource && x.Slot == slot))
+                {
+                    var copiedProperty = new MaterialCubemapProperty(property.ObjectType, (int)e.CopyDestination, slot, property.MaterialName, property.Property, property.TexID);
+                    copiedProperty.InheritCubemapOriginalSnapshot(property, (int)e.CopySource == CurrentCoordinateIndex ? FindGameObject(ObjectType.Accessory, slot) : null);
+                    newAccessoryMaterialCubemapPropertyList.Add(copiedProperty);
+                }
                 foreach (var property in MaterialCopyList.Where(x => x.ObjectType == ObjectType.Accessory && x.CoordinateIndex == (int)e.CopySource && x.Slot == slot))
                     newAccessoryMaterialCopyList.Add(new MaterialCopy(property.ObjectType, (int)e.CopyDestination, slot, property.MaterialName, property.MaterialCopyName));
 
@@ -249,12 +451,19 @@ namespace KK_Plugins.MaterialEditor
                 MaterialNamePropertyList.AddRange(newAccessoryMaterialNamePropertyList);
                 MaterialFloatPropertyList.AddRange(newAccessoryMaterialFloatPropertyList);
                 MaterialColorPropertyList.AddRange(newAccessoryMaterialColorPropertyList);
+                MaterialVectorPropertyList.AddRange(newAccessoryMaterialVectorPropertyList);
                 MaterialTexturePropertyList.AddRange(newAccessoryMaterialTexturePropertyList);
+                MaterialCubemapPropertyList.AddRange(newAccessoryMaterialCubemapPropertyList);
                 MaterialCopyList.AddRange(newAccessoryMaterialCopyList);
 
-                if (MakerAPI.InsideAndLoaded)
-                    if ((int)e.CopyDestination == CurrentCoordinateIndex)
-                        MaterialEditorUI.Visible = false;
+                if (MakerAPI.InsideAndLoaded
+                    && (int)e.CopyDestination == CurrentCoordinateIndex)
+                {
+                    MaterialEditorUI.Visible = false;
+                    ReleaseUiForObjectReplacement(
+                        ObjectType.Accessory,
+                        slot);
+                }
             }
 
             PurgeUnusedAnimation();
@@ -276,7 +485,13 @@ namespace KK_Plugins.MaterialEditor
                 return;
             }
 #endif
-            if (!MakerAPI.InsideAndLoaded) return;
+            if (!MakerAPI.InsideAndLoaded)
+            {
+                ReleaseUiForObjectReplacement(
+                    ObjectType.Accessory,
+                    slot);
+                return;
+            }
             if (CoordinateChanging) return;
 
             MaterialShaderList.RemoveAll(x => x.ObjectType == ObjectType.Accessory && x.CoordinateIndex == CurrentCoordinateIndex && x.Slot == slot);
@@ -285,18 +500,29 @@ namespace KK_Plugins.MaterialEditor
             MaterialFloatPropertyList.RemoveAll(x => x.ObjectType == ObjectType.Accessory && x.CoordinateIndex == CurrentCoordinateIndex && x.Slot == slot);
             MaterialKeywordPropertyList.RemoveAll(x => x.ObjectType == ObjectType.Accessory && x.CoordinateIndex == CurrentCoordinateIndex && x.Slot == slot);
             MaterialColorPropertyList.RemoveAll(x => x.ObjectType == ObjectType.Accessory && x.CoordinateIndex == CurrentCoordinateIndex && x.Slot == slot);
+            MaterialVectorPropertyList.RemoveAll(x => x.ObjectType == ObjectType.Accessory && x.CoordinateIndex == CurrentCoordinateIndex && x.Slot == slot);
             MaterialTexturePropertyList.RemoveAll(x => x.ObjectType == ObjectType.Accessory && x.CoordinateIndex == CurrentCoordinateIndex && x.Slot == slot);
+            MaterialCubemapPropertyList.RemoveAll(x => x.ObjectType == ObjectType.Accessory && x.CoordinateIndex == CurrentCoordinateIndex && x.Slot == slot);
             MaterialCopyList.RemoveAll(x => x.ObjectType == ObjectType.Accessory && x.CoordinateIndex == CurrentCoordinateIndex && x.Slot == slot);
 
             if (MakerAPI.InsideAndLoaded)
                 MaterialEditorUI.Visible = false;
+            ReleaseUiForObjectReplacement(
+                ObjectType.Accessory,
+                slot);
 
             PurgeUnusedAnimation();
         }
 
         internal void ChangeCustomClothesEvent(int slot)
         {
-            if (!MakerAPI.InsideAndLoaded) return;
+            if (!MakerAPI.InsideAndLoaded)
+            {
+                ReleaseUiForObjectReplacement(
+                    ObjectType.Clothing,
+                    slot);
+                return;
+            }
             if (CoordinateChanging) return;
             if (ClothesChanging) return;
             if (CharacterLoading) return;
@@ -317,11 +543,16 @@ namespace KK_Plugins.MaterialEditor
             MaterialFloatPropertyList.RemoveAll(x => x.ObjectType == ObjectType.Clothing && x.CoordinateIndex == CurrentCoordinateIndex && x.Slot == slot);
             MaterialKeywordPropertyList.RemoveAll(x => x.ObjectType == ObjectType.Clothing && x.CoordinateIndex == CurrentCoordinateIndex && x.Slot == slot);
             MaterialColorPropertyList.RemoveAll(x => x.ObjectType == ObjectType.Clothing && x.CoordinateIndex == CurrentCoordinateIndex && x.Slot == slot);
+            MaterialVectorPropertyList.RemoveAll(x => x.ObjectType == ObjectType.Clothing && x.CoordinateIndex == CurrentCoordinateIndex && x.Slot == slot);
             MaterialTexturePropertyList.RemoveAll(x => x.ObjectType == ObjectType.Clothing && x.CoordinateIndex == CurrentCoordinateIndex && x.Slot == slot);
+            MaterialCubemapPropertyList.RemoveAll(x => x.ObjectType == ObjectType.Clothing && x.CoordinateIndex == CurrentCoordinateIndex && x.Slot == slot);
             MaterialCopyList.RemoveAll(x => x.ObjectType == ObjectType.Clothing && x.CoordinateIndex == CurrentCoordinateIndex && x.Slot == slot);
 
             if (MakerAPI.InsideAndLoaded)
                 MaterialEditorUI.Visible = false;
+            ReleaseUiForObjectReplacement(
+                ObjectType.Clothing,
+                slot);
 
 #if KK || EC || KKS
             if (MaterialEditorPlugin.RimRemover.Value)
@@ -336,7 +567,13 @@ namespace KK_Plugins.MaterialEditor
 
         internal void ChangeHairEvent(int slot)
         {
-            if (!MakerAPI.InsideAndLoaded) return;
+            if (!MakerAPI.InsideAndLoaded)
+            {
+                ReleaseUiForObjectReplacement(
+                    ObjectType.Hair,
+                    slot);
+                return;
+            }
             if (CharacterLoading) return;
 
             MaterialShaderList.RemoveAll(x => x.ObjectType == ObjectType.Hair && x.Slot == slot);
@@ -345,11 +582,16 @@ namespace KK_Plugins.MaterialEditor
             MaterialFloatPropertyList.RemoveAll(x => x.ObjectType == ObjectType.Hair && x.Slot == slot);
             MaterialKeywordPropertyList.RemoveAll(x => x.ObjectType == ObjectType.Hair && x.Slot == slot);
             MaterialColorPropertyList.RemoveAll(x => x.ObjectType == ObjectType.Hair && x.Slot == slot);
+            MaterialVectorPropertyList.RemoveAll(x => x.ObjectType == ObjectType.Hair && x.Slot == slot);
             MaterialTexturePropertyList.RemoveAll(x => x.ObjectType == ObjectType.Hair && x.Slot == slot);
+            MaterialCubemapPropertyList.RemoveAll(x => x.ObjectType == ObjectType.Hair && x.Slot == slot);
             MaterialCopyList.RemoveAll(x => x.ObjectType == ObjectType.Hair && x.Slot == slot);
 
             if (MakerAPI.InsideAndLoaded)
                 MaterialEditorUI.Visible = false;
+            ReleaseUiForObjectReplacement(
+                ObjectType.Hair,
+                slot);
 
 #if KK || EC || KKS
             if (MaterialEditorPlugin.RimRemover.Value)
@@ -389,14 +631,27 @@ namespace KK_Plugins.MaterialEditor
             if (existing == null)
             {
                 int idx = GetCoordinateIndex(objectType);
+                foreach (var legacyProperty in MaterialColorPropertyList.Where(x => x.ObjectType == objectType && x.CoordinateIndex == idx && x.Slot == slot && x.MaterialName == material.NameFormatted()).ToList())
+                    MigrateLegacyMaterialVectorProperty(slot, objectType, legacyProperty.MaterialName, legacyProperty.Property, go);
+
                 var shader = MaterialShaderList.Where(x => x.ObjectType == objectType && x.CoordinateIndex == idx && x.Slot == slot && x.MaterialName == material.NameFormatted()).ToList();
                 var textures = MaterialTexturePropertyList.Where(x => x.ObjectType == objectType && x.CoordinateIndex == idx && x.Slot == slot && x.MaterialName == material.NameFormatted()).ToList();
+                var cubemaps = MaterialCubemapPropertyList.Where(x => x.ObjectType == objectType && x.CoordinateIndex == idx && x.Slot == slot && x.MaterialName == material.NameFormatted()).ToList();
                 var colors = MaterialColorPropertyList.Where(x => x.ObjectType == objectType && x.CoordinateIndex == idx && x.Slot == slot && x.MaterialName == material.NameFormatted()).ToList();
+                var vectors = MaterialVectorPropertyList.Where(x => x.ObjectType == objectType && x.CoordinateIndex == idx && x.Slot == slot && x.MaterialName == material.NameFormatted()).ToList();
                 var floats = MaterialFloatPropertyList.Where(x => x.ObjectType == objectType && x.CoordinateIndex == idx && x.Slot == slot && x.MaterialName == material.NameFormatted()).ToList();
                 var keywords = MaterialKeywordPropertyList.Where(x => x.ObjectType == objectType && x.CoordinateIndex == idx && x.Slot == slot && x.MaterialName == material.NameFormatted()).ToList();
                 if (shader.Count == 1) MaterialShaderList.Add(new MaterialShader(objectType, idx, slot, value, shader[0].ShaderName, shader[0].ShaderNameOriginal, shader[0].RenderQueue, shader[0].RenderQueueOriginal));
-                foreach (var tex in textures) MaterialTexturePropertyList.Add(new MaterialTextureProperty(objectType, idx, slot, value, tex.Property, tex.TexID, tex.Offset, tex.OffsetOriginal, tex.Scale, tex.ScaleOriginal, tex.TexAnimationDef));
+                foreach (var tex in textures)
+                    MaterialTexturePropertyList.Add(new MaterialTextureProperty(objectType, idx, slot, value, tex.Property, tex.TexID, tex.Offset, tex.OffsetOriginal, tex.Scale, tex.ScaleOriginal, tex.TexAnimationDef));
+                foreach (var cubemap in cubemaps)
+                {
+                    var renamedProperty = new MaterialCubemapProperty(objectType, idx, slot, value, cubemap.Property, cubemap.TexID);
+                    renamedProperty.InheritCubemapOriginalSnapshotSameMaterials(cubemap, go);
+                    MaterialCubemapPropertyList.Add(renamedProperty);
+                }
                 foreach (var col in colors) MaterialColorPropertyList.Add(new MaterialColorProperty(objectType, idx, slot, value, col.Property, col.Value, col.ValueOriginal));
+                foreach (var vector in vectors) MaterialVectorPropertyList.Add(new MaterialVectorProperty(objectType, idx, slot, value, vector.Property, vector.Value, vector.ValueOriginal));
                 foreach (var _float in floats) MaterialFloatPropertyList.Add(new MaterialFloatProperty(objectType, idx, slot, value, _float.Property, _float.Value, _float.ValueOriginal));
                 foreach (var kw in keywords) MaterialKeywordPropertyList.Add(new MaterialKeywordProperty(objectType, idx, slot, value, kw.Property, kw.Value, kw.ValueOriginal));
             }
@@ -425,25 +680,53 @@ namespace KK_Plugins.MaterialEditor
         /// <summary>
         /// Refresh the clothes MainTex, typically called after editing colors in the character maker
         /// </summary>
-        public void RefreshClothesMainTex() => StartCoroutine(RefreshClothesMainTexCoroutine());
+        private EndOfFrameRefreshGate _clothesMainTexRefreshGate;
+        private EndOfFrameRefreshGate _bodyMainTexRefreshGate;
+
+        public void RefreshClothesMainTex()
+        {
+            if (!_clothesMainTexRefreshGate.TryRequest())
+            {
+                return;
+            }
+            try
+            {
+                if (StartCoroutine(RefreshClothesMainTexCoroutine()) != null)
+                    return;
+            }
+            catch
+            {
+                _clothesMainTexRefreshGate.Complete();
+                throw;
+            }
+            _clothesMainTexRefreshGate.Complete();
+        }
+
         private IEnumerator RefreshClothesMainTexCoroutine()
         {
             yield return new WaitForEndOfFrame();
-            for (var i = 0; i < MaterialTexturePropertyList.Count; i++)
+            try
             {
-                var property = MaterialTexturePropertyList[i];
-                if (Instance.CheckBlacklist(property.MaterialName, property.Property))
-                    continue;
-
-                if (property.ObjectType != ObjectType.Clothing || property.CoordinateIndex != CurrentCoordinateIndex || property.Property != "MainTex")
-                    continue;
-
-                if (property.TexID != null)
+                for (var i = 0; i < MaterialTexturePropertyList.Count; i++)
                 {
-                    var tex = TextureDictionary[(int)property.TexID].Texture;
-                    MaterialEditorPlugin.Instance.ConvertNormalMap(ref tex, property.Property);
-                    SetTexture(FindGameObject(ObjectType.Clothing, property.Slot), property.MaterialName, property.Property, tex);
+                    var property = MaterialTexturePropertyList[i];
+                    if (Instance.CheckBlacklist(property.MaterialName, property.Property))
+                        continue;
+
+                    if (property.ObjectType != ObjectType.Clothing || property.CoordinateIndex != CurrentCoordinateIndex || property.Property != "MainTex")
+                        continue;
+
+                    if (property.TexID != null)
+                    {
+                        var tex = TextureDictionary[(int)property.TexID].Texture;
+                        MaterialEditorPlugin.Instance.ConvertNormalMap(ref tex, property.Property);
+                        SetTexture(FindGameObject(ObjectType.Clothing, property.Slot), property.MaterialName, property.Property, tex);
+                    }
                 }
+            }
+            finally
+            {
+                _clothesMainTexRefreshGate.Complete();
             }
         }
 
@@ -486,27 +769,50 @@ namespace KK_Plugins.MaterialEditor
                     AnimationControllerMap[textureProperty] = controller;
                 }
 
-                controller.UpdateAnimation(textureProperty);
-                return true;
+                return controller.TryUpdateAnimation(textureProperty);
             }
         }
 
         /// <summary>
         /// Refresh the body MainTex, typically called after editing colors in the character maker
         /// </summary>
-        public void RefreshBodyMainTex() => StartCoroutine(RefreshBodyMainTexCoroutine());
+        public void RefreshBodyMainTex()
+        {
+            if (!_bodyMainTexRefreshGate.TryRequest())
+            {
+                return;
+            }
+            try
+            {
+                if (StartCoroutine(RefreshBodyMainTexCoroutine()) != null)
+                    return;
+            }
+            catch
+            {
+                _bodyMainTexRefreshGate.Complete();
+                throw;
+            }
+            _bodyMainTexRefreshGate.Complete();
+        }
+
         private IEnumerator RefreshBodyMainTexCoroutine()
         {
             yield return new WaitForEndOfFrame();
-
-            for (var i = 0; i < MaterialTexturePropertyList.Count; i++)
+            try
             {
-                var property = MaterialTexturePropertyList[i];
-                if (Instance.CheckBlacklist(property.MaterialName, property.Property))
-                    continue;
+                for (var i = 0; i < MaterialTexturePropertyList.Count; i++)
+                {
+                    var property = MaterialTexturePropertyList[i];
+                    if (Instance.CheckBlacklist(property.MaterialName, property.Property))
+                        continue;
 
-                if (property.ObjectType == ObjectType.Character && property.Property == "MainTex")
-                    SetTextureWithProperty(ChaControl.gameObject, property);
+                    if (property.ObjectType == ObjectType.Character && property.Property == "MainTex")
+                        SetTextureWithProperty(ChaControl.gameObject, property);
+                }
+            }
+            finally
+            {
+                _bodyMainTexRefreshGate.Complete();
             }
         }
         /// <summary>
@@ -516,6 +822,23 @@ namespace KK_Plugins.MaterialEditor
         {
             if (CharacterLoading) return;
             StartCoroutine(LoadData(false, false, false));
+        }
+        private struct EndOfFrameRefreshGate
+        {
+            private bool _pending;
+
+            internal bool TryRequest()
+            {
+                if (_pending)
+                    return false;
+                _pending = true;
+                return true;
+            }
+
+            internal void Complete()
+            {
+                _pending = false;
+            }
         }
     }
 }

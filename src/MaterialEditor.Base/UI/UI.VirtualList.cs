@@ -1,6 +1,6 @@
-﻿using System;
+using System;
+using System.Collections;
 using System.Collections.Generic;
-using System.Linq;
 using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.UI;
@@ -10,10 +10,8 @@ namespace MaterialEditorAPI
 {
     internal class VirtualList : MonoBehaviour
     {
-        private static readonly bool instantiateOverloadExists = typeof(UnityEngine.Object).GetMethod("Instantiate", new[] { typeof(GameObject), typeof(Transform) }) != null;
-
-        private readonly List<RowView> _cachedViews = new List<RowView>();
         private readonly List<RowModel> _models = new List<RowModel>();
+        private VirtualListViewPool _viewPool;
 
         internal event Action<int> ViewportAnchorIndexChanged;
 
@@ -22,7 +20,15 @@ namespace MaterialEditorAPI
 
         private bool _dirty;
         private int _lastItemsAboveViewRect;
+        private float _lastScrollPosition = float.NaN;
+        private float _lastViewportHeight = float.NaN;
         private int _viewportAnchorIndex = -1;
+        private int _viewportRestoreVersion;
+        private bool _viewportRestorePending;
+        private bool _programmaticViewportAnchorPinned;
+        private float _programmaticScrollPosition = float.NaN;
+        private bool _rangeMutationAnchorPublished;
+        private float _rangeMutationScrollPosition = float.NaN;
 
         private int _paddingBot;
         private int _paddingTop;
@@ -39,55 +45,19 @@ namespace MaterialEditorAPI
             _paddingTop = _verticalLayoutGroup.padding.top;
             _paddingBot = _verticalLayoutGroup.padding.bottom;
 
-            SetupEntryTemplate();
-
-            PopulateEntryCache();
-
-            Destroy(EntryTemplate);
-
+            if (EntryTemplate == null) throw new ArgumentNullException(nameof(EntryTemplate));
+            _viewPool = new VirtualListViewPool(EntryTemplate);
             Clear();
         }
 
-        private void SetupEntryTemplate()
+        internal void EnsureViewportCapacity(float viewportHeight)
         {
-            if (EntryTemplate == null) throw new ArgumentNullException(nameof(EntryTemplate));
-
-            EntryTemplate.SetActive(false);
-
-            var rowView = EntryTemplate.AddComponent<RowView>();
-            var listEntry = EntryTemplate.AddComponent<RowBinder>();
-            rowView.Initialize(listEntry);
-            rowView.Bind(null, true);
-        }
-
-        private void PopulateEntryCache()
-        {
-            var viewportHeight = ScrollRect.GetComponent<RectTransform>().rect.height;
-            var visibleEntryCount = Mathf.CeilToInt(viewportHeight / PanelHeight);
-
-            for (var i = 0; i < visibleEntryCount; i++)
-            {
-                GameObject copy;
-                if (instantiateOverloadExists)
-                {
-                    copy = Instantiate(EntryTemplate, EntryTemplate.transform.parent);
-                }
-                else
-                {
-                    copy = Instantiate(EntryTemplate);
-                    copy.transform.parent = EntryTemplate.transform.parent;
-                }
-                var entry = copy.GetComponent<RowView>();
-                entry.Initialize(copy.GetComponent<RowBinder>());
-                _cachedViews.Add(entry);
-                entry.SetVisible(false);
-            }
-#if DEBUG
-            if (_cachedViews.Count > 0)
-                RowLayoutRuntimeAssertions.Validate(_cachedViews[0]);
-            if (_cachedViews.Count > 1)
-                RowLayoutRuntimeAssertions.ValidateClones(_cachedViews[0], _cachedViews[1]);
-#endif
+            if (_viewPool != null
+                && _viewPool.EnsureCapacity(
+                    viewportHeight,
+                    PanelHeight,
+                    _models.Count))
+                _dirty = true;
         }
 
         public void Clear()
@@ -97,20 +67,204 @@ namespace MaterialEditorAPI
 
         public void SetList(IEnumerable<RowModel> items)
         {
+            SetList(items, true);
+        }
+
+        internal void SetList(
+            IEnumerable<RowModel> items,
+            bool publishViewportAnchor)
+        {
+            SuspendRowListeners();
+            _viewportRestoreVersion++;
+            _viewportRestorePending = false;
+            ClearProgrammaticViewportAnchor();
+            ClearRangeMutationAnchor();
             _models.Clear();
             if (items != null)
                 _models.AddRange(items);
 
+            EnsureViewportCapacity(GetViewportHeight());
+
+            _viewPool.ReleaseCachedFrom(_models.Count);
+
             _dirty = true;
-            UpdateViewportAnchor(true);
+            UpdateViewportAnchor(true, publishViewportAnchor);
+        }
+
+        internal void ReplaceRange(
+            int startIndex,
+            int removeCount,
+            IList<RowModel> replacementRows,
+            int anchorFallbackIndex)
+        {
+            if (startIndex < 0 || startIndex > _models.Count)
+                throw new ArgumentOutOfRangeException(nameof(startIndex));
+            if (removeCount < 0
+                || removeCount > _models.Count - startIndex)
+                throw new ArgumentOutOfRangeException(nameof(removeCount));
+
+            var replacementCount = replacementRows == null
+                ? 0
+                : replacementRows.Count;
+            if (removeCount == 0 && replacementCount == 0)
+                return;
+
+            SuspendRowListeners();
+            _viewportRestoreVersion++;
+            _viewportRestorePending = false;
+            ClearProgrammaticViewportAnchor();
+            ClearRangeMutationAnchor();
+
+            var scrollPosition = Mathf.Max(
+                0f,
+                ScrollRect.content.localPosition.y);
+            var topRowIndex = _models.Count == 0
+                ? -1
+                : Mathf.Clamp(
+                    Mathf.FloorToInt(scrollPosition / PanelHeight),
+                    0,
+                    _models.Count - 1);
+            var offsetWithinRow = topRowIndex < 0
+                ? 0f
+                : scrollPosition - topRowIndex * PanelHeight;
+            var nextTopRowIndex = ShiftIndexForRange(
+                topRowIndex,
+                startIndex,
+                removeCount,
+                replacementCount,
+                anchorFallbackIndex);
+            var nextViewportAnchor = ShiftIndexForRange(
+                _viewportAnchorIndex,
+                startIndex,
+                removeCount,
+                replacementCount,
+                anchorFallbackIndex);
+
+            if (removeCount != 0)
+                _models.RemoveRange(startIndex, removeCount);
+            if (replacementCount != 0)
+                _models.InsertRange(startIndex, replacementRows);
+
+            EnsureViewportCapacity(GetViewportHeight());
+            var position = ScrollRect.content.localPosition;
+            if (_models.Count == 0)
+            {
+                position.y = 0f;
+                nextViewportAnchor = -1;
+            }
+            else
+            {
+                nextTopRowIndex = Mathf.Clamp(
+                    nextTopRowIndex,
+                    0,
+                    _models.Count - 1);
+                nextViewportAnchor = Mathf.Clamp(
+                    nextViewportAnchor,
+                    0,
+                    _models.Count - 1);
+                var viewport = ScrollRect.viewport != null
+                    ? ScrollRect.viewport
+                    : ScrollRect.GetComponent<RectTransform>();
+                var maximum = Mathf.Max(
+                    0f,
+                    _models.Count * PanelHeight - viewport.rect.height);
+                position.y = Mathf.Clamp(
+                    nextTopRowIndex * PanelHeight + offsetWithinRow,
+                    0f,
+                    maximum);
+            }
+
+            ScrollRect.StopMovement();
+            ScrollRect.content.localPosition = position;
+            _dirty = true;
+            _rangeMutationAnchorPublished = true;
+            _rangeMutationScrollPosition = position.y;
+            SetViewportAnchorIndex(nextViewportAnchor, true, true);
+            // A targeted collapse is complete when this method returns: stale
+            // child RowViews and their listener graphs must not survive until
+            // the next Unity frame. Update consumes the one dirty/layout pass;
+            // the normal frame callback then remains on its idle fast path.
+            Update();
+        }
+
+        private static int ShiftIndexForRange(
+            int index,
+            int startIndex,
+            int removeCount,
+            int replacementCount,
+            int fallbackIndex)
+        {
+            if (index < 0 || index < startIndex)
+                return index;
+            if (removeCount != 0
+                && index < startIndex + removeCount)
+                return fallbackIndex;
+            return index + replacementCount - removeCount;
+        }
+
+        internal void ReleaseContent()
+        {
+            _viewportRestoreVersion++;
+            _viewportRestorePending = false;
+            ClearProgrammaticViewportAnchor();
+            ClearRangeMutationAnchor();
+            _models.Clear();
+            _viewPool.ReleaseAll();
+
+            // Keep the exact scroll, published anchor, and padding for reopening.
+            // Recording the current geometry also makes an accidental Update while
+            // hidden a no-op instead of publishing an empty-list anchor.
+            _lastScrollPosition = ScrollRect.content.localPosition.y;
+            var viewport = ScrollRect.viewport != null
+                ? ScrollRect.viewport
+                : ScrollRect.GetComponent<RectTransform>();
+            _lastViewportHeight = viewport.rect.height;
+            _dirty = false;
+        }
+
+        internal void SuspendRowListeners()
+        {
+            _viewPool.SuspendListeners();
         }
 
         private void Update()
         {
             var scrollPosition = ScrollRect.content.localPosition.y;
-            UpdateViewportAnchor(false);
+            var viewport = ScrollRect.viewport != null
+                ? ScrollRect.viewport
+                : ScrollRect.GetComponent<RectTransform>();
+            var viewportHeight = viewport.rect.height;
+            if (viewportHeight != _lastViewportHeight)
+                EnsureViewportCapacity(viewportHeight);
+            // Explicit navigation owns the published anchor until the content
+            // actually moves again. Virtualization still runs while it is pinned.
+            if (_programmaticViewportAnchorPinned
+                && !Mathf.Approximately(
+                    scrollPosition,
+                    _programmaticScrollPosition))
+                ClearProgrammaticViewportAnchor();
+            var rangeMutationAnchorPublished =
+                _rangeMutationAnchorPublished
+                && Mathf.Approximately(
+                    scrollPosition,
+                    _rangeMutationScrollPosition);
+            ClearRangeMutationAnchor();
+            if (!_dirty
+                && scrollPosition == _lastScrollPosition
+                && viewportHeight == _lastViewportHeight)
+                return;
+
+            _lastScrollPosition = scrollPosition;
+            _lastViewportHeight = viewportHeight;
+            if (!_programmaticViewportAnchorPinned
+                && !rangeMutationAnchorPublished)
+            {
+                UpdateViewportAnchor(false, !_viewportRestorePending);
+            }
             // How many items are not visible in current view
-            var offscreenItemCount = Mathf.Max(0, _models.Count - _cachedViews.Count);
+            var offscreenItemCount = Mathf.Max(
+                0,
+                _models.Count - _viewPool.ActiveCapacity);
             // How many items are above current view rect and not visible
             var itemsAboveViewRect = Mathf.FloorToInt(Mathf.Clamp(scrollPosition / PanelHeight, 0, offscreenItemCount));
 
@@ -124,56 +278,125 @@ namespace MaterialEditorAPI
             RowModel selectedItem = null;
             if (EventSystem.current != null)
             {
-                var cachedEntry = _cachedViews.Find(x => x.gameObject == EventSystem.current.currentSelectedGameObject);
-                if (cachedEntry != null)
-                    selectedItem = cachedEntry.CurrentModel;
+                selectedItem = _viewPool.FindBoundModel(
+                    EventSystem.current.currentSelectedGameObject);
             }
 
-            var count = 0;
-            bool eventSystem = EventSystem.current != null;
-            foreach (var item in _models.Skip(itemsAboveViewRect))
+            var visibleCount = Mathf.Min(
+                _viewPool.ActiveCapacity,
+                _models.Count - itemsAboveViewRect);
+            var hasEventSystem = EventSystem.current != null;
+            for (var index = 0; index < visibleCount; index++)
             {
-                if (_cachedViews.Count <= count) break;
+                var item = _models[itemsAboveViewRect + index];
+                var boundGameObject = _viewPool.Bind(index, item);
 
-                var cachedEntry = _cachedViews[count];
-
-                count++;
-
-                cachedEntry.Bind(item, false);
-                cachedEntry.SetVisible(true);
-
-                if (eventSystem && ReferenceEquals(selectedItem, item))
-                    EventSystem.current.SetSelectedGameObject(cachedEntry.gameObject);
+                if (hasEventSystem && ReferenceEquals(selectedItem, item))
+                    EventSystem.current.SetSelectedGameObject(boundGameObject);
             }
 
-            // If there are less items than cached list entries, disable unused cache entries
-            if (_cachedViews.Count > _models.Count)
-            {
-                foreach (var cacheEntry in _cachedViews.Skip(_models.Count))
-                    cacheEntry.SetVisible(false);
-            }
+            // Keep the GameObjects pooled, but release every stale model/listener graph.
+            _viewPool.ReleaseActiveFrom(visibleCount);
 
-            RecalculateOffsets(itemsAboveViewRect);
+            RecalculateOffsets(
+                itemsAboveViewRect,
+                _viewPool.ActiveCapacity);
 
             // Needed after changing _verticalLayoutGroup.padding since it doesn't make the object dirty
             LayoutRebuilder.MarkLayoutForRebuild(_verticalLayoutGroup.GetComponent<RectTransform>());
         }
 
-        private void RecalculateOffsets(int itemsAboveViewRect)
+        private void RecalculateOffsets(
+            int itemsAboveViewRect,
+            int activeViewCapacity)
         {
             var topOffset = Mathf.RoundToInt(itemsAboveViewRect * PanelHeight);
             _verticalLayoutGroup.padding.top = _paddingTop + topOffset;
 
             var totalHeight = _models.Count * PanelHeight;
-            var cacheEntriesHeight = _cachedViews.Count * PanelHeight;
+            var cacheEntriesHeight = activeViewCapacity * PanelHeight;
             var trailingHeight = totalHeight - cacheEntriesHeight - topOffset;
             _verticalLayoutGroup.padding.bottom = Mathf.FloorToInt(Mathf.Max(0, trailingHeight) + _paddingBot);
         }
 
         internal int ViewportAnchorIndex => _viewportAnchorIndex;
+        internal bool ViewportAnchorIsProgrammatic =>
+            _programmaticViewportAnchorPinned;
+        internal int ActiveViewCapacity => _viewPool.ActiveCapacity;
+        internal int CachedViewCount => _viewPool.CachedViewCount;
+
+        internal bool TryGetVisibleRowRange(
+            out int firstVisibleRowIndex,
+            out int lastVisibleRowIndex)
+        {
+            firstVisibleRowIndex = -1;
+            lastVisibleRowIndex = -1;
+            if (_models.Count == 0
+                || ScrollRect == null
+                || ScrollRect.content == null)
+                return false;
+
+            var viewport = ScrollRect.viewport != null
+                ? ScrollRect.viewport
+                : ScrollRect.GetComponent<RectTransform>();
+            if (viewport == null)
+                return false;
+
+            var viewportHeight = viewport.rect.height;
+            if (viewportHeight <= 0f
+                || float.IsNaN(viewportHeight)
+                || float.IsInfinity(viewportHeight))
+                return false;
+
+            var scrollPosition = Mathf.Max(
+                0f,
+                ScrollRect.content.localPosition.y);
+            firstVisibleRowIndex = Mathf.Clamp(
+                Mathf.FloorToInt(scrollPosition / PanelHeight),
+                0,
+                _models.Count - 1);
+            const float boundaryEpsilon = 0.001f;
+            var visibleBottom = Mathf.Max(
+                scrollPosition,
+                scrollPosition + viewportHeight - boundaryEpsilon);
+            lastVisibleRowIndex = Mathf.Clamp(
+                Mathf.FloorToInt(visibleBottom / PanelHeight),
+                firstVisibleRowIndex,
+                _models.Count - 1);
+            return true;
+        }
+
+        internal VirtualListRowAnchorResolver.TopRowAnchor CaptureTopRowAnchor()
+        {
+            return VirtualListRowAnchorResolver.Capture(
+                _models,
+                ScrollRect.content.localPosition.y,
+                PanelHeight);
+        }
+
+        internal void RestoreTopRowAnchor(
+            VirtualListRowAnchorResolver.TopRowAnchor anchor,
+            bool publishViewportAnchor = true)
+        {
+            ClearProgrammaticViewportAnchor();
+            ClearRangeMutationAnchor();
+            var restoreVersion = ++_viewportRestoreVersion;
+            _viewportRestorePending = true;
+            ApplyTopRowAnchor(anchor, publishViewportAnchor);
+            StartCoroutine(RestoreTopRowAnchorAfterLayout(anchor, restoreVersion));
+        }
+
+        internal void PublishViewportAnchor()
+        {
+            ViewportAnchorIndexChanged?.Invoke(_viewportAnchorIndex);
+        }
 
         internal void ScrollToIndex(int index)
         {
+            _viewportRestoreVersion++;
+            _viewportRestorePending = false;
+            ClearProgrammaticViewportAnchor();
+            ClearRangeMutationAnchor();
             if (_models.Count == 0)
                 return;
 
@@ -189,10 +412,80 @@ namespace MaterialEditorAPI
             ScrollRect.StopMovement();
             ScrollRect.content.localPosition = position;
             _dirty = true;
-            UpdateViewportAnchor(true);
+            // The requested row is the semantic selection even when the last rows
+            // cannot be aligned with the top because the scroll position clamps.
+            _programmaticViewportAnchorPinned = true;
+            _programmaticScrollPosition = position.y;
+            SetViewportAnchorIndex(index, true, true);
         }
 
-        private void UpdateViewportAnchor(bool force)
+        private void ClearProgrammaticViewportAnchor()
+        {
+            _programmaticViewportAnchorPinned = false;
+            _programmaticScrollPosition = float.NaN;
+        }
+
+        private void ClearRangeMutationAnchor()
+        {
+            _rangeMutationAnchorPublished = false;
+            _rangeMutationScrollPosition = float.NaN;
+        }
+
+        private IEnumerator RestoreTopRowAnchorAfterLayout(
+            VirtualListRowAnchorResolver.TopRowAnchor anchor,
+            int restoreVersion)
+        {
+            yield return null;
+            if (restoreVersion != _viewportRestoreVersion)
+                yield break;
+
+            _viewportRestorePending = false;
+            ApplyTopRowAnchor(anchor, false);
+        }
+
+        private void ApplyTopRowAnchor(
+            VirtualListRowAnchorResolver.TopRowAnchor anchor,
+            bool publishViewportAnchor)
+        {
+            if (_models.Count == 0)
+            {
+                var emptyPosition = ScrollRect.content.localPosition;
+                emptyPosition.y = 0f;
+                ScrollRect.StopMovement();
+                ScrollRect.content.localPosition = emptyPosition;
+                _dirty = true;
+                UpdateViewportAnchor(true, publishViewportAnchor);
+                return;
+            }
+
+            if (anchor == null)
+            {
+                if (publishViewportAnchor)
+                    PublishViewportAnchor();
+                return;
+            }
+
+            var targetIndex = VirtualListRowAnchorResolver.ResolveRestoreIndex(
+                anchor,
+                _models);
+            var viewport = ScrollRect.viewport != null
+                ? ScrollRect.viewport
+                : ScrollRect.GetComponent<RectTransform>();
+            var maximum = Mathf.Max(
+                0f,
+                _models.Count * PanelHeight - viewport.rect.height);
+            var position = ScrollRect.content.localPosition;
+            position.y = Mathf.Clamp(
+                targetIndex * PanelHeight + anchor.OffsetWithinRow,
+                0f,
+                maximum);
+            ScrollRect.StopMovement();
+            ScrollRect.content.localPosition = position;
+            _dirty = true;
+            UpdateViewportAnchor(true, publishViewportAnchor);
+        }
+
+        private void UpdateViewportAnchor(bool force, bool publish = true)
         {
             int next;
             if (_models.Count == 0)
@@ -212,17 +505,213 @@ namespace MaterialEditorAPI
                     _models.Count - 1);
             }
 
+            SetViewportAnchorIndex(next, force, publish);
+        }
+
+        private void SetViewportAnchorIndex(
+            int next,
+            bool force,
+            bool publish)
+        {
             if (!force && next == _viewportAnchorIndex)
                 return;
 
             _viewportAnchorIndex = next;
-            ViewportAnchorIndexChanged?.Invoke(next);
+            if (publish)
+                ViewportAnchorIndexChanged?.Invoke(next);
         }
 
         public void SelectFirstItem()
         {
-            var entry = _cachedViews.FirstOrDefault();
-            if (entry != null) entry.GetComponent<Button>().Select();
+            _viewPool.SelectFirst();
+        }
+
+        private float GetViewportHeight()
+        {
+            var viewport = ScrollRect.viewport != null
+                ? ScrollRect.viewport
+                : ScrollRect.GetComponent<RectTransform>();
+            return viewport.rect.height;
+        }
+    }
+
+    internal static class VirtualListCachePolicy
+    {
+        internal static int MaximumViewCount
+        {
+            get
+            {
+                var maximumMainHeight =
+                    MaterialEditorTheme.Metrics.CanvasReferenceHeight
+                    * (1f - 2f
+                        * MaterialEditorTheme.Metrics.ResponsiveOuterMarginFraction);
+                var maximumViewportHeight = Math.Max(
+                    0f,
+                    maximumMainHeight
+                    - MaterialEditorTheme.Metrics.TopBarHeight
+                    - MaterialEditorTheme.Metrics.Margin * 1.5f);
+                return UnboundedViewCount(
+                    maximumViewportHeight,
+                    MaterialEditorTheme.Metrics.RowHeight);
+            }
+        }
+
+        internal static int RequiredViewCount(
+            float viewportHeight,
+            float rowHeight,
+            int modelCount)
+        {
+            if (modelCount <= 0
+                || viewportHeight <= 0f
+                || rowHeight <= 0f
+                || float.IsNaN(viewportHeight)
+                || float.IsInfinity(viewportHeight)
+                || float.IsNaN(rowHeight)
+                || float.IsInfinity(rowHeight))
+                return 0;
+
+            return Math.Min(
+                modelCount,
+                Math.Min(
+                    MaximumViewCount,
+                    UnboundedViewCount(viewportHeight, rowHeight)));
+        }
+
+        private static int UnboundedViewCount(
+            float viewportHeight,
+            float rowHeight)
+        {
+            return (int)Math.Ceiling(viewportHeight / rowHeight) + 1;
+        }
+    }
+    internal sealed class VirtualListViewPool
+    {
+        private static readonly bool InstantiateWithParentExists =
+            typeof(UnityEngine.Object).GetMethod(
+                "Instantiate",
+                new[] { typeof(GameObject), typeof(Transform) }) != null;
+
+        private readonly GameObject _entryTemplate;
+        private readonly List<RowView> _cachedViews = new List<RowView>();
+
+        internal VirtualListViewPool(GameObject entryTemplate)
+        {
+            _entryTemplate = entryTemplate
+                ?? throw new ArgumentNullException(nameof(entryTemplate));
+            SetupEntryTemplate();
+        }
+
+        internal int ActiveCapacity { get; private set; }
+
+        internal int CachedViewCount
+        {
+            get { return _cachedViews.Count; }
+        }
+
+        internal bool EnsureCapacity(
+            float viewportHeight,
+            float rowHeight,
+            int modelCount)
+        {
+            var required = VirtualListCachePolicy.RequiredViewCount(
+                viewportHeight,
+                rowHeight,
+                modelCount);
+            while (_cachedViews.Count < required)
+                _cachedViews.Add(CreatePooledView());
+
+            if (ActiveCapacity == required)
+                return false;
+
+            if (required < ActiveCapacity)
+            {
+                for (var index = required;
+                     index < ActiveCapacity;
+                     index++)
+                    _cachedViews[index].Release();
+            }
+
+            ActiveCapacity = required;
+return true;
+        }
+
+        internal RowModel FindBoundModel(GameObject selectedGameObject)
+        {
+            for (var index = 0; index < _cachedViews.Count; index++)
+            {
+                var cachedEntry = _cachedViews[index];
+                if (cachedEntry.gameObject == selectedGameObject)
+                    return cachedEntry.CurrentModel;
+            }
+            return null;
+        }
+
+        internal GameObject Bind(int index, RowModel model)
+        {
+            var cachedEntry = _cachedViews[index];
+            cachedEntry.Bind(model, false);
+            cachedEntry.SetVisible(true);
+            return cachedEntry.gameObject;
+        }
+
+        internal void ReleaseActiveFrom(int startIndex)
+        {
+            for (var index = startIndex; index < ActiveCapacity; index++)
+                _cachedViews[index].Release();
+        }
+
+        internal void ReleaseCachedFrom(int startIndex)
+        {
+            for (var index = startIndex; index < _cachedViews.Count; index++)
+                _cachedViews[index].Release();
+        }
+
+        internal void ReleaseAll()
+        {
+            for (var index = 0; index < _cachedViews.Count; index++)
+                _cachedViews[index].Release();
+        }
+
+        internal void SuspendListeners()
+        {
+            for (var index = 0; index < _cachedViews.Count; index++)
+                _cachedViews[index].SuspendListeners();
+        }
+
+        internal void SelectFirst()
+        {
+            if (ActiveCapacity > 0)
+                _cachedViews[0].GetComponent<Button>().Select();
+        }
+
+        private void SetupEntryTemplate()
+        {
+            _entryTemplate.SetActive(false);
+
+            var rowView = _entryTemplate.AddComponent<RowView>();
+            var listEntry = _entryTemplate.AddComponent<RowBinder>();
+            rowView.Initialize(listEntry);
+            rowView.Bind(null, true);
+}
+
+        private RowView CreatePooledView()
+        {
+            GameObject copy;
+            if (InstantiateWithParentExists)
+            {
+                copy = UnityEngine.Object.Instantiate(
+                    _entryTemplate,
+                    _entryTemplate.transform.parent);
+            }
+            else
+            {
+                copy = UnityEngine.Object.Instantiate(_entryTemplate);
+                copy.transform.parent = _entryTemplate.transform.parent;
+            }
+            var entry = copy.GetComponent<RowView>();
+            entry.Initialize(copy.GetComponent<RowBinder>());
+            entry.Release();
+            return entry;
         }
     }
 }

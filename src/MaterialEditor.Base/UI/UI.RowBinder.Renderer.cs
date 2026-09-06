@@ -53,19 +53,53 @@ namespace MaterialEditorAPI
         {
             var controls = _controls.Renderer;
             controls.SetVisible(true);
-            ChangedStateBinding.SetLabel(controls.Label, item.LabelText);
+            System.Action refreshCollapsedGlyph = () =>
+                controls.CollapseButton.GetComponentInChildren<Text>().text =
+                    item.Collapsed
+                        ? FoldGlyphs.Collapsed
+                        : FoldGlyphs.Expanded;
+            refreshCollapsedGlyph();
+            UnityEngine.Events.UnityAction toggleCollapsed = () =>
+            {
+                item.CollapsedOnChange(!item.Collapsed);
+                refreshCollapsedGlyph();
+            };
+            listeners.Listen(controls.HeaderButton, toggleCollapsed);
+            listeners.Listen(controls.CollapseButton, toggleCollapsed);
             controls.Name.text = item.RendererName;
-            listeners.Listen(controls.ExportUvButton, () => item.ExportUv());
-            listeners.Listen(controls.ExportObjButton, () => item.ExportObj());
-            listeners.Listen(
+            TooltipBinding.Bind(
+                controls.Name.gameObject,
+                item.TooltipText,
+                item.RendererName,
+                controls.Name);
+            MaterialEditorStyles.SetControlAvailability(
+                controls.ExportUvsButton,
+                item.ExportUv != null,
+                MaterialEditorControlAvailabilityMode.LegacyPassive);
+            MaterialEditorStyles.SetControlAvailability(
+                controls.ExportMeshButton,
+                item.ExportObj != null,
+                MaterialEditorControlAvailabilityMode.LegacyPassive);
+            if (item.ExportUv != null)
+                listeners.Listen(controls.ExportUvsButton, () => item.ExportUv());
+            if (item.ExportObj != null)
+                listeners.Listen(controls.ExportMeshButton, () => item.ExportObj());
+            TimelineColumnBinding.Bind(
                 controls.SelectInterpolableButton,
-                () => item.SelectInterpolable());
+                listeners,
+                null);
             LabelClickBinding.Bind(
                 listeners,
                 controls.LabelClickTrigger,
                 item,
                 MaterialEditorLabelType.Renderer,
-                () => item.RendererName);
+                () => item.RendererName,
+                pointerEventData =>
+                {
+                    if (pointerEventData.button
+                        == UnityEngine.EventSystems.PointerEventData.InputButton.Left)
+                        toggleCollapsed();
+                });
         }
 
         private static void BindToggle(
@@ -101,6 +135,7 @@ namespace MaterialEditorAPI
                     controls.Panel);
 
             controls.Dropdown.Set(item.Value);
+            MaterialEditorDropdownCaptionFitter.Refresh(controls.Dropdown);
             refresh();
             listeners.Listen(controls.Dropdown, value =>
             {

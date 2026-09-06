@@ -1,6 +1,6 @@
 # Material Editor Public API Compatibility
 
-This document defines the compatibility boundary for the Material Editor modernization work.
+This document defines the compatibility boundary for the Material Editor public API.
 
 ## Baseline
 
@@ -52,6 +52,12 @@ Reviewed additions currently recorded in `PublicAPI.Unshipped.txt` include the s
 - custom property descriptor providers and semantic property editor factories
 - `MaterialEditorEditService`, a stable facade over repository-backed edits
 - optional English property tooltip metadata and the `PropertyTooltips` capability
+- bounded numeric conditions and the `ConditionalPropertyVisibility`
+  capability
+- semantic Enum, Vector2/3/4, and Float-backed Toggle editor contracts with
+  append-only capability flags
+- `MaterialAPI.ShaderPropertyType.Vector = 4`, Vector copy payloads,
+  `MaterialAPI.SetVector`, and repository-backed Vector facade operations
 
 These APIs deliberately do not expose the internal row model, row view, binder registry, or concrete Unity controls.
 
@@ -59,7 +65,7 @@ The exact constructors, methods, properties, fields, enum values, optional param
 
 ## Compatibility Rules
 
-The modernization work must preserve the following unless an explicitly approved breaking release says otherwise:
+Public API changes must preserve the following unless an explicitly approved breaking release says otherwise:
 
 - Existing public types and members remain present with binary-compatible signatures.
 - Existing enum member numeric values do not change.
@@ -67,7 +73,7 @@ The modernization work must preserve the following unless an explicitly approved
 - Public types do not move to a different namespace or assembly.
 - Public or protected members on `MaterialEditorPluginBase` and `MaterialEditorUI` remain available even when their implementation moves to new internal services.
 - New APIs are additive and are first declared in `PublicAPI.Unshipped.txt`.
-- Public API removals are not allowed as part of the UI modernization.
+- Public API removals require an explicitly approved breaking release.
 - Registration methods document ownership and disposal behavior; changing callback order or lifetime semantics requires compatibility review.
 - Capability flags and enum numeric values are append-only.
 - New property editor families are added as new semantic editor types rather than by exposing internal controls.

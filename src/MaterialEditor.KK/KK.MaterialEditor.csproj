@@ -15,9 +15,12 @@
   </ItemGroup>
   <ItemGroup>
     <PackageReference Include="IllusionLibs.XUnity.ResourceRedirector" Version="4.18.0" />
-    <PackageReference Include="IllusionModdingAPI.KKAPI" Version="1.45.1" />
+    <!-- Match the dependency set loaded by the target Koikatsu installation. -->
+    <PackageReference Include="IllusionModdingAPI.KKAPI" Version="1.42.2" />
+    <PackageReference Include="Microsoft.Unity.Analyzers" Version="1.25.0" PrivateAssets="all" />
     <PackageReference Include="SharpZipLib" Version="[0.86.0,1.0)" NoWarn="NU1903, NU1902" />
-    <PackageReference Include="Sideloader.Koikatu" Version="21.0" />
+    <PackageReference Include="Sideloader.Koikatu" Version="20.0" />
+    <PackageReference Update="ExtensibleSaveFormat.Koikatu" Version="20.0" />
   </ItemGroup>
   <Import Project="..\UIUtility\UIUtility.projitems" Label="Shared" />
   <Import Project="..\Shared\Shared.projitems" Label="Shared" />

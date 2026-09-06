@@ -6,7 +6,10 @@ using static MaterialEditorAPI.MaterialAPI;
 
 namespace KK_Plugins.MaterialEditor
 {
-    internal sealed class CharaMaterialEditRepository : IMaterialEditRepository
+    internal sealed class CharaMaterialEditRepository :
+        IMaterialEditRepository,
+        IMaterialTextureImportCompletionRepository,
+        IMaterialCubemapDataImportRepository
     {
         private readonly Func<GameObject, MaterialEditorCharaController> _controllerResolver;
 
@@ -163,10 +166,82 @@ namespace KK_Plugins.MaterialEditor
             GetController(gameObject).SetMaterialTextureFromFile(objectData.Slot, objectData.ObjectType, material, propertyName, filePath, gameObject, true);
         }
 
+        public void SetMaterialTexture(
+            object data,
+            Material material,
+            string propertyName,
+            string filePath,
+            GameObject gameObject,
+            Action<bool> completed)
+        {
+            var objectData = GetObjectData(data);
+            GetController(gameObject).QueueMaterialTextureFromFile(
+                objectData.Slot,
+                objectData.ObjectType,
+                material,
+                propertyName,
+                filePath,
+                gameObject,
+                completed);
+        }
+
         public void RemoveMaterialTexture(object data, Material material, string propertyName, GameObject gameObject)
         {
             var objectData = GetObjectData(data);
             GetController(gameObject).RemoveMaterialTexture(objectData.Slot, objectData.ObjectType, material, propertyName, gameObject);
+        }
+
+        public bool GetMaterialCubemapValueOriginal(object data, Material material, string propertyName, GameObject gameObject)
+        {
+            var objectData = GetObjectData(data);
+            return GetController(gameObject).GetMaterialCubemapOriginal(
+                objectData.Slot,
+                objectData.ObjectType,
+                material,
+                propertyName,
+                gameObject);
+        }
+
+        public void SetMaterialCubemap(object data, Material material, string propertyName, string filePath, GameObject gameObject)
+        {
+            var objectData = GetObjectData(data);
+            GetController(gameObject).SetMaterialCubemapFromFile(
+                objectData.Slot,
+                objectData.ObjectType,
+                material,
+                propertyName,
+                filePath,
+                gameObject);
+        }
+
+        public bool SetMaterialCubemap(
+            object data,
+            Material material,
+            string propertyName,
+            byte[] encodedData,
+            MaterialEditorCubemapContentKey contentKey,
+            GameObject gameObject)
+        {
+            var objectData = GetObjectData(data);
+            return GetController(gameObject).SetMaterialCubemap(
+                objectData.Slot,
+                objectData.ObjectType,
+                material,
+                propertyName,
+                encodedData,
+                contentKey,
+                gameObject);
+        }
+
+        public void RemoveMaterialCubemap(object data, Material material, string propertyName, GameObject gameObject)
+        {
+            var objectData = GetObjectData(data);
+            GetController(gameObject).RemoveMaterialCubemap(
+                objectData.Slot,
+                objectData.ObjectType,
+                material,
+                propertyName,
+                gameObject);
         }
 
         public Vector2? GetMaterialTextureOffsetOriginal(object data, Material material, string propertyName, GameObject gameObject)
@@ -221,6 +296,24 @@ namespace KK_Plugins.MaterialEditor
         {
             var objectData = GetObjectData(data);
             GetController(gameObject).RemoveMaterialColorProperty(objectData.Slot, objectData.ObjectType, material, propertyName, gameObject);
+        }
+
+        public Vector4? GetMaterialVectorPropertyValueOriginal(object data, Material material, string propertyName, GameObject gameObject)
+        {
+            var objectData = GetObjectData(data);
+            return GetController(gameObject).GetMaterialVectorPropertyValueOriginal(objectData.Slot, objectData.ObjectType, material, propertyName, gameObject);
+        }
+
+        public void SetMaterialVectorProperty(object data, Material material, string propertyName, Vector4 value, GameObject gameObject)
+        {
+            var objectData = GetObjectData(data);
+            GetController(gameObject).SetMaterialVectorProperty(objectData.Slot, objectData.ObjectType, material, propertyName, value, gameObject);
+        }
+
+        public void RemoveMaterialVectorProperty(object data, Material material, string propertyName, GameObject gameObject)
+        {
+            var objectData = GetObjectData(data);
+            GetController(gameObject).RemoveMaterialVectorProperty(objectData.Slot, objectData.ObjectType, material, propertyName, gameObject);
         }
 
         public float? GetMaterialFloatPropertyValueOriginal(object data, Material material, string propertyName, GameObject gameObject)

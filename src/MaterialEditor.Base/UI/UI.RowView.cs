@@ -27,6 +27,17 @@ namespace MaterialEditorAPI
             Binder.Bind(model, force);
         }
 
+        internal void SuspendListeners()
+        {
+            Binder.SuspendListeners();
+        }
+
+        internal void Release()
+        {
+            Binder.Release();
+            SetVisible(false);
+        }
+
         internal void SetVisible(bool visible)
         {
             if (gameObject.activeSelf != visible)

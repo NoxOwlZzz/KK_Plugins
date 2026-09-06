@@ -69,6 +69,13 @@ namespace MaterialEditorAPI
         public void RemoveMaterialTexture(object data, Material material, string propertyName, GameObject gameObject) =>
             _ui.RemoveMaterialTexture(data, material, propertyName, gameObject);
 
+        public bool GetMaterialCubemapValueOriginal(object data, Material material, string propertyName, GameObject gameObject) =>
+            _ui.GetMaterialCubemapValueOriginal(data, material, propertyName, gameObject);
+        public void SetMaterialCubemap(object data, Material material, string propertyName, string filePath, GameObject gameObject) =>
+            _ui.SetMaterialCubemap(data, material, propertyName, filePath, gameObject);
+        public void RemoveMaterialCubemap(object data, Material material, string propertyName, GameObject gameObject) =>
+            _ui.RemoveMaterialCubemap(data, material, propertyName, gameObject);
+
         public Vector2? GetMaterialTextureOffsetOriginal(object data, Material material, string propertyName, GameObject gameObject) =>
             _ui.GetMaterialTextureOffsetOriginal(data, material, propertyName, gameObject);
         public void SetMaterialTextureOffset(object data, Material material, string propertyName, Vector2 value, GameObject gameObject) =>
@@ -89,6 +96,30 @@ namespace MaterialEditorAPI
             _ui.SetMaterialColorProperty(data, material, propertyName, value, gameObject);
         public void RemoveMaterialColorProperty(object data, Material material, string propertyName, GameObject gameObject) =>
             _ui.RemoveMaterialColorProperty(data, material, propertyName, gameObject);
+
+        // Color and Vector4 are lossless four-float storage. Implementations using the Color API
+        // store vector data under the color key; repository-backed builds migrate that key in memory
+        // when schema metadata identifies a Vector. SetVector runs last to preserve vector semantics
+        // and binary compatibility.
+        public Vector4? GetMaterialVectorPropertyValueOriginal(object data, Material material, string propertyName, GameObject gameObject)
+        {
+            var value = _ui.GetMaterialColorPropertyValueOriginal(data, material, propertyName, gameObject);
+            return value == null
+                ? (Vector4?)null
+                : new Vector4(value.Value.r, value.Value.g, value.Value.b, value.Value.a);
+        }
+        public void SetMaterialVectorProperty(object data, Material material, string propertyName, Vector4 value, GameObject gameObject)
+        {
+            _ui.SetMaterialColorProperty(data, material, propertyName, new Color(value.x, value.y, value.z, value.w), gameObject);
+            SetVector(gameObject, material.NameFormatted(), propertyName, value);
+        }
+        public void RemoveMaterialVectorProperty(object data, Material material, string propertyName, GameObject gameObject)
+        {
+            var original = GetMaterialVectorPropertyValueOriginal(data, material, propertyName, gameObject);
+            _ui.RemoveMaterialColorProperty(data, material, propertyName, gameObject);
+            if (original != null)
+                SetVector(gameObject, material.NameFormatted(), propertyName, original.Value);
+        }
 
         public float? GetMaterialFloatPropertyValueOriginal(object data, Material material, string propertyName, GameObject gameObject) =>
             _ui.GetMaterialFloatPropertyValueOriginal(data, material, propertyName, gameObject);

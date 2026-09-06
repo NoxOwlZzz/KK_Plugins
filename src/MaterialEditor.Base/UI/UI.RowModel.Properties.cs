@@ -29,6 +29,7 @@ namespace MaterialEditorAPI
 
         internal float Value { get; set; }
         internal float OriginalValue { get; set; }
+        internal bool HasRange { get; set; }
         internal float SliderMinimum { get; set; }
         internal float SliderMaximum { get; set; } = 1f;
         internal Action SelectInterpolable { get; set; }
@@ -53,10 +54,29 @@ namespace MaterialEditorAPI
 
         internal float Value { get; set; }
         internal float OriginalValue { get; set; }
+        internal bool IsMixed { get; set; }
         internal IList<MaterialEditorEnumOption> Options { get; set; }
-        internal IList<float> CurrentValues { get; set; }
         internal Action SelectInterpolable { get; set; }
         internal Action<float> ValueOnChange { get; set; }
+        internal Action ValueOnReset { get; set; }
+    }
+
+    internal sealed class VectorPropertyRowModel : RowModel
+    {
+        internal VectorPropertyRowModel(string labelText)
+            : base(RowItemType.VectorProperty, labelText)
+        {
+        }
+
+        internal Vector4 Value { get; set; }
+        internal Vector4 OriginalValue { get; set; }
+        internal int ComponentCount { get; set; } = 4;
+        internal float? Minimum { get; set; }
+        internal float? Maximum { get; set; }
+        internal bool[] MixedComponents { get; set; }
+        internal Action SelectInterpolable { get; set; }
+        internal Action<int, float> ComponentOnChange { get; set; }
+        internal Action<Vector4> ValueOnChange { get; set; }
         internal Action ValueOnReset { get; set; }
     }
 
@@ -69,7 +89,9 @@ namespace MaterialEditorAPI
 
         internal float Value { get; set; }
         internal float OriginalValue { get; set; }
-        internal bool Invert { get; set; }
+        internal float OffValue { get; set; }
+        internal float OnValue { get; set; } = 1f;
+        internal bool IsMixed { get; set; }
         internal Action SelectInterpolable { get; set; }
         internal Action<float> ValueOnChange { get; set; }
         internal Action ValueOnReset { get; set; }

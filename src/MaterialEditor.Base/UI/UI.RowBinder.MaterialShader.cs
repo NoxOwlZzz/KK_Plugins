@@ -34,15 +34,17 @@ namespace MaterialEditorAPI
             var controls = _controls.Material;
             controls.SetVisible(true);
             controls.CollapseButton.GetComponentInChildren<Text>().text =
-                item.Collapsed ? "+" : "-";
+                item.Collapsed
+                    ? FoldGlyphs.Collapsed
+                    : FoldGlyphs.Expanded;
             listeners.Listen(
                 controls.CollapseButton, () => item.CollapsedOnChange(!item.Collapsed));
-            ChangedStateBinding.SetLabel(controls.Label, item.LabelText);
             controls.Name.text = item.MaterialName;
             TooltipBinding.Bind(
                 controls.Name.gameObject,
                 item.TooltipText,
-                "Material name");
+                item.MaterialName,
+                controls.Name);
             LabelClickBinding.Bind(
                 listeners,
                 controls.LabelClickTrigger,
@@ -50,26 +52,82 @@ namespace MaterialEditorAPI
                 MaterialEditorLabelType.Material,
                 () => item.MaterialName);
 
-            listeners.Listen(controls.CopyButton, () => item.Copy.Invoke());
-            listeners.Listen(controls.PasteButton, () => item.Paste.Invoke());
+            System.Action refreshPasteAvailability = () =>
+            {
+                var clipboard = MaterialEditorPluginBase.CopyData;
+                var canPaste = MaterialEditorClipboardPolicy.CanPaste(
+                    clipboard,
+                    item.Material,
+                    item.Projector);
+                MaterialEditorStyles.SetControlAvailability(
+                    controls.PasteEditsButton,
+                    canPaste,
+                    MaterialEditorControlAvailabilityMode.LegacyPassive);
+                if (controls.PasteEditsTooltip != null)
+                {
+                    controls.PasteEditsTooltip.SetStandardTooltipText(
+                        canPaste
+                            ? "Paste all copied edits into this material"
+                            : clipboard == null || clipboard.IsEmpty
+                                ? "Copy material edits before pasting"
+                                : "Copied edits are not compatible with this material");
+                }
+            };
+            refreshPasteAvailability();
+            _controls.Owner.ListenForClipboardChanges(
+                listeners,
+                refreshPasteAvailability);
 
-            var pasteText = controls.PasteButton.GetComponentInChildren<Text>();
-            controls.PasteButton.enabled = !MaterialEditorPluginBase.CopyData.IsEmpty;
-            pasteText.color = controls.PasteButton.enabled ? Color.black : Color.gray;
-
-            controls.CopyRemoveButton.GetComponentInChildren<Text>().text =
-                item.MaterialName.Contains(MaterialAPI.MaterialCopyPostfix)
-                    ? "Remove Material"
-                    : "Copy Material";
-            controls.CopyRemoveButton.gameObject.SetActive(item.CopyOrRemove != null);
-            if (item.CopyOrRemove != null)
-                listeners.Listen(controls.CopyRemoveButton, () => item.CopyOrRemove.Invoke());
-
-            controls.RenameButton.gameObject.SetActive(item.Rename != null);
+            MaterialEditorStyles.SetControlAvailability(
+                controls.RenameButton,
+                item.Rename != null,
+                MaterialEditorControlAvailabilityMode.Hidden);
+            MaterialEditorStyles.SetControlAvailability(
+                controls.CopyEditsButton,
+                item.Copy != null);
             if (item.Rename != null)
-                listeners.Listen(controls.RenameButton, () => item.Rename.Invoke());
-        }
+                listeners.Listen(controls.RenameButton, () => item.Rename());
+            if (item.Copy != null)
+                listeners.Listen(controls.CopyEditsButton, () => item.Copy());
+            listeners.Listen(controls.PasteEditsButton, () =>
+            {
+                if (MaterialEditorClipboardPolicy.CanPaste(
+                    MaterialEditorPluginBase.CopyData,
+                    item.Material,
+                    item.Projector))
+                    item.Paste();
+            });
 
+            var removesCopy = item.MaterialName != null
+                              && item.MaterialName.Contains(
+                                  MaterialAPI.MaterialCopyPostfix);
+            var copyOrRemoveAvailable = item.CopyOrRemove != null;
+            MaterialEditorStyles.SetControlAvailability(
+                controls.CopyOrRemoveButton,
+                copyOrRemoveAvailable,
+                MaterialEditorControlAvailabilityMode.Hidden);
+            if (controls.CopyOrRemoveLabel != null)
+            {
+                controls.CopyOrRemoveLabel.text = removesCopy
+                    ? "Remove"
+                    : "Duplicate";
+            }
+            if (controls.CopyOrRemoveTooltip != null)
+            {
+                controls.CopyOrRemoveTooltip.SetStandardTooltipText(
+                    !copyOrRemoveAvailable
+                        ? "This material cannot be duplicated or removed"
+                        : removesCopy
+                            ? "Remove this duplicated material instance"
+                            : "Make a copy of this material.\n\nUseful for overlaying different effects onto an object with different material shaders/properties");
+            }
+            if (copyOrRemoveAvailable)
+            {
+                listeners.Listen(
+                    controls.CopyOrRemoveButton,
+                    () => item.CopyOrRemove());
+            }
+        }
         private void BindShader(ShaderRowModel item, ListenerScope listeners)
         {
             var controls = _controls.Shader;
@@ -77,11 +135,8 @@ namespace MaterialEditorAPI
             TooltipBinding.Bind(
                 controls.Label.gameObject,
                 item.TooltipText,
-                "Shader name");
-            controls.CollapseButton.GetComponentInChildren<Text>().text =
-                item.Collapsed ? FoldGlyphs.Collapsed : FoldGlyphs.Expanded;
-            listeners.Listen(
-                controls.CollapseButton, () => item.CollapsedOnChange(!item.Collapsed));
+                item.ShaderName,
+                controls.Label);
 
             controls.CategoriesCollapseButton.gameObject.SetActive(item.HasCategories);
             controls.CategoriesCollapseButton.GetComponentInChildren<Text>().text =
@@ -93,21 +148,6 @@ namespace MaterialEditorAPI
                     controls.CategoriesCollapseButton,
                     () => item.CategoriesCollapsedOnChange(!item.AllCategoriesCollapsed));
 
-            controls.UiModeButton.gameObject.SetActive(item.HasAdvancedProperties);
-            if (item.HasAdvancedProperties)
-            {
-                controls.UiModeButton.GetComponentInChildren<Text>().text =
-                    item.UiMode == MaterialEditorUiMode.Advanced
-                        ? "Advanced"
-                        : "Basic";
-                listeners.Listen(
-                    controls.UiModeButton,
-                    () => item.UiModeOnChange(
-                        item.UiMode == MaterialEditorUiMode.Advanced
-                            ? MaterialEditorUiMode.Basic
-                            : MaterialEditorUiMode.Advanced));
-            }
-
             System.Action refresh = () =>
                 ChangedStateBinding.Apply(
                     controls.Label,
@@ -116,10 +156,13 @@ namespace MaterialEditorAPI
                     controls.ResetButton,
                     controls.Panel);
 
-            var selectedIndex = controls.Dropdown.OptionIndex(item.ShaderName);
-            controls.Dropdown.Set(
-                Mathf.Clamp(selectedIndex, 0, controls.Dropdown.options.Count - 1));
+            var selectedIndex = controls.OptionCache.PrepareSelection(item.ShaderName);
+            if (selectedIndex >= 0)
+                controls.Dropdown.Set(selectedIndex);
             controls.Dropdown.captionText.text = item.ShaderName;
+            MaterialEditorDropdownCaptionFitter.Refresh(
+                controls.Dropdown,
+                item.ShaderName);
             refresh();
 
             listeners.Listen(controls.Dropdown, value =>
@@ -142,11 +185,13 @@ namespace MaterialEditorAPI
             });
             listeners.Listen(
                 controls.ResetButton,
-                () => controls.Dropdown.value = controls.Dropdown.OptionIndex(item.OriginalShaderName));
-            listeners.Listen(
-                controls.SelectInterpolableButton,
-                () => item.SelectInterpolable());
-
+                () =>
+                {
+                    var resetIndex = controls.OptionCache.PrepareSelection(
+                        item.OriginalShaderName);
+                    if (resetIndex >= 0)
+                        controls.Dropdown.value = resetIndex;
+                });
             AutoScrollToSelectionWithDropdown.Setup(controls.Dropdown);
             DropdownFilter.AddFilterUI(controls.Dropdown, "ShaderDropDown");
             LabelClickBinding.Bind(

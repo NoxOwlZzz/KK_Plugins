@@ -7,6 +7,8 @@ namespace MaterialEditorAPI
 {
     internal static class RendererRowViewFactory
     {
+        private const float RendererActionButtonWidth = 72f;
+
         internal static void CreateRows(Transform parent)
         {
             CreateRendererRow(parent);
@@ -52,19 +54,24 @@ namespace MaterialEditorAPI
         private static void CreateRendererRow(Transform parent)
         {
             var panel = RowViewFactorySupport.CreatePanel("RendererPanel", parent, RendererColor);
-            RowViewFactorySupport.CreateLabel(
-                "RendererLabel",
+            var headerButton = panel.gameObject.AddComponent<Button>();
+            headerButton.targetGraphic = panel;
+            headerButton.transition = Selectable.Transition.None;
+            var collapse = MaterialEditorControlFactory.CreateButton(
+                "RendererCollapseButton",
                 panel.transform,
-                string.Empty,
-                0f,
-                0f);
-
+                FoldGlyphs.Expanded);
+            RowViewFactorySupport.SetWidth(collapse, SmallButtonWidth);
+            TooltipManager.AddTooltip(
+                collapse.gameObject,
+                "Expand or collapse this renderer section");
             var rendererName = RowViewFactorySupport.CreateLabel(
                 "RendererText",
                 panel.transform,
                 string.Empty,
                 LabelWidth,
                 1f);
+            RowViewFactorySupport.ConfigurePropertyLabel(rendererName);
             rendererName.gameObject.AddComponent<LabelClickTrigger>();
             TooltipManager.AddTooltip(rendererName.gameObject, "Renderer name");
 
@@ -73,22 +80,26 @@ namespace MaterialEditorAPI
                 panel.transform,
                 "Select the properties (Enabled, Shadow casting mode and Receive shadows) of the currently selected renderer as interpolables in timeline");
 
-            var exportUv = MaterialEditorControlFactory.CreateButton(
-                "ExportUVButton",
+            var exportUvs = MaterialEditorControlFactory.CreateButton(
+                "RendererExportUvsButton",
                 panel.transform,
-                "Export UV Map");
-            RowViewFactorySupport.SetWidth(exportUv, RendererButtonWidth);
+                "Export UVs");
+            RowViewFactorySupport.SetWidth(
+                exportUvs,
+                RendererActionButtonWidth);
             TooltipManager.AddTooltip(
-                exportUv.gameObject,
+                exportUvs.gameObject,
                 "Export the UV map of this renderer.\n\nThe UV map is the 2d projection of the renderer with which to map textures to the 3d model. You can use this UV map as a guide to drawing on textures");
 
-            var exportObj = MaterialEditorControlFactory.CreateButton(
-                "ExportObjButton",
+            var exportMesh = MaterialEditorControlFactory.CreateButton(
+                "RendererExportMeshButton",
                 panel.transform,
-                "Export .obj");
-            RowViewFactorySupport.SetWidth(exportObj, RendererButtonWidth);
+                "Export Mesh");
+            RowViewFactorySupport.SetWidth(
+                exportMesh,
+                RendererActionButtonWidth);
             TooltipManager.AddTooltip(
-                exportObj.gameObject,
+                exportMesh.gameObject,
                 "Export the renderer as a .obj.\n\nYou can use the <i>ExportBakedMesh</i> and <i>ExportBakedWorldPosition</i> config options to change the exporting behaviour");
         }
 
@@ -102,13 +113,18 @@ namespace MaterialEditorAPI
             string toggleTooltip,
             string resetTooltip)
         {
-            var panel = RowViewFactorySupport.CreatePanel(panelName, parent, ItemColor);
-            RowViewFactorySupport.CreateLabel(
+            var panel = RowViewFactorySupport.CreatePanel(
+                panelName,
+                parent,
+                ItemColor,
+                true);
+            var label = RowViewFactorySupport.CreateLabel(
                 labelName,
                 panel.transform,
                 string.Empty,
                 LabelWidth,
                 1f);
+            RowViewFactorySupport.ConfigurePropertyLabel(label);
 
             var toggle = MaterialEditorControlFactory.CreateToggle(
                 toggleName,
@@ -121,7 +137,7 @@ namespace MaterialEditorAPI
             var reset = MaterialEditorControlFactory.CreateButton(
                 resetName,
                 panel.transform,
-                "Reset");
+                MaterialEditorTheme.Glyphs.Reset);
             RowViewFactorySupport.SetWidth(reset, ResetButtonWidth);
             TooltipManager.AddTooltip(reset.gameObject, resetTooltip);
         }
@@ -131,19 +147,29 @@ namespace MaterialEditorAPI
             var panel = RowViewFactorySupport.CreatePanel(
                 "RendererShadowCastingModePanel",
                 parent,
-                ItemColor);
-            RowViewFactorySupport.CreateLabel(
+                ItemColor,
+                true);
+            var label = RowViewFactorySupport.CreateLabel(
                 "RendererShadowCastingModeLabel",
                 panel.transform,
                 string.Empty,
                 LabelWidth,
                 1f);
+            RowViewFactorySupport.ConfigurePropertyLabel(label);
 
             var dropdown = MaterialEditorControlFactory.CreateDropdown(
                 "RendererShadowCastingModeDropdown",
                 panel.transform);
-            dropdown.transform.SetRect(0f, 0f, 0f, 1f, 0f, 0f, 100f);
-            dropdown.captionText.transform.SetRect(0f, 0f, 1f, 1f, 5f, 2f, -15f, -2f);
+            dropdown.transform.SetRect(
+                0f, 0f, 0f, 1f,
+                0f, 0f,
+                MaterialEditorTheme.Metrics.DropdownTemplateWidth);
+            dropdown.captionText.transform.SetRect(
+                0f, 0f, 1f, 1f,
+                MaterialEditorTheme.Spacing.DropdownCaptionLeftInset,
+                MaterialEditorTheme.Spacing.DropdownCaptionVerticalInset,
+                -MaterialEditorTheme.Spacing.DropdownCaptionRightInset,
+                -MaterialEditorTheme.Spacing.DropdownCaptionVerticalInset);
             dropdown.captionText.alignment = TextAnchor.MiddleLeft;
             dropdown.options.Clear();
             dropdown.options.Add(new Dropdown.OptionData("Off"));
@@ -163,7 +189,7 @@ namespace MaterialEditorAPI
             var reset = MaterialEditorControlFactory.CreateButton(
                 "RendererShadowCastingModeResetButton",
                 panel.transform,
-                "Reset");
+                MaterialEditorTheme.Glyphs.Reset);
             RowViewFactorySupport.SetWidth(reset, ResetButtonWidth);
             TooltipManager.AddTooltip(
                 reset.gameObject,

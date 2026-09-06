@@ -1,4 +1,11 @@
 <?xml version="1.0" encoding="utf-8" standalone="no"?>
+<!--
+  Material Editor shader-manifest template.
+
+  `schema-ver` is the Sideloader manifest version and remains 1.
+  `MaterialEditor SchemaVersion="2"` enables the additive UI metadata shown
+  below.
+-->
 <manifest schema-ver="1">
   <guid>{{Mod GUID}}</guid>
   <!-- Example: <guid>my.mod</guid> -->
@@ -17,92 +24,187 @@
   <!-- <game>Koikatsu Sunshine</game> -->
   <!-- <game>Koikatsu</game> -->
 
-  <MaterialEditor>
+  <MaterialEditor SchemaVersion="2">
     <!-- Optional English tooltip catalog stored as an XML TextAsset in an AssetBundle. -->
     <!-- Example: <TooltipCatalog AssetBundle="my_shaders/shader_assets.unity3d" Asset="material_editor_tooltips"/> -->
-    <TooltipCatalog AssetBundle="{{tooltip_asset_bundle_path.unity3d}}" Asset="{{tooltip_asset_name}}"/>
+    <!--
+    <TooltipCatalog
+        AssetBundle="{{tooltip_asset_bundle_path.unity3d}}"
+        Asset="{{tooltip_asset_name}}" />
+    -->
 
     <!-- A shader is defined by the following xml structure. -->
     <!-- Example: <Shader Name="My/ShaderA" AssetBundle="my_shaders/shader_a.unity3d" Asset="asset_shader_a"> -->
-    <Shader Name="{{ShaderName}}" AssetBundle="{{asset_bundle_path.unity3d}}" Asset="{{asset_name}}">
+    <Shader
+        Name="{{ShaderName}}"
+        AssetBundle="{{asset_bundle_path.unity3d}}"
+        Asset="{{asset_name}}">
 
-      <!-- Float property -->
-      <Property Name="{{PropertyName}}" Type="Float"/>
-      <!-- -->
-      <!-- Optional `Range` attribute -->
-      <Property Name="{{PropertyName}}" Type="Float" Range="{{min_value,max_value}}"/>
-      <!-- Example: <Property Name="PropertyName" Type="Float" Range="-1,1"/> -->
-      <!-- -->
-      <!-- Optional `DefaultValue` attribute -->
-      <Property Name="{{PropertyName}}" Type="Float" DefaultValue="{{value}}"/>
-      <!-- Example: <Property Name="PropertyName" Type="Float" DefaultValue="0"/> -->
-      <!-- -->
-      <!-- Optional `Hidden` attribute -->
-      <Property Name="{{PropertyName}}" Type="Float" Hidden="{{boolean}}"/>
-      <!-- Example: <Property Name="PropertyName" Type="Float" Hidden="True"/> -->
-      <!-- -->
-      <!-- Optional `Category` attribute -->
-      <Property Name="{{PropertyName}}" Type="Float" Category="{{category_name}}"/>
-      <!-- Example: <Property Name="PropertyName" Type="Float" Category="Category Name"/> -->
+      <!--
+        DisplayName controls the UI label; Name identifies the shader property
+        and persistence key. Tooltip is shown on hover. Declaration order
+        controls category and property order.
+      -->
+      <Property
+          Name="MainTex"
+          Type="Texture"
+          DisplayName="Main Texture"
+          Category="Main"
+          Group="Surface"
+          Tooltip="Primary surface texture." />
 
-      <!-- Color or vector property -->
-      <Property Name="{{PropertyName}}" Type="Color"/>
-      <!-- -->
-      <!-- Optional `DefaultValue` attribute -->
-      <Property Name="{{PropertyName}}" Type="Color" DefaultValue="{{value}}"/>
-      <!-- Example: <Property Name="PropertyName" Type="Color" DefaultValue="0,0.5,0.5,1"/> -->
-      <!-- -->
-      <!-- Optional `Hidden` attribute -->
-      <Property Name="{{PropertyName}}" Type="Color" Hidden="{{boolean}}"/>
-      <!-- Example: <Property Name="PropertyName" Type="Color" Hidden="True"/> -->
-      <!-- -->
-      <!-- Optional `Category` attribute -->
-      <Property Name="{{PropertyName}}" Type="Color" Category="{{category_name}}"/>
-      <!-- Example: <Property Name="PropertyName" Type="Color" Category="Category Name"/> -->
+      <!--
+        Native shader Cube property. Import accepts equirectangular PNG and Radiance RGBE HDR
+        panoramas up to 64 MiB. Non-2:1 sources are stretched with a log warning.
+        Cubemap rows expose Import, Export and Reset without 2D offset/scale.
+      -->
+      <Property
+          Name="EnvironmentCube"
+          Type="Cubemap"
+          DisplayName="Environment"
+          Category="Environment"
+          Tooltip="Environment reflection cubemap." />
 
-      <!-- Texture property -->
-      <Property Name="{{PropertyName}}" Type="Texture"/>
-      <!-- -->
-      <!-- Optional `DefaultValue` and `DefaultValueAssetBundle` attributes -->
-      <Property Name="{{PropertyName}}" Type="Texture" DefaultValueAssetBundle="{{default_texture_asset_bundle_path.unity3d}}" DefaultValue="{{default_texture_asset_name}}"/>
-      <!-- Example: <Property Name="PropertyName" Type="Texture" DefaultValueAssetBundle="shader_assets.unity3d" DefaultValue="default_texture_a"/> -->
-      <!-- -->
-      <!-- Optional `AnisoLevel` attribute -->
-      <Property Name="{{PropertyName}}" Type="Texture" AnisoLevel="{{aniso_level: 0-16}}"/>
-      <!-- Example: <Property Name="PropertyName" Type="Texture" AnisoLevel="16"/> -->
-      <!-- -->
-      <!-- Optional `FilterMode` attribute -->
-      <Property Name="{{PropertyName}}" Type="Texture" FilterMode="{{filter_mode: Point = 0, Bilinear = 1, Trilinear = 2}}"/>
-      <!-- Example: <Property Name="PropertyName" Type="Texture" FilterMode="2"/> -->
-      <!-- -->
-       <!-- Optional `WrapMode` attribute -->
-      <Property Name="{{PropertyName}}" Type="Texture" WrapMode="{{wrap_mode: Repeat = 0, Clamp = 1, Mirror = 2, MirrorOnce = 3}}"/>
-      <!-- Example: <Property Name="PropertyName" Type="Texture" WrapMode="0"/> -->
-      <!-- -->
-      <!-- Optional `Hidden` attribute -->
-      <Property Name="{{PropertyName}}" Type="Texture" Hidden="{{boolean}}"/>
-      <!-- Example: <Property Name="PropertyName" Type="Texture" Hidden="True"/> -->
-      <!-- -->
-      <!-- Optional `Category` attribute -->
-      <Property Name="{{PropertyName}}" Type="Texture" Category="{{category_name}}"/>
-      <!-- Example: <Property Name="PropertyName" Type="Texture" Category="Category Name"/> -->
+      <Property Name="Color" Type="Color" Category="Main" />
 
-      <!-- Keyword -->
-      <Property Name="{{KEYWORD_NAME}}" Type="Keyword"/>
-      <!-- -->
-      <!-- Optional `DefaultValue` attribute -->
-      <Property Name="{{KEYWORD_NAME}}" Type="Keyword" DefaultValue="{boolean}"/>
-      <!-- Example: <Property Name="KEYWORD_NAME" Type="Keyword" DefaultValue="True"/> -->
-      <!-- -->
-      <!-- Optional `Hidden` attribute -->
-      <Property Name="{{KEYWORD_NAME}}" Type="Keyword" Hidden="{{boolean}}"/>
-      <!-- Example: <Property Name="KEYWORD_NAME" Type="Keyword" Hidden="True"/> -->
-      <!-- -->
-      <!-- Optional `Category` attribute -->
-      <Property Name="{{PropertyName}}" Type="Keyword" Category="{{category_name}}"/>
-      <!-- Example: <Property Name="PropertyName" Type="Keyword" Category="Category Name"/> -->
+      <!-- Render-state override example. -->
+      <Property
+          Name="BlendOpFA"
+          Type="Float"
+          DisplayName="Forward Add Blend Operation"
+          Category="Rendering"
+          Tooltip="Blend operation for the forward-add pass." />
 
+      <!--
+        Schema-2 Enum shorthand with label/value pairs. An unknown current
+        value is displayed, not rewritten.
+      -->
+      <Property
+          Name="Cull"
+          Type="Enum"
+          DisplayName="Cull Mode"
+          Category="Rendering"
+          Enums="Off,0,Front,1,Back,2" />
 
+      <!-- Vector2 preserves the hidden Z and W components and has no color picker. -->
+      <Property
+          Name="ScrollDirection"
+          Type="Vector"
+          Editor="Vector2"
+          VectorComponentCount="2"
+          DefaultValue="0,0,0,0"
+          DisplayName="Scroll Direction"
+          Category="Main"
+          Tooltip="Texture scroll speed on X and Y." />
+
+      <!-- Vector3 and Vector4 use the same Vector persistence family. -->
+      <Property Name="Direction" Type="Vector" Editor="Vector3"
+                VectorComponentCount="3" Category="Lighting" />
+      <Property Name="VectorData" Type="Vector" Editor="Vector4"
+                VectorComponentCount="4" Category="Vector Data" />
+
+      <!--
+        Category and Subcategory are optional presentation containers. Category
+        IDs are local to the shader; Subcategory IDs are local to their parent
+        Category. Hierarchy metadata is shader-local when the shared
+        default-property fallback is built.
+      -->
+      <Category
+          Id="lighting"
+          DisplayName="Lighting">
+
+        <Subcategory
+            Id="direct-light"
+            DisplayName="Direct Light">
+
+          <Property
+              Name="DirectLightColor"
+              Type="Color"
+              DisplayName="Color" />
+
+          <Property
+              Name="DirectLightStrength"
+              Type="Float"
+              Range="0,1"
+              DisplayName="Strength" />
+        </Subcategory>
+      </Category>
+
+      <Category
+          Id="effects"
+          DisplayName="Effects">
+
+        <Subcategory
+            Id="back-light"
+            DisplayName="Back Light">
+
+          <!--
+            Schema-2 Boolean is Float-backed and writes 0 or 1 only after an
+            explicit user change. It does not manipulate a shader keyword.
+            Invert is optional and defaults to false.
+          -->
+          <Property
+              Name="UseBacklight"
+              Type="Boolean"
+              DisplayName="Back Light"
+              Tooltip="Enable back-light shading." />
+
+          <!--
+            ShowIf hides this row during normal browsing when its condition is
+            false.
+          -->
+          <Property
+              Name="BacklightColor"
+              Type="Color"
+              DisplayName="Color"
+              ShowIf="UseBacklight != 0" />
+
+          <Property
+              Name="BacklightNormalStrength"
+              Type="Float"
+              Range="0,1"
+              DisplayName="Normal Strength" />
+        </Subcategory>
+      </Category>
+
+      <!-- Escape less-than operators in XML attributes. -->
+      <Property Name="LowQualityValue" Type="Float"
+                ShowIf="Quality &lt;= 1" />
+
+      <!-- Schema-1 property examples. -->
+      <Property Name="FloatProperty" Type="Float" Range="-1,1"
+                DefaultValue="0" Category="Schema 1 Examples" />
+      <Property Name="ColorProperty" Type="Color"
+                DefaultValue="0,0.5,0.5,1" Category="Schema 1 Examples" />
+      <Property Name="TextureProperty" Type="Texture"
+                DefaultValueAssetBundle="shader_assets.unity3d"
+                DefaultValue="default_texture"
+                AnisoLevel="16" FilterMode="2" WrapMode="0"
+                Category="Schema 1 Examples" />
+      <Property Name="KEYWORD_NAME" Type="Keyword"
+                DefaultValue="True" Category="Schema 1 Examples" />
+      <Property Name="InternalProperty" Type="Float" Hidden="True" />
+
+      <!--
+        Supported condition operators: ==, !=, >, >=, <, <=.
+        A bare property means != 0; !Property means == 0. Sources are limited
+        to Float/Enum/Boolean/Keyword values on the same material.
+
+        Invalid metadata warns and falls back safely:
+        - Type="Boolean" and Type="Enum" are schema-2-only Float aliases;
+          schema 1 rejects both aliases
+        - unknown Editor -> editor implied by Type
+        - Enum without valid Enums pairs -> Float editor
+        - malformed condition -> accessible row
+        - invalid VectorComponentCount -> editor default
+
+        Category and Subcategory are optional; manifests that omit them remain
+        flat.
+
+        Search ignores stored Category/Subcategory collapse without modifying
+        it. A matching ShowIf-false property is displayed disabled together
+        with the blocking condition; search never writes or satisfies it.
+      -->
       <!-- Notes -->
       <!-- - "True", "TRUE", "true" are all acceptable values for boolean fields. -->
     </Shader>

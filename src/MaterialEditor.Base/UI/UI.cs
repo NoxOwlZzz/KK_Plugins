@@ -2,7 +2,6 @@
 using System;
 using System.Collections;
 using System.Collections.Generic;
-using System.IO;
 using System.Linq;
 using UnityEngine;
 using UnityEngine.UI;
@@ -34,19 +33,27 @@ namespace MaterialEditorAPI
         private static MaterialEditorWindowView ActiveView;
         private static MaterialEditorUI ActiveUi;
 
+        private static readonly MaterialEditorInterpolableSelectionState
+            InterpolableSelection =
+                new MaterialEditorInterpolableSelectionState();
+        private static readonly MaterialEditorTargetLifecycle TargetLifecycle =
+            new MaterialEditorTargetLifecycle(
+                Session,
+                InterpolableSelection,
+                () => ActiveUi);
+
         private MaterialEditorWindowView _windowView;
         private MaterialEditorSelectionController _selectionController;
         private MaterialEditorPresenter _presenter;
         private MaterialEditorPresentation _presentation;
-        private Coroutine _conditionRefreshCoroutine;
-        private int _conditionRefreshVersion;
-        private GameObject _conditionRefreshGameObject;
-        private object _conditionRefreshData;
-        private string _conditionRefreshFilter;
+        private MaterialEditorAssetWorkflow _assetWorkflow;
+        private MaterialEditorRefreshController _refresh;
+        private MaterialEditorRefreshController RefreshController =>
+            _refresh ?? (_refresh = new MaterialEditorRefreshController(this));
+        private bool _transientContentReleased;
 
         private static readonly List<Action<MaterialEditorLabelClickEventArgs>> LabelClickHandlers = new List<Action<MaterialEditorLabelClickEventArgs>>();
 
-        internal static FileSystemWatcher TexChangeWatcher;
         private VirtualList VirtualList;
 
         internal const float MarginSize = MaterialEditorLayout.Margin;
@@ -70,6 +77,8 @@ namespace MaterialEditorAPI
         internal const float MaterialButtonWidth = MaterialEditorLayout.MaterialButtonWidth;
         internal const float MaterialRenameButtonWidth = MaterialEditorLayout.MaterialRenameButtonWidth;
         // Shader
+        internal const float ShaderLabelMinimumWidth = MaterialEditorLayout.ShaderLabelMinimumWidth;
+        internal const float ShaderDropdownMinimumWidth = MaterialEditorLayout.ShaderDropdownMinimumWidth;
         internal const float ShaderDropdownWidth = MaterialEditorLayout.ShaderDropdownWidth;
         // RenderQueue
         internal const float RenderQueueInputFieldWidth = MaterialEditorLayout.RenderQueueInputWidth;
@@ -93,12 +102,13 @@ namespace MaterialEditorAPI
         internal static RectOffset Padding => MaterialEditorLayout.RowPadding;
 
         #region Colors
-        internal static readonly Color RowColor = MaterialEditorStyles.RowColor;
-        internal static readonly Color RendererColor = MaterialEditorStyles.RendererColor;
-        internal static readonly Color MaterialColor = MaterialEditorStyles.MaterialColor;
-        internal static readonly Color CategoryColor = MaterialEditorStyles.CategoryColor;
-        internal static readonly Color ItemColor = MaterialEditorStyles.TransparentRowColor;
-        internal static readonly Color ItemColorChanged = MaterialEditorStyles.ChangedRowColor;
+        internal static Color RowColor => MaterialEditorStyles.RowColor;
+        internal static Color RendererColor => MaterialEditorStyles.RendererColor;
+        internal static Color MaterialColor => MaterialEditorStyles.MaterialColor;
+        internal static Color CategoryColor => MaterialEditorStyles.CategoryColor;
+        internal static Color SubcategoryColor => MaterialEditorStyles.SubcategoryColor;
+        internal static Color ItemColor => MaterialEditorStyles.PropertyColor;
+        internal static Color ItemColorChanged => MaterialEditorStyles.ChangedRowColor;
         #endregion
 
         private protected IMaterialEditorColorPalette ColorPalette;
@@ -115,6 +125,11 @@ namespace MaterialEditorAPI
             set => Session.CurrentData = value;
         }
 
+        internal static GameObject RetainedTargetGameObject =>
+            Session.CurrentGameObject;
+
+        internal static object RetainedTargetData => Session.CurrentData;
+
         private MaterialEditService _materialEditService;
         private static string CurrentFilter
         {
@@ -122,11 +137,74 @@ namespace MaterialEditorAPI
             set => Session.Filter = value;
         }
 
-        internal static SelectedInterpolable selectedInterpolable;
-        internal static SelectedProjectorInterpolable selectedProjectorInterpolable;
+        internal string RefreshFilter
+        {
+            get => CurrentFilter;
+            set => CurrentFilter = value;
+        }
 
+        internal MaterialEditorPresentation RefreshPresentation => _presentation;
+
+        internal VirtualList RefreshVirtualList => VirtualList;
+
+        internal Coroutine StartRefreshCoroutine(IEnumerator routine) =>
+            StartCoroutine(routine);
+
+        internal void StopRefreshCoroutine(Coroutine coroutine) =>
+            StopCoroutine(coroutine);
+
+        internal void PopulateListCoreForRefresh(
+            GameObject go,
+            object data,
+            string filter,
+            VirtualListRowAnchorResolver.TopRowAnchor topRowAnchor,
+            bool preserveRenamePanel)
+        {
+            PopulateListCore(
+                go,
+                data,
+                filter,
+                topRowAnchor,
+                preserveRenamePanel);
+        }
+
+        internal static SelectedInterpolable selectedInterpolable =>
+            InterpolableSelection.SelectedMaterial;
+
+        internal static SelectedProjectorInterpolable
+            selectedProjectorInterpolable =>
+                InterpolableSelection.SelectedProjector;
+
+        internal VirtualList LifecycleVirtualList => VirtualList;
+
+        internal MaterialEditorSelectionController LifecycleSelectionController =>
+            _selectionController;
+
+        internal MaterialEditorWindowView LifecycleWindowView => _windowView;
+
+        internal MaterialEditorPresentation LifecyclePresentation
+        {
+            get => _presentation;
+            set => _presentation = value;
+        }
+
+        internal bool LifecycleTransientContentReleased
+        {
+            get => _transientContentReleased;
+            set => _transientContentReleased = value;
+        }
+
+        internal IMaterialEditorColorPalette LifecycleColorPalette =>
+            ColorPalette;
+
+        internal void CancelPendingRefreshesForLifecycle() =>
+            CancelPendingRefreshes();
         private protected MaterialEditService EditService =>
             _materialEditService ?? (_materialEditService = CreateMaterialEditService());
+
+        private MaterialEditorAssetWorkflow AssetWorkflow =>
+            _assetWorkflow ?? (_assetWorkflow =
+                new MaterialEditorAssetWorkflow(this, EditService));
 
         private protected virtual MaterialEditService CreateMaterialEditService() =>
             new MaterialEditService(new LegacyMaterialEditRepository(this));
@@ -176,14 +254,18 @@ namespace MaterialEditorAPI
         protected void InitUI()
         {
             ActiveUi = this;
+            if (_refresh == null)
+                _refresh = new MaterialEditorRefreshController(this);
             MaterialEditorExtensionRegistry.SetActiveEditService(EditService);
             _windowView = new MaterialEditorWindowView(
                 transform,
                 CurrentFilter,
-                RefreshUI,
+                HandleFilterChanged,
                 () => Visible = false,
-                () => _selectionController.ToggleSidePanels(),
+                () => _selectionController.ToggleCategoriesPanel(),
+                () => _selectionController.ToggleSelectionPanels(),
                 ToggleAllCategories,
+                ToggleAllSections,
                 NavigateToCategory,
                 ToggleCategory);
             _selectionController = new MaterialEditorSelectionController(
@@ -191,21 +273,27 @@ namespace MaterialEditorAPI
                 _windowView,
                 EditService,
                 PopulateList);
+            _selectionController.InitializeViewState();
             _presenter = new MaterialEditorPresenter(
                 EditService,
                 Session,
                 new MaterialEditorPresentationActions
                 {
-                    Refresh = PopulateList,
-                    RefreshDeferred = (go, data, filter) =>
-                        StartCoroutine(PopulateListCoroutine(go, data, filter)),
-                    RefreshConditionsDeferred = ScheduleConditionRefresh,
+                    Refresh = (go, data, filter) => PopulateList(
+                        go,
+                        data,
+                        ResolveFilterForCurrentTarget(go, data, filter)),
+                    RefreshDeferred = SchedulePopulateList,
+                    RequestCondition = HandleConditionChanged,
                     RefreshMaterialSelection = PopulateMaterialList,
+                    SetRendererCollapsed = SetRendererCollapsed,
                     ShowRename = PopulateRenameList,
                     ExportUv = Export.ExportUVMaps,
                     RequestObjExport = Session.RequestObjExport,
                     ExportTexture = ExportTexture,
                     ImportTexture = ImportTexture,
+                    ExportCubemap = ExportCubemap,
+                    ImportCubemap = ImportCubemap,
                     SelectInterpolable = SelectInterpolableButtonOnClick,
                     SelectProjectorInterpolable = SelectProjectorInterpolableButtonOnClick,
                     EditColor = (data, material, title, value, onChanged) =>
@@ -226,6 +314,14 @@ namespace MaterialEditorAPI
         private protected void SetHeaderTitleHorizontalOffset(float offset)
         {
             _windowView?.SetHeaderTitleHorizontalOffset(offset);
+        }
+
+        private protected Transform HeaderContextSlot =>
+            _windowView?.HeaderContextSlot;
+
+        private protected void SetHeaderContextControlVisible(bool visible)
+        {
+            _windowView?.SetHeaderContextControlVisible(visible);
         }
 
         /// <summary>
@@ -250,19 +346,30 @@ namespace MaterialEditorAPI
             }
             set
             {
+                var wasVisible = Visible;
                 if (MaterialEditorWindow != null)
                     MaterialEditorWindow.gameObject.SetActive(value);
                 if (!value)
-                {
-                    ActiveUi?.CancelConditionRefresh();
-                    TexChangeWatcher?.Dispose();
-                }
+                    ActiveUi?.ReleaseTransientUiContent();
+                else if (!wasVisible)
+                    ActiveUi?.RestoreTransientUiContent();
             }
         }
 
         internal static void UISettingChanged(object sender, EventArgs e)
         {
             ActiveView?.ApplySettings();
+        }
+
+        internal static void UIThemeSettingChanged(object sender, EventArgs e)
+        {
+            var mode = UITheme == null
+                ? MaterialEditorThemeMode.Legacy
+                : GetConfiguredUITheme();
+            if (!MaterialEditorTheme.SetMode(mode))
+                return;
+
+            ActiveView?.ApplyTheme();
         }
 
         /// <summary>
@@ -317,15 +424,59 @@ namespace MaterialEditorAPI
         /// <param name="filter">Comma separated list of text to filter the results</param>
         protected void PopulateList(GameObject go, object data, string filter = null)
         {
-            CancelConditionRefresh();
-            _selectionController.CloseRenamePanel();
+            CancelPendingRefreshes();
+            PopulateListCore(go, data, filter, null, false);
+        }
+
+        private void PopulateListWithAnchor(
+            GameObject go,
+            object data,
+            string filter,
+            VirtualListRowAnchorResolver.TopRowAnchor topRowAnchor)
+        {
+            CancelPendingRefreshes();
+            PopulateListCore(go, data, filter, topRowAnchor, false);
+        }
+
+        private void PopulateListCore(
+            GameObject go,
+            object data,
+            string filter,
+            VirtualListRowAnchorResolver.TopRowAnchor topRowAnchor,
+            bool preserveRenamePanel,
+            bool publishViewportAnchor = true)
+        {
+            var previousTarget = CurrentGameObject;
+            var previousTargetWasDestroyed =
+                !ReferenceEquals(previousTarget, null) && previousTarget == null;
+            _transientContentReleased = false;
+            if (!preserveRenamePanel)
+                _selectionController.CloseRenamePanel();
+
+            if (!ReferenceEquals(previousTarget, null)
+                && !ReferenceEquals(previousTarget, go))
+            {
+                CloseTargetColorPalette();
+                if (previousTargetWasDestroyed)
+                {
+                    ClearInterpolablesForTarget(previousTarget);
+                    PruneDestroyedInterpolables();
+                }
+            }
 
             if (filter == null)
                 filter = PersistFilter.Value ? CurrentFilter : string.Empty;
 
             _windowView.PrepareForDisplay(filter);
             if (go == null)
+            {
+                ReleaseRetainedTargetContext();
+                Session.ClearTargetReferences();
+                if (previousTargetWasDestroyed)
+                    ClearInterpolablesForTarget(previousTarget);
+                PruneDestroyedInterpolables();
                 return;
+            }
 
             var renderers = GetRendererList(go).ToList();
             var projectors = EditService.GetProjectorList(data, go).ToList();
@@ -336,95 +487,66 @@ namespace MaterialEditorAPI
             CurrentFilter = filter;
 
             _presentation = _presenter.BuildRows(go, data, filter, renderers, projectors);
-            VirtualList.SetList(_presentation.Rows);
-            _windowView.SetPresentation(_presentation);
-        }
+            VirtualList.SetList(_presentation.Rows, false);
+            if (topRowAnchor != null)
+                VirtualList.RestoreTopRowAnchor(topRowAnchor, false);
 
-        private void ScheduleConditionRefresh(
-            GameObject go,
-            object data,
-            string filter)
-        {
-            if (!IsCurrentConditionRefreshContext(go, data, filter))
-                return;
-
-            _conditionRefreshGameObject = go;
-            _conditionRefreshData = data;
-            _conditionRefreshFilter = filter;
-            _conditionRefreshVersion++;
-
-            if (_conditionRefreshCoroutine != null)
-                return;
-            _conditionRefreshCoroutine =
-                StartCoroutine(ConditionRefreshWorker());
-        }
-
-        private IEnumerator ConditionRefreshWorker()
-        {
-            int scheduledVersion;
-            do
-            {
-                scheduledVersion = _conditionRefreshVersion;
-                yield return null;
-            }
-            while (scheduledVersion != _conditionRefreshVersion);
-
-            var go = _conditionRefreshGameObject;
-            var data = _conditionRefreshData;
-            var filter = _conditionRefreshFilter;
-            _conditionRefreshCoroutine = null;
-            _conditionRefreshGameObject = null;
-            _conditionRefreshData = null;
-            _conditionRefreshFilter = null;
-
-            if (!IsCurrentConditionRefreshContext(go, data, filter))
-                yield break;
-            PopulateList(go, data, filter);
-        }
-
-        private bool IsCurrentConditionRefreshContext(
-            GameObject go,
-            object data,
-            string filter)
-        {
-            return Visible
-                   && go != null
-                   && ReferenceEquals(go, CurrentGameObject)
-                   && ReferenceEquals(data, CurrentData)
-                   && string.Equals(
-                       filter,
-                       CurrentFilter,
-                       StringComparison.Ordinal);
-        }
-
-        private void CancelConditionRefresh()
-        {
-            _conditionRefreshVersion++;
-            _conditionRefreshGameObject = null;
-            _conditionRefreshData = null;
-            _conditionRefreshFilter = null;
-
-            var coroutine = _conditionRefreshCoroutine;
-            _conditionRefreshCoroutine = null;
-            if (coroutine != null)
-                StopCoroutine(coroutine);
+            // Install the new presentation first, then publish its final anchor
+            // once. Deferring the navigator update avoids a false no-categories
+            // transition and two responsive layout passes during one rebuild.
+            _windowView.SetPresentation(_presentation, true);
+            if (publishViewportAnchor)
+                VirtualList.PublishViewportAnchor();
         }
 
         private void NavigateToCategory(CategoryNavigationTarget target)
         {
             if (target == null)
                 return;
-            target.EnsureParentsExpanded();
-            PopulateList(CurrentGameObject, CurrentData, CurrentFilter);
-            StartCoroutine(ScrollToCategory(target.SectionId, target.Id));
+            if (target.EnsureParentsExpanded())
+            {
+                RebuildAndScrollToCategory(target.SectionId, target.Id);
+                return;
+            }
+            if (target.RowIndex >= 0)
+                VirtualList.ScrollToIndex(target.RowIndex);
         }
 
         private void ToggleCategory(CategoryNavigationTarget target)
         {
             if (target == null)
                 return;
+            var sectionId = target.SectionId;
+            var categoryId = target.Id;
             target.SetCollapsed(!target.Collapsed);
-            PopulateList(CurrentGameObject, CurrentData, CurrentFilter);
+            RebuildAndScrollToCategory(sectionId, categoryId);
+        }
+
+        private void SetRendererCollapsed(
+            RendererSectionPresentation section,
+            bool collapsed)
+        {
+            var presentation = _presentation;
+            if (presentation == null || VirtualList == null)
+                return;
+
+            int replaceStartIndex;
+            int removeCount;
+            IList<RowModel> replacementRows;
+            if (!presentation.TrySetRendererCollapsed(
+                    section,
+                    collapsed,
+                    out replaceStartIndex,
+                    out removeCount,
+                    out replacementRows))
+                return;
+
+            VirtualList.ReplaceRange(
+                replaceStartIndex,
+                removeCount,
+                replacementRows,
+                section.HeaderRowIndex);
+            _windowView?.RefreshSectionCollapseState(presentation);
         }
 
         private void ToggleAllCategories()
@@ -437,12 +559,34 @@ namespace MaterialEditorAPI
             PopulateList(CurrentGameObject, CurrentData, CurrentFilter);
         }
 
-        private IEnumerator ScrollToCategory(string sectionId, string categoryId)
+        private void ToggleAllSections()
         {
-            yield return null;
+            if (_presentation == null
+                || !_presentation.CanToggleSections)
+                return;
+
+            _presentation.SetAllSectionsCollapsed(
+                !_presentation.AllSectionsCollapsed);
+            PopulateList(CurrentGameObject, CurrentData, CurrentFilter);
+        }
+
+        private void RebuildAndScrollToCategory(
+            string sectionId,
+            string categoryId)
+        {
+            CancelPendingRefreshes();
+            PopulateListCore(
+                CurrentGameObject,
+                CurrentData,
+                CurrentFilter,
+                null,
+                false,
+                false);
             var target = _presentation?.FindCategory(sectionId, categoryId);
             if (target != null && target.RowIndex >= 0)
                 VirtualList.ScrollToIndex(target.RowIndex);
+            else
+                VirtualList.PublishViewportAnchor();
         }
 
         /// <summary>
@@ -455,21 +599,103 @@ namespace MaterialEditorAPI
         }
 
         /// <summary>
-        /// Hacky workaround to wait for the dropdown fade to complete before refreshing
+        /// Defers rebuilding the material list until the dropdown fade has completed.
         /// </summary>
-        protected IEnumerator PopulateListCoroutine(GameObject go, object data, string filter = "")
+        protected IEnumerator PopulateListCoroutine(
+            GameObject go,
+            object data,
+            string filter = "") =>
+            RefreshController.PopulateListCoroutine(go, data, filter);
+
+        private void SchedulePopulateList(
+            GameObject go,
+            object data,
+            string filter) =>
+            RefreshController.SchedulePopulateList(go, data, filter);
+
+        private string ResolveFilterForCurrentTarget(
+            GameObject go,
+            object data,
+            string filter) =>
+            RefreshController.ResolveFilterForCurrentTarget(go, data, filter);
+
+        private void HandleFilterChanged(string filter) =>
+            RefreshController.HandleFilterChanged(filter);
+
+        private void HandleConditionChanged(
+            MaterialConditionInvalidationHandle handle) =>
+            RefreshController.HandleConditionChanged(handle);
+
+        private void CancelPendingRefreshes() =>
+            _refresh?.CancelPendingRefreshes();
+        private void ReleaseTransientUiContent() =>
+            TargetLifecycle.ReleaseTransientUiContent();
+
+        private void ReleaseRetainedTargetContext() =>
+            TargetLifecycle.ReleaseRetainedTargetContext();
+
+        private void RestoreTransientUiContent() =>
+            TargetLifecycle.RestoreTransientUiContent();
+
+        internal static bool IsGameObjectWithin(
+            GameObject candidate,
+            GameObject root) =>
+            MaterialEditorTargetLifecycle.IsGameObjectWithin(candidate, root);
+
+        internal static bool IsCurrentTargetWithin(GameObject root) =>
+            TargetLifecycle.IsCurrentTargetWithin(root);
+
+        internal static void ReleaseCurrentTargetSelections() =>
+            TargetLifecycle.ReleaseCurrentTargetSelections();
+
+        internal static void InvalidateCurrentTarget() =>
+            TargetLifecycle.InvalidateCurrentTarget();
+
+        internal static void InvalidateAllTargetState() =>
+            TargetLifecycle.InvalidateAllTargetState();
+
+        internal static bool NotifyTargetDestroyed(GameObject root) =>
+            TargetLifecycle.NotifyTargetDestroyed(root);
+
+        internal static void PruneDestroyedInterpolables() =>
+            TargetLifecycle.PruneDestroyedInterpolables();
+
+        private static void ClearInterpolablesForTarget(GameObject root) =>
+            TargetLifecycle.ClearInterpolablesForTarget(root);
+
+        private void CloseTargetColorPalette() =>
+            TargetLifecycle.CloseTargetColorPalette();
+        internal void ShutdownMaterialEditorUi()
         {
-            yield return null;
-            yield return null;
-            yield return null;
-            yield return null;
-            yield return null;
-            yield return null;
-            yield return null;
-            yield return null;
-            yield return null;
-            yield return null;
-            PopulateList(go, data, filter);
+            if (!ReferenceEquals(ActiveUi, this))
+                return;
+
+            try
+            {
+                InvalidateAllTargetState();
+            }
+            finally
+            {
+                MaterialEditorExtensionRegistry.SetActiveEditService(null);
+                _assetWorkflow?.Dispose();
+                _assetWorkflow = null;
+                ActiveView = null;
+                ActiveUi = null;
+                MaterialEditorWindow = null;
+                MaterialEditorMainPanel = null;
+                DragPanel = null;
+                VirtualList = null;
+                _refresh = null;
+                _windowView = null;
+                _selectionController = null;
+                _presenter = null;
+                ColorPalette = null;
+            }
+        }
+
+        internal static void DisposeTexChangeWatcher()
+        {
+            MaterialEditorAssetWorkflow.DisposeTextureWatcher();
         }
 
         private void ImportTexture(
@@ -479,166 +705,91 @@ namespace MaterialEditorAPI
             Material material,
             string propertyName)
         {
-#if !API
-            string fileFilter = KK_Plugins.ImageHelper.FileFilter;
-#else
-            string fileFilter = "Images (*.png;.jpg)|*.png;*.jpg|All files|*.*";
-#endif
-            KKAPI.Utilities.OpenFileDialog.Show(OnFileAccept, "Open image", ExportPath, fileFilter, ".png");
+            AssetWorkflow.ImportTexture(
+                textureItem,
+                gameObject,
+                data,
+                material,
+                propertyName);
+        }
 
-            void OnFileAccept(string[] files)
-            {
-                if (files == null || files.Length == 0 || files[0].IsNullOrEmpty())
-                {
-                    textureItem.Changed =
-                        !EditService.GetMaterialTextureValueOriginal(
-                            data,
-                            material,
-                            propertyName,
-                            gameObject);
-                    textureItem.Exists = material.GetTexture($"_{propertyName}") != null;
-                    return;
-                }
-
-                string filePath = files[0];
-                EditService.SetMaterialTexture(data, material, propertyName, filePath, gameObject);
-
-                TexChangeWatcher?.Dispose();
-                if (!WatchTexChanges.Value)
-                    return;
-
-                var directory = Path.GetDirectoryName(filePath);
-                if (directory == null)
-                    return;
-
-                TexChangeWatcher = new FileSystemWatcher(directory, Path.GetFileName(filePath));
-                TexChangeWatcher.Changed += (sender, args) =>
-                {
-                    if (WatchTexChanges.Value && File.Exists(filePath))
-                        EditService.SetMaterialTexture(data, material, propertyName, filePath, gameObject);
-                };
-                TexChangeWatcher.Deleted += (sender, args) => TexChangeWatcher?.Dispose();
-                TexChangeWatcher.Error += (sender, args) => TexChangeWatcher?.Dispose();
-                TexChangeWatcher.EnableRaisingEvents = true;
-            }
+        private void ImportCubemap(
+            CubemapPropertyRowModel cubemapItem,
+            GameObject gameObject,
+            object data,
+            Material material,
+            string propertyName)
+        {
+            AssetWorkflow.ImportCubemap(
+                cubemapItem,
+                gameObject,
+                data,
+                material,
+                propertyName);
         }
 
         internal virtual void ExportTexture(Material mat, string property)
         {
-            var tex = mat.GetTexture($"_{property}");
-            if (tex == null) return;
-            var matName = mat.NameFormatted();
-            matName = string.Concat(matName.Split(Path.GetInvalidFileNameChars())).Trim();
-            string filename = Path.Combine(ExportPath, $"_Export_{DateTime.Now:yyyy-MM-dd-HH-mm-ss}_{matName}_{property}.png");
-            Instance.ConvertNormalMap(ref tex, property, ConvertNormalmapsOnExport.Value);
-            SaveTex(tex, filename);
-            MaterialEditorPluginBase.Logger.LogInfo($"Exported {filename}");
-            Utilities.OpenFileInExplorer(filename);
+            AssetWorkflow.ExportTexture(mat, property);
         }
 
-        internal void ExportTextureOriginal(Material mat, string property, string ext, byte[] texData)
+        internal void ExportCubemap(Material mat, string property)
         {
-            var matName = mat.NameFormatted();
-            matName = string.Concat(matName.Split(Path.GetInvalidFileNameChars())).Trim();
-            string filename = Path.Combine(ExportPath, $"_Export_{DateTime.Now:yyyy-MM-dd-HH-mm-ss}_{matName}_{property}.{ext}");
-            System.IO.File.WriteAllBytes(filename, texData);
-            MaterialEditorPluginBase.Logger.LogInfo($"Exported {filename}");
-            Utilities.OpenFileInExplorer(filename);
+            AssetWorkflow.ExportCubemap(mat, property);
         }
 
-        private void SetupColorPalette(object data, Material material, string title, Color value, Action<Color> onChanged, bool useAlpha)
+        internal void ExportTextureOriginal(
+            Material mat,
+            string property,
+            string ext,
+            byte[] texData)
         {
-            var name = material.name;
-            if (ColorPalette.IsShowing(title, data, name))
-            {
-                ColorPalette.Close();
-                return;
-            }
-
-            try
-            {
-                ColorPalette.Setup(title, data, name, value, onChanged, useAlpha);
-            }
-            catch (ArgumentException)
-            {
-                MaterialEditorPluginBase.Logger.LogError($"Color value is out of range. ({value})");
-                ColorPalette.Close();
-            }
-        }
-        private void SetColorToPalette(object data, Material material, string title, Color value)
-        {
-            if (ColorPalette.IsShowing(title, data, material.name))
-            {
-                try
-                {
-                    ColorPalette.SetColor(value);
-                }
-                catch (ArgumentException)
-                {
-                    MaterialEditorPluginBase.Logger.LogError($"Color value is out of range. ({value})");
-                    ColorPalette.Close();
-                }
-            }
+            AssetWorkflow.ExportTextureOriginal(mat, property, ext, texData);
         }
 
-        private void SelectInterpolableButtonOnClick(GameObject go, RowModel.RowItemType rowType, string materialName = "", string propertyName = "", string rendererName = "")
-        {
-            selectedInterpolable = new SelectedInterpolable(go, rowType, materialName, propertyName, rendererName);
-            MaterialEditorPluginBase.Logger.LogMessage($"Activated interpolable(s), {selectedInterpolable}");
-#if !API && !EC
-            TimelineCompatibilityHelper.RefreshInterpolablesList();
-#endif
-        }
+        private void SetupColorPalette(
+            object data,
+            Material material,
+            string title,
+            Color value,
+            Action<Color> onChanged,
+            bool useAlpha) =>
+            TargetLifecycle.SetupColorPalette(
+                data,
+                material,
+                title,
+                value,
+                onChanged,
+                useAlpha);
 
-        private void SelectProjectorInterpolableButtonOnClick(GameObject go, ProjectorProperties property, string projectorName)
-        {
-            selectedProjectorInterpolable = new SelectedProjectorInterpolable(go, property, projectorName);
-            MaterialEditorPluginBase.Logger.LogMessage($"Activated interpolable(s), {selectedProjectorInterpolable}");
-#if !API && !EC
-            TimelineCompatibilityHelper.RefreshInterpolablesList();
-#endif
-        }
+        private void SetColorToPalette(
+            object data,
+            Material material,
+            string title,
+            Color value) =>
+            TargetLifecycle.SetColorToPalette(data, material, title, value);
 
-        internal class SelectedInterpolable
-        {
-            public string MaterialName;
-            public string PropertyName;
-            public string RendererName;
-            public GameObject GameObject;
-            public RowModel.RowItemType RowType;
+        private void SelectInterpolableButtonOnClick(
+            GameObject go,
+            RowModel.RowItemType rowType,
+            string materialName = "",
+            string propertyName = "",
+            string rendererName = "") =>
+            InterpolableSelection.SelectMaterial(
+                go,
+                rowType,
+                materialName,
+                propertyName,
+                rendererName);
 
-            public SelectedInterpolable(GameObject go, RowModel.RowItemType rowType, string materialName, string propertyName, string rendererName)
-            {
-                GameObject = go;
-                RowType = rowType;
-                MaterialName = materialName;
-                PropertyName = propertyName;
-                RendererName = rendererName;
-            }
-
-            public override string ToString()
-            {
-                return $"{RowType}: {string.Join(" - ", new string[] { PropertyName, MaterialName, RendererName, }.Where(x => !x.IsNullOrEmpty()).ToArray())}";
-            }
-        }
-
-        internal class SelectedProjectorInterpolable
-        {
-            public string ProjectorName;
-            public ProjectorProperties Property;
-            public GameObject GameObject;
-
-            public SelectedProjectorInterpolable(GameObject go, ProjectorProperties property, string projectorName)
-            {
-                GameObject = go;
-                Property = property;
-                ProjectorName = projectorName;
-            }
-
-            public override string ToString()
-            {
-                return $"Projector: {string.Join(" - ", new string[] { Property.ToString(), ProjectorName, }.Where(x => !x.IsNullOrEmpty()).ToArray())}";
-            }
-        }
+        private void SelectProjectorInterpolableButtonOnClick(
+            GameObject gameObject,
+            ProjectorProperties property,
+            string projectorName) =>
+            InterpolableSelection.SelectProjector(
+                gameObject,
+                property,
+                projectorName);
     }
+
 }

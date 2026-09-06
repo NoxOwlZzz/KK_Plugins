@@ -27,14 +27,9 @@ namespace MaterialEditorAPI
 
         internal string ShaderName { get; set; }
         internal string OriginalShaderName { get; set; }
-        internal bool Collapsed { get; set; }
-        internal Action<bool> CollapsedOnChange { get; set; }
         internal bool HasCategories { get; set; }
         internal bool AllCategoriesCollapsed { get; set; }
         internal Action<bool> CategoriesCollapsedOnChange { get; set; }
-        internal bool HasAdvancedProperties { get; set; }
-        internal MaterialEditorUiMode UiMode { get; set; }
-        internal Action<MaterialEditorUiMode> UiModeOnChange { get; set; }
         internal Action SelectInterpolable { get; set; }
         internal Action<string> ShaderNameOnChange { get; set; }
         internal Action ShaderNameOnReset { get; set; }

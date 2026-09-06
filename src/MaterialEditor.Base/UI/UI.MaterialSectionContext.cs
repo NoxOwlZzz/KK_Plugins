@@ -13,7 +13,7 @@ namespace MaterialEditorAPI
             object data,
             string filter,
             IEnumerable<Renderer> allRenderers,
-            IList<string> propertyFilter,
+            IList<MaterialEditorFilterPattern> propertyFilter,
             Material material,
             Projector projector)
         {
@@ -41,7 +41,7 @@ namespace MaterialEditorAPI
         internal object Data { get; }
         internal string Filter { get; }
         internal IEnumerable<Renderer> AllRenderers { get; }
-        internal IList<string> PropertyFilter { get; }
+        internal IList<MaterialEditorFilterPattern> PropertyFilter { get; }
         internal Material Material { get; }
         internal Projector Projector { get; }
         internal string MaterialName { get; }
@@ -89,15 +89,19 @@ namespace MaterialEditorAPI
             string sourceId,
             string categoryName,
             bool namedCategory,
-            bool includeRows)
+            bool includeRows,
+            string categoryIdentity = null)
         {
             var showHeader = namedCategory && context.PropertyFilter.Count == 0;
+            var identity = string.IsNullOrEmpty(categoryIdentity)
+                ? categoryName
+                : categoryIdentity;
             var categoryKey = MaterialEditorSectionKeys.Category(
                 context.GameObject,
                 context.Material,
                 context.ShaderName,
                 sourceId,
-                categoryName);
+                identity);
             var storedCollapsed = namedCategory
                 && MaterialEditorSessionState.IsCollapsed(
                     _session.CollapsedPropertyCategories,
@@ -111,6 +115,7 @@ namespace MaterialEditorAPI
             if (namedCategory)
             {
                 navigationTarget = materialSection.AddCategory(
+                    sourceId + ":" + identity,
                     categoryName,
                     -1,
                     categoryKey,
@@ -127,7 +132,7 @@ namespace MaterialEditorAPI
             if (includeRows && showHeader)
             {
                 navigationTarget?.RecordRowIndex(context.Rows.Count);
-                context.Rows.Add(new PropertyCategoryRowModel(categoryName)
+                var row = new PropertyCategoryRowModel(categoryName)
                 {
                     Collapsed = storedCollapsed,
                     TooltipText = tooltip,
@@ -142,7 +147,8 @@ namespace MaterialEditorAPI
                             context.Data,
                             context.Filter);
                     }
-                });
+                };
+                context.Rows.Add(row);
             }
 
             // Filtering temporarily flattens categories, so a collapsed category
@@ -150,6 +156,48 @@ namespace MaterialEditorAPI
             return new PropertyCategorySection(
                 navigationTarget,
                 showHeader && storedCollapsed);
+        }
+
+        internal bool AddSubcategory(
+            MaterialSectionContext context,
+            string sourceId,
+            string categoryId,
+            OrganizedPropertySubcategory subcategory,
+            bool includeRows)
+        {
+            var showHeader = context.PropertyFilter.Count == 0;
+            var stateKey = MaterialEditorSectionKeys.Subcategory(
+                context.GameObject,
+                context.Material,
+                context.ShaderName,
+                sourceId,
+                categoryId,
+                subcategory.Id);
+            var storedCollapsed = showHeader
+                                  && MaterialEditorSessionState.IsCollapsed(
+                                      _session.CollapsedPropertySubcategories,
+                                      stateKey);
+            if (includeRows && showHeader)
+            {
+                var row = new PropertySubcategoryRowModel(subcategory.Name)
+                {
+                    HierarchyDepth = 1,
+                    Collapsed = storedCollapsed,
+                    CollapsedOnChange = value =>
+                        {
+                            MaterialEditorSessionState.SetCollapsed(
+                                _session.CollapsedPropertySubcategories,
+                                stateKey,
+                                value);
+                            _actions.Refresh(
+                                context.GameObject,
+                                context.Data,
+                                context.Filter);
+                        }
+                };
+                context.Rows.Add(row);
+            }
+            return showHeader && storedCollapsed;
         }
     }
 }

@@ -6,7 +6,10 @@ using static MaterialEditorAPI.MaterialAPI;
 
 namespace KK_Plugins.MaterialEditor
 {
-    internal sealed class SceneMaterialEditRepository : IMaterialEditRepository
+    internal sealed class SceneMaterialEditRepository :
+        IMaterialEditRepository,
+        IMaterialTextureImportCompletionRepository,
+        IMaterialCubemapDataImportRepository
     {
         private readonly Func<SceneController> _controllerResolver;
 
@@ -94,8 +97,45 @@ namespace KK_Plugins.MaterialEditor
         public void SetMaterialTexture(object data, Material material, string propertyName, string filePath, GameObject gameObject) =>
             GetController().SetMaterialTextureFromFile(GetObjectId(data), material, propertyName, filePath, true);
 
+        public void SetMaterialTexture(
+            object data,
+            Material material,
+            string propertyName,
+            string filePath,
+            GameObject gameObject,
+            Action<bool> completed) =>
+            GetController().QueueMaterialTextureFromFile(
+                GetObjectId(data),
+                material,
+                propertyName,
+                filePath,
+                completed);
+
         public void RemoveMaterialTexture(object data, Material material, string propertyName, GameObject gameObject) =>
             GetController().RemoveMaterialTexture(GetObjectId(data), material, propertyName);
+
+        public bool GetMaterialCubemapValueOriginal(object data, Material material, string propertyName, GameObject gameObject) =>
+            GetController().GetMaterialCubemapOriginal(GetObjectId(data), material, propertyName);
+
+        public void SetMaterialCubemap(object data, Material material, string propertyName, string filePath, GameObject gameObject) =>
+            GetController().SetMaterialCubemapFromFile(GetObjectId(data), material, propertyName, filePath);
+
+        public bool SetMaterialCubemap(
+            object data,
+            Material material,
+            string propertyName,
+            byte[] encodedData,
+            MaterialEditorCubemapContentKey contentKey,
+            GameObject gameObject) =>
+            GetController().SetMaterialCubemap(
+                GetObjectId(data),
+                material,
+                propertyName,
+                encodedData,
+                contentKey);
+
+        public void RemoveMaterialCubemap(object data, Material material, string propertyName, GameObject gameObject) =>
+            GetController().RemoveMaterialCubemap(GetObjectId(data), material, propertyName);
 
         public Vector2? GetMaterialTextureOffsetOriginal(object data, Material material, string propertyName, GameObject gameObject) =>
             GetController().GetMaterialTextureOffsetOriginal(GetObjectId(data), material, propertyName);
@@ -123,6 +163,15 @@ namespace KK_Plugins.MaterialEditor
 
         public void RemoveMaterialColorProperty(object data, Material material, string propertyName, GameObject gameObject) =>
             GetController().RemoveMaterialColorProperty(GetObjectId(data), material, propertyName);
+
+        public Vector4? GetMaterialVectorPropertyValueOriginal(object data, Material material, string propertyName, GameObject gameObject) =>
+            GetController().GetMaterialVectorPropertyValueOriginal(GetObjectId(data), material, propertyName);
+
+        public void SetMaterialVectorProperty(object data, Material material, string propertyName, Vector4 value, GameObject gameObject) =>
+            GetController().SetMaterialVectorProperty(GetObjectId(data), material, propertyName, value);
+
+        public void RemoveMaterialVectorProperty(object data, Material material, string propertyName, GameObject gameObject) =>
+            GetController().RemoveMaterialVectorProperty(GetObjectId(data), material, propertyName);
 
         public float? GetMaterialFloatPropertyValueOriginal(object data, Material material, string propertyName, GameObject gameObject) =>
             GetController().GetMaterialFloatPropertyValueOriginal(GetObjectId(data), material, propertyName);

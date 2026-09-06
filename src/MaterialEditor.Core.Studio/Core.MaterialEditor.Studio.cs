@@ -1,4 +1,4 @@
-﻿using BepInEx;
+using BepInEx;
 using BepInEx.Bootstrap;
 using KKAPI;
 using KKAPI.Maker;
@@ -60,30 +60,41 @@ namespace KK_Plugins.MaterialEditor
         public static MEStudio Instance;
 
         internal static Dropdown ItemTypeDropDown;
-        private const float CharacterHeaderTitleOffset = -16f;
+        private ChaControl _itemTypeTarget;
+        private Tooltip _itemTypeDropdownTooltip;
 
         private void Start()
         {
             Instance = this;
-            SceneManager.sceneLoaded += (s, lsm) => InitStudioUI(s.name);
+            SceneManager.sceneLoaded += SceneManagerSceneLoaded;
             StudioSaveLoadApi.RegisterExtraBehaviour<SceneController>(MaterialEditorPlugin.PluginGUID);
 #if !PH
             TimelineCompatibilityHelper.PopulateTimeline();
 #endif
         }
 
+        private void SceneManagerSceneLoaded(UnityEngine.SceneManagement.Scene scene, LoadSceneMode mode)
+        {
+            InitStudioUI(scene.name);
+        }
+
         private void InitStudioUI(string sceneName)
         {
             if (sceneName != "Studio") return;
-            SceneManager.sceneLoaded -= (s, lsm) => InitStudioUI(s.name);
+            SceneManager.sceneLoaded -= SceneManagerSceneLoaded;
 
             InitUI();
 
-            ItemTypeDropDown = UIUtility.CreateDropdown("ItemType", DragPanel.transform);
-            ItemTypeDropDown.transform.SetRect(1f, 0f, 1f, 1f, -242f, 1f, -61f, -1f);
+            ItemTypeDropDown = MaterialEditorControlFactory.CreateDropdown(
+                "ItemType",
+                HeaderContextSlot);
+            ItemTypeDropDown.transform.SetRect();
             ItemTypeDropDown.captionText.transform.SetRect(0.05f, 0f, 1f, 1f, 5f, 2f, -15f, -2f);
             ItemTypeDropDown.captionText.alignment = TextAnchor.MiddleLeft;
-            ItemTypeDropDown.gameObject.SetActive(false);
+            _itemTypeDropdownTooltip = TooltipManager.AddTooltip(
+                ItemTypeDropDown.gameObject,
+                "Body");
+            SetItemTypeDropdownVisible(false);
             AutoScrollToSelectionWithDropdown.Setup(ItemTypeDropDown);
 
 #if PH
@@ -137,18 +148,15 @@ namespace KK_Plugins.MaterialEditor
                 if (Studio.Studio.Instance.dicInfo.TryGetValue(selectNodes[i], out ObjectCtrlInfo objectCtrlInfo))
                     if (objectCtrlInfo is OCIItem ociItem)
                     {
+                        ReleaseItemTypeDropdownTarget();
                         PopulateList(ociItem.objectItem, GetObjectID(objectCtrlInfo));
-                        ItemTypeDropDown.gameObject.SetActive(false);
-                        SetHeaderTitleHorizontalOffset(0f);
                     }
                     else if (objectCtrlInfo is OCIChar ociChar)
                     {
                         PopulateList(ociChar.charInfo.gameObject, new ObjectData(0, MaterialEditorCharaController.ObjectType.Character));
                         var chaControl = ociChar.GetChaControl();
                         PopulateItemTypeDropdown(chaControl);
-                        ItemTypeDropDown.gameObject.SetActive(true);
-                        SetHeaderTitleHorizontalOffset(
-                            CharacterHeaderTitleOffset);
+                        SetItemTypeDropdownVisible(true);
                     }
         }
 
@@ -158,11 +166,14 @@ namespace KK_Plugins.MaterialEditor
         protected void PopulateItemTypeDropdown(ChaControl chaControl)
         {
             ItemTypeDropDown.onValueChanged.RemoveAllListeners();
-            ItemTypeDropDown.onValueChanged.AddListener(value => ChangeItemType(value, chaControl));
+            _itemTypeTarget = chaControl;
+            ItemTypeDropDown.onValueChanged.AddListener(value =>
+            {
+                RefreshItemTypeDropdownCaption(value);
+                ChangeItemType(value, chaControl);
+            });
             ItemTypeDropDown.options.Clear();
             ItemTypeDropDown.options.Add(new Dropdown.OptionData("Body"));
-            ItemTypeDropDown.Set(0);
-            ItemTypeDropDown.captionText.text = "Body";
 
             var clothes = chaControl.GetClothes();
             for (var i = 0; i < clothes.Length; i++)
@@ -186,13 +197,114 @@ namespace KK_Plugins.MaterialEditor
             for (var i = 0; i < accessories.Length; i++)
                 if (accessories[i] != null)
                 {
-                    string optionName = $"Accessory {AccessoryIndexToString(i)}";
+                    string optionName = $"Acc. {AccessoryIndexToString(i)}";
 #if !PH
                     if (i < chaControl.infoAccessory.Length)
-                        optionName += $" {chaControl.infoAccessory[i].Name}";
+                        optionName += $" - {chaControl.infoAccessory[i].Name}";
 #endif
                     ItemTypeDropDown.options.Add(new Dropdown.OptionData(optionName));
                 }
+
+            // Populate every option before refreshing the selected value. Direct
+            // changes to Dropdown.options do not update the caption, and this
+            // control is normally populated while its header slot is inactive.
+            RefreshItemTypeDropdownCaption(0);
+        }
+
+        internal void ReleaseItemTypeDropdownTarget(
+            GameObject destroyedRoot = null)
+        {
+            if (!ReferenceEquals(destroyedRoot, null)
+                && _itemTypeTarget != null
+                && !MaterialEditorUI.IsGameObjectWithin(
+                    _itemTypeTarget.gameObject,
+                    destroyedRoot))
+                return;
+
+            var dropdown = ItemTypeDropDown;
+            if (dropdown != null)
+            {
+                dropdown.onValueChanged.RemoveAllListeners();
+                dropdown.options.Clear();
+            }
+            SetItemTypeDropdownVisible(false);
+            _itemTypeTarget = null;
+        }
+
+        private void UpdateItemTypeDropdownTooltip(int optionIndex)
+        {
+            if (_itemTypeDropdownTooltip == null || ItemTypeDropDown == null)
+                return;
+            _itemTypeDropdownTooltip.SetStandardTooltipText(
+                ItemTypeDropDown.OptionText(optionIndex));
+        }
+
+        private void RefreshItemTypeDropdownCaption(int optionIndex)
+        {
+            var dropdown = ItemTypeDropDown;
+            if (dropdown == null || dropdown.options.Count == 0)
+                return;
+
+            var selectedIndex = Mathf.Clamp(
+                optionIndex,
+                0,
+                dropdown.options.Count - 1);
+            var selectedText = dropdown.OptionText(selectedIndex)
+                               ?? string.Empty;
+
+            // UILib.Set invokes Dropdown.RefreshShownValue on every supported
+            // Unity version without notifying listeners. Keep the explicit text
+            // assignment as a caption fallback, then restore the semantic
+            // dropdown style and its renderer tint after parent activation.
+            dropdown.Set(selectedIndex);
+            if (dropdown.captionText != null)
+                dropdown.captionText.text = selectedText;
+            MaterialEditorStyles.ApplyDropdown(dropdown);
+            if (dropdown.captionText != null)
+                MaterialEditorStyles.RefreshTextRendering(
+                    dropdown.captionText.gameObject,
+                    false);
+            UpdateItemTypeDropdownTooltip(selectedIndex);
+        }
+
+        private void SetItemTypeDropdownVisible(bool visible)
+        {
+            if (visible)
+            {
+                // Activate the parent before the child so caption styling and
+                // RefreshShownValue run against a renderable hierarchy.
+                SetHeaderContextControlVisible(true);
+                if (ItemTypeDropDown != null)
+                {
+                    ItemTypeDropDown.gameObject.SetActive(true);
+                    RefreshItemTypeDropdownCaption(ItemTypeDropDown.value);
+                }
+                return;
+            }
+
+            if (ItemTypeDropDown != null)
+                ItemTypeDropDown.gameObject.SetActive(false);
+            SetHeaderContextControlVisible(false);
+        }
+
+        internal void ReleaseItemTypeDropdownTarget(ChaControl destroyedTarget)
+        {
+            if (ReferenceEquals(destroyedTarget, null)
+                || !ReferenceEquals(_itemTypeTarget, destroyedTarget))
+                return;
+            ReleaseItemTypeDropdownTarget();
+        }
+
+        private void OnDestroy()
+        {
+            SceneManager.sceneLoaded -= SceneManagerSceneLoaded;
+            if (!ReferenceEquals(Instance, this))
+                return;
+            ReleaseItemTypeDropdownTarget();
+            ShutdownMaterialEditorUi();
+            ItemTypeDropDown = null;
+            _itemTypeDropdownTooltip = null;
+            Instance = null;
         }
 
         private void ChangeItemType(int selectedItem, ChaControl chaControl)
@@ -237,6 +349,7 @@ namespace KK_Plugins.MaterialEditor
                         PopulateList(hair, new ObjectData(index, MaterialEditorCharaController.ObjectType.Hair));
                     break;
                 case "Accessory":
+                case "Acc.":
                     if (option.Length > 1)
                         index = AccessoryStringToIndex(option[1]);
                     var accessory = chaControl.GetAccessoryObject(index);
@@ -406,7 +519,7 @@ namespace KK_Plugins.MaterialEditor
                         texData = SceneController.TextureDictionary[textureProperty.TexID.Value].Data;
                 }
             }
-            string ext = ImageTypeIdentifier.Identify(texData, "XXX");
+            string ext = TextureSaveHandler.IdentifyImageExtension(texData, "XXX");
             if (texData != null && ext != "XXX")
                 base.ExportTextureOriginal(mat, property, ext, texData);
             else
@@ -498,6 +611,16 @@ namespace KK_Plugins.MaterialEditor
             EditService.SetMaterialTexture(data, material, propertyName, filePath, go);
         public override void RemoveMaterialTexture(object data, Material material, string propertyName, GameObject go) =>
             EditService.RemoveMaterialTexture(data, material, propertyName, go);
+
+        /// <inheritdoc/>
+        public override bool GetMaterialCubemapValueOriginal(object data, Material material, string propertyName, GameObject go) =>
+            EditService.GetMaterialCubemapValueOriginal(data, material, propertyName, go);
+        /// <inheritdoc/>
+        public override void SetMaterialCubemap(object data, Material material, string propertyName, string filePath, GameObject go) =>
+            EditService.SetMaterialCubemap(data, material, propertyName, filePath, go);
+        /// <inheritdoc/>
+        public override void RemoveMaterialCubemap(object data, Material material, string propertyName, GameObject go) =>
+            EditService.RemoveMaterialCubemap(data, material, propertyName, go);
 
         public override Vector2? GetMaterialTextureOffsetOriginal(object data, Material material, string propertyName, GameObject go) =>
             EditService.GetMaterialTextureOffsetOriginal(data, material, propertyName, go);

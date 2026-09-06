@@ -132,11 +132,15 @@ namespace MaterialEditorAPI
                    interpolateAfter: null,
                    getValue: (oci, parameter) =>
                    {
-                       var tex = parameter.GetMaterial(oci).GetTexture($"_{parameter.propertyName}");
+                       var tex = MaterialPropertyAccess.GetTexture(
+                           parameter.GetMaterial(oci),
+                           MaterialPropertyIdCache.Get(parameter.propertyName));
                        //When no texture is set (by default or custom) return -1 to prevent a null reference when trying to convert the texture to bytes
                        //-1 will never exist in the texture dictionary and null will be used as a texture, which functions the same as the default empty texture
                        if (tex == null) return -1;
-                       return SetAndGetTextureID(tex.ToTexture2D().EncodeToPNG());
+                        return SetAndGetTextureID(
+                            MaterialEditorPluginBase.EncodeTextureToPng(
+                                tex.ToTexture2D()));
                    },
                    readValueFromXml: (parameter, node) => XmlConvert.ToInt32(node.Attributes["value"].Value),
                    writeValueToXml: (parameter, writer, value) =>
@@ -158,7 +162,9 @@ namespace MaterialEditorAPI
                    name: "Texture Scale Property",
                    interpolateBefore: (oci, parameter, leftValue, rightValue, factor) => SetTextureScale(parameter.GetGameObject(oci), parameter.materialName, parameter.propertyName, Vector2.LerpUnclamped(leftValue, rightValue, factor)),
                    interpolateAfter: null,
-                   getValue: (oci, parameter) => parameter.GetMaterial(oci).GetTextureScale($"_{parameter.propertyName}"),
+                   getValue: (oci, parameter) => MaterialPropertyAccess.GetTextureScale(
+                       parameter.GetMaterial(oci),
+                       MaterialPropertyIdCache.Get(parameter.propertyName)),
                    readValueFromXml: (parameter, node) =>
                    {
                        return new Vector2(
@@ -186,7 +192,9 @@ namespace MaterialEditorAPI
                    name: "Texture Offset Property",
                    interpolateBefore: (oci, parameter, leftValue, rightValue, factor) => SetTextureOffset(parameter.GetGameObject(oci), parameter.materialName, parameter.propertyName, Vector2.LerpUnclamped(leftValue, rightValue, factor)),
                    interpolateAfter: null,
-                   getValue: (oci, parameter) => parameter.GetMaterial(oci).GetTextureOffset($"_{parameter.propertyName}"),
+                   getValue: (oci, parameter) => MaterialPropertyAccess.GetTextureOffset(
+                       parameter.GetMaterial(oci),
+                       MaterialPropertyIdCache.Get(parameter.propertyName)),
                    readValueFromXml: (parameter, node) =>
                    {
                        return new Vector2(
@@ -214,7 +222,9 @@ namespace MaterialEditorAPI
                    name: "Color Property",
                    interpolateBefore: (oci, parameter, leftValue, rightValue, factor) => SetColor(parameter.GetGameObject(oci), parameter.materialName, parameter.propertyName, Color.LerpUnclamped(leftValue, rightValue, factor)),
                    interpolateAfter: null,
-                   getValue: (oci, parameter) => parameter.GetMaterial(oci).GetColor($"_{parameter.propertyName}"),
+                   getValue: (oci, parameter) => MaterialPropertyAccess.GetColor(
+                       parameter.GetMaterial(oci),
+                       MaterialPropertyIdCache.Get(parameter.propertyName)),
                    readValueFromXml: (parameter, node) =>
                    {
                        return new Color(
@@ -239,6 +249,40 @@ namespace MaterialEditorAPI
                    isCompatibleWithTarget: (oci) => IsCompatibleWithTarget(RowModel.RowItemType.ColorProperty)
                );
 
+            //Vector value
+            TimelineCompatibility.AddInterpolableModelDynamic(
+                   owner: "MaterialEditor",
+                   id: "vectorProperty",
+                   name: "Vector Property",
+                   interpolateBefore: (oci, parameter, leftValue, rightValue, factor) => SetVector(parameter.GetGameObject(oci), parameter.materialName, parameter.propertyName, Vector4.LerpUnclamped(leftValue, rightValue, factor)),
+                   interpolateAfter: null,
+                   getValue: (oci, parameter) => MaterialPropertyAccess.GetVector(
+                       parameter.GetMaterial(oci),
+                       MaterialPropertyIdCache.Get(parameter.propertyName)),
+                   readValueFromXml: (parameter, node) =>
+                   {
+                       return new Vector4(
+                           XmlConvert.ToSingle(node.Attributes["X"].Value),
+                           XmlConvert.ToSingle(node.Attributes["Y"].Value),
+                           XmlConvert.ToSingle(node.Attributes["Z"].Value),
+                           XmlConvert.ToSingle(node.Attributes["W"].Value)
+                       );
+                   },
+                   writeValueToXml: (parameter, writer, value) =>
+                   {
+                       writer.WriteAttributeString("X", XmlConvert.ToString(value.x));
+                       writer.WriteAttributeString("Y", XmlConvert.ToString(value.y));
+                       writer.WriteAttributeString("Z", XmlConvert.ToString(value.z));
+                       writer.WriteAttributeString("W", XmlConvert.ToString(value.w));
+                   },
+                   getParameter: GetMaterialInfoParameter,
+                   readParameterFromXml: ReadMaterialInfoXml,
+                   writeParameterToXml: WriteMaterialInfoXml,
+                   checkIntegrity: (oci, parameter, leftValue, rightValue) => CheckIntegrity(oci, parameter, leftValue, rightValue, RowModel.RowItemType.VectorProperty),
+                   getFinalName: (currentName, oci, parameter) => $"{parameter.propertyName}: {parameter.materialName}",
+                   isCompatibleWithTarget: (oci) => IsCompatibleWithTarget(RowModel.RowItemType.VectorProperty)
+               );
+
             //Float value
             TimelineCompatibility.AddInterpolableModelDynamic(
                    owner: "MaterialEditor",
@@ -246,7 +290,9 @@ namespace MaterialEditorAPI
                    name: "Float Property",
                    interpolateBefore: (oci, parameter, leftValue, rightValue, factor) => SetFloat(parameter.GetGameObject(oci), parameter.materialName, parameter.propertyName, Mathf.LerpUnclamped(leftValue, rightValue, factor)),
                    interpolateAfter: null,
-                   getValue: (oci, parameter) => parameter.GetMaterial(oci).GetFloat($"_{parameter.propertyName}"),
+                   getValue: (oci, parameter) => MaterialPropertyAccess.GetFloat(
+                       parameter.GetMaterial(oci),
+                       MaterialPropertyIdCache.Get(parameter.propertyName)),
                    readValueFromXml: (parameter, node) => XmlConvert.ToSingle(node.Attributes["value"].Value),
                    writeValueToXml: (parameter, writer, value) => writer.WriteAttributeString("value", value.ToString()),
                    getParameter: GetMaterialInfoParameter,
@@ -278,6 +324,9 @@ namespace MaterialEditorAPI
 
         private static MaterialInfo GetMaterialInfoParameter(ObjectCtrlInfo oci)
         {
+            if (selectedInterpolable == null
+                || selectedInterpolable.GameObject == null)
+                return null;
             return new MaterialInfo(selectedInterpolable.GameObject.GetFullPath(), selectedInterpolable.MaterialName, selectedInterpolable.PropertyName, selectedInterpolable.RendererName);
         }
 
@@ -295,6 +344,9 @@ namespace MaterialEditorAPI
 
         private static ProjectorInfo GetProjectorInfoParameter(ObjectCtrlInfo oci)
         {
+            if (selectedProjectorInterpolable == null
+                || selectedProjectorInterpolable.GameObject == null)
+                return null;
             return new ProjectorInfo(selectedProjectorInterpolable.GameObject.GetFullPath(), selectedProjectorInterpolable.ProjectorName, selectedProjectorInterpolable.Property);
         }
 
@@ -324,19 +376,23 @@ namespace MaterialEditorAPI
 
         private static bool IsCompatibleWithTarget(RowModel.RowItemType rowtype)
         {
-            if (selectedInterpolable != null && selectedInterpolable.RowType == rowtype)
+            if (selectedInterpolable != null
+                && selectedInterpolable.GameObject != null
+                && selectedInterpolable.RowType == rowtype)
                 if (rowtype == RowModel.RowItemType.Renderer && !selectedInterpolable.RendererName.IsNullOrEmpty())
                     return true;
                 else if (rowtype == RowModel.RowItemType.Shader && !selectedInterpolable.MaterialName.IsNullOrEmpty())
                     return true;
-                else if ((rowtype == RowModel.RowItemType.TextureProperty || rowtype == RowModel.RowItemType.ColorProperty || rowtype == RowModel.RowItemType.FloatProperty) && !selectedInterpolable.MaterialName.IsNullOrEmpty() && !selectedInterpolable.PropertyName.IsNullOrEmpty())
+                else if ((rowtype == RowModel.RowItemType.TextureProperty || rowtype == RowModel.RowItemType.ColorProperty || rowtype == RowModel.RowItemType.FloatProperty || rowtype == RowModel.RowItemType.VectorProperty) && !selectedInterpolable.MaterialName.IsNullOrEmpty() && !selectedInterpolable.PropertyName.IsNullOrEmpty())
                     return true;
             return false;
         }
 
         private static bool IsCompatibleWithProjectorTarget()
         {
-            if (selectedProjectorInterpolable != null && !selectedProjectorInterpolable.ProjectorName.IsNullOrEmpty())
+            if (selectedProjectorInterpolable != null
+                && selectedProjectorInterpolable.GameObject != null
+                && !selectedProjectorInterpolable.ProjectorName.IsNullOrEmpty())
                 return true;
             return false;
         }
@@ -414,6 +470,7 @@ namespace MaterialEditorAPI
                     case RowModel.RowItemType.TextureProperty:
                     case RowModel.RowItemType.ColorProperty:
                     case RowModel.RowItemType.FloatProperty:
+                    case RowModel.RowItemType.VectorProperty:
                         if (materialName.IsNullOrEmpty() || propertyName.IsNullOrEmpty()) return false;
                         break;
                 }

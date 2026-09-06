@@ -15,7 +15,15 @@ namespace MaterialEditorAPI
         {
             var colorItem = (ColorPropertyRowModel)item;
             _controls.SetVisible(true);
-            TooltipBinding.Bind(_controls.Label.gameObject, colorItem.TooltipText);
+            TooltipBinding.Bind(
+                _controls.Label.gameObject,
+                colorItem.TooltipText,
+                colorItem.PropertyName,
+                _controls.Label);
+            TimelineColumnBinding.Bind(
+                _controls.SelectInterpolableButton,
+                listeners,
+                colorItem.SelectInterpolable);
 
             System.Action refreshInputs = () =>
             {
@@ -107,9 +115,6 @@ namespace MaterialEditorAPI
                     refreshState();
                 });
             });
-            listeners.Listen(
-                _controls.SelectInterpolableButton,
-                () => colorItem.SelectInterpolable());
             LabelClickBinding.Bind(
                 listeners,
                 _controls.LabelClickTrigger,

@@ -1,7 +1,6 @@
 using KKAPI.Chara;
 using MaterialEditorAPI;
 using System;
-using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
 using System.Linq;
@@ -25,22 +24,77 @@ namespace KK_Plugins.MaterialEditor
         /// <param name="setTexInUpdate">Whether to wait for the next Update</param>
         public void SetMaterialTextureFromFile(int slot, ObjectType objectType, Material material, string propertyName, string filePath, GameObject go, bool setTexInUpdate = false)
         {
-            if (!File.Exists(filePath)) return;
-
             if (setTexInUpdate)
             {
-                FileToSet = filePath;
-                PropertyToSet = propertyName;
-                MatToSet = material;
-                GameObjectToSet = go;
-                SlotToSet = slot;
-                ObjectTypeToSet = objectType;
+                QueueMaterialTextureFromFile(
+                    slot,
+                    objectType,
+                    material,
+                    propertyName,
+                    filePath,
+                    go,
+                    null);
             }
             else
             {
-                var texBytes = File.ReadAllBytes(filePath);
-                SetMaterialTexture(slot, objectType, material, propertyName, texBytes, go);
+                TrySetMaterialTextureFromFile(
+                    slot,
+                    objectType,
+                    material,
+                    propertyName,
+                    filePath,
+                    go);
             }
+        }
+
+        internal void QueueMaterialTextureFromFile(
+            int slot,
+            ObjectType objectType,
+            Material material,
+            string propertyName,
+            string filePath,
+            GameObject go,
+            Action<bool> completed)
+        {
+            if (!File.Exists(filePath))
+            {
+                completed?.Invoke(false);
+                return;
+            }
+
+            // Only one import can wait for Update. Replacing it completes the
+            // displaced request as failed so its UI cannot wait indefinitely.
+            if (FileToSet != null)
+                TextureImportCompleted?.Invoke(false);
+
+            FileToSet = filePath;
+            PropertyToSet = propertyName;
+            MatToSet = material;
+            GameObjectToSet = go;
+            SlotToSet = slot;
+            ObjectTypeToSet = objectType;
+            TextureImportCompleted = completed;
+        }
+
+        private bool TrySetMaterialTextureFromFile(
+            int slot,
+            ObjectType objectType,
+            Material material,
+            string propertyName,
+            string filePath,
+            GameObject go)
+        {
+            if (!File.Exists(filePath))
+                return false;
+
+            var texBytes = File.ReadAllBytes(filePath);
+            return TrySetMaterialTexture(
+                slot,
+                objectType,
+                material,
+                propertyName,
+                texBytes,
+                go);
         }
 
         /// <summary>
@@ -53,18 +107,90 @@ namespace KK_Plugins.MaterialEditor
         /// <param name="go">GameObject the material belongs to</param>
         public void SetMaterialTexture(int slot, ObjectType objectType, Material material, string propertyName, byte[] data, GameObject go)
         {
-            if (data == null) return;
-
-            var texID = SetAndGetTextureID(data);
-            var textureProperty = MaterialTexturePropertyList.FirstOrDefault(x => x.ObjectType == objectType && x.CoordinateIndex == GetCoordinateIndex(objectType) && x.Slot == slot && x.Property == propertyName && x.MaterialName == material.NameFormatted());
-            if (textureProperty == null)
-                MaterialTexturePropertyList.Add(textureProperty = new MaterialTextureProperty(objectType, GetCoordinateIndex(objectType), slot, material.NameFormatted(), propertyName, texID));
-            else
-                textureProperty.TexID = texID;
-
-            textureProperty.TexAnimationDef = MEAnimationUtil.LoadAnimationDefFromBytes(texID, data, SetAndGetTextureID);
-            SetTextureWithProperty(go, textureProperty);
+            TrySetMaterialTexture(slot, objectType, material, propertyName, data, go);
         }
+
+        private bool TrySetMaterialTexture(int slot, ObjectType objectType, Material material, string propertyName, byte[] data, GameObject go)
+        {
+            if (data == null || material == null || go == null)
+                return false;
+
+            var coordinateIndex = GetCoordinateIndex(objectType);
+            var materialName = material.NameFormatted();
+            var existingProperty = MaterialTexturePropertyList.FirstOrDefault(x => x.ObjectType == objectType && x.CoordinateIndex == coordinateIndex && x.Slot == slot && x.Property == propertyName && x.MaterialName == materialName);
+            MaterialTextureProperty candidateProperty = null;
+            var committed = false;
+
+            try
+            {
+                var texID = SetAndGetTextureID(data);
+                var animationDefinition = MEAnimationUtil.LoadAnimationDefFromBytes(texID, data, SetAndGetTextureID);
+                candidateProperty = new MaterialTextureProperty(
+                    objectType,
+                    coordinateIndex,
+                    slot,
+                    materialName,
+                    propertyName,
+                    texID,
+                    existingProperty == null ? null : existingProperty.Offset,
+                    existingProperty == null ? null : existingProperty.OffsetOriginal,
+                    existingProperty == null ? null : existingProperty.Scale,
+                    existingProperty == null ? null : existingProperty.ScaleOriginal,
+                    animationDefinition);
+
+                if (!SetTextureWithProperty(go, candidateProperty))
+                    return false;
+
+                CommitTextureImport(existingProperty, candidateProperty);
+                committed = true;
+                return true;
+            }
+            finally
+            {
+                if (!committed)
+                {
+                    if (candidateProperty != null)
+                        AnimationControllerMap.Remove(candidateProperty);
+                    PurgeUnusedTextures();
+                }
+            }
+        }
+
+        private void CommitTextureImport(MaterialTextureProperty existingProperty, MaterialTextureProperty candidateProperty)
+        {
+            if (existingProperty == null)
+            {
+                MaterialTexturePropertyList.Add(candidateProperty);
+                return;
+            }
+
+            var previousTexID = existingProperty.TexID;
+            var previousAnimationDefinition = existingProperty.TexAnimationDef;
+            var hadPreviousController = AnimationControllerMap.TryGetValue(existingProperty, out var previousController);
+            var hasCandidateController = AnimationControllerMap.TryGetValue(candidateProperty, out var candidateController);
+            try
+            {
+                existingProperty.TexID = candidateProperty.TexID;
+                existingProperty.TexAnimationDef = candidateProperty.TexAnimationDef;
+                AnimationControllerMap.Remove(candidateProperty);
+                if (hasCandidateController)
+                    AnimationControllerMap[existingProperty] = candidateController;
+                else
+                    AnimationControllerMap.Remove(existingProperty);
+            }
+            catch
+            {
+                existingProperty.TexID = previousTexID;
+                existingProperty.TexAnimationDef = previousAnimationDefinition;
+                AnimationControllerMap.Remove(candidateProperty);
+                if (hadPreviousController)
+                    AnimationControllerMap[existingProperty] = previousController;
+                else
+                    AnimationControllerMap.Remove(existingProperty);
+                throw;
+            }
+        }
+
         /// <summary>
         /// Get the saved material property value or null if none is saved
         /// </summary>

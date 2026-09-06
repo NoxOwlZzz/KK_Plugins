@@ -8,7 +8,7 @@ namespace MaterialEditorAPI
     internal sealed class NumericInputSpec
     {
         internal static readonly NumericInputSpec FloatingPoint =
-            new NumericInputSpec("0.####", "R");
+            new NumericInputSpec("R", "R");
 
         internal NumericInputSpec(string displayFormat, string editFormat)
         {
@@ -57,9 +57,11 @@ namespace MaterialEditorAPI
         ISelectHandler,
         IDeselectHandler
     {
+        private const float GlyphBleed = 1f;
+
         [SerializeField] private InputField _inputField;
         [SerializeField] private RectTransform _viewport;
-        [SerializeField] private string _displayFormat = "0.####";
+        [SerializeField] private string _displayFormat = "R";
         [SerializeField] private string _editFormat = "R";
 
         private bool _editing;
@@ -87,11 +89,15 @@ namespace MaterialEditorAPI
             input.lineType = InputField.LineType.SingleLine;
             input.textComponent.resizeTextForBestFit = false;
             input.textComponent.horizontalOverflow = HorizontalWrapMode.Overflow;
-            input.textComponent.verticalOverflow = VerticalWrapMode.Truncate;
+            // Unity 5.6 can discard the complete line when a fixed-size font is
+            // slightly taller than the compact input viewport. The viewport
+            // already clips the mesh, so generate the line and let it clip.
+            input.textComponent.verticalOverflow = VerticalWrapMode.Overflow;
 
             EnsureViewport();
-            if (GetComponent<RowColumnLayoutOverride>() == null)
-                gameObject.AddComponent<RowColumnLayoutOverride>();
+            // Column sizing belongs to RowLayoutCatalog or the immediate
+            // editor group. An unconfigured high-priority layout override here
+            // would force nested numeric inputs to zero width.
         }
 
         internal void SetValue(float value)
@@ -99,6 +105,13 @@ namespace MaterialEditorAPI
             _value = value;
             _hasValue = true;
             RefreshText();
+        }
+
+        internal void SetMixed()
+        {
+            _editing = false;
+            _hasValue = false;
+            SetTextWithoutNotification(InputField, "Mixed");
         }
 
         internal void CommitValue(float value)
@@ -180,8 +193,15 @@ namespace MaterialEditorAPI
                 _viewport.SetParent(input.transform, false);
                 _viewport.anchorMin = Vector2.zero;
                 _viewport.anchorMax = Vector2.one;
-                _viewport.offsetMin = new Vector2(leftInset, bottomInset);
-                _viewport.offsetMax = new Vector2(-rightInset, -topInset);
+                // Extend the mask one pixel beyond the original text rect so
+                // anti-aliased glyph edges are not clipped. The child text is
+                // inset by the same amount below, preserving its exact layout.
+                _viewport.offsetMin = new Vector2(
+                    leftInset - GlyphBleed,
+                    bottomInset - GlyphBleed);
+                _viewport.offsetMax = new Vector2(
+                    -rightInset + GlyphBleed,
+                    -topInset + GlyphBleed);
             }
 
             if (input.placeholder is Graphic placeholder)
@@ -198,8 +218,8 @@ namespace MaterialEditorAPI
         {
             rect.anchorMin = Vector2.zero;
             rect.anchorMax = Vector2.one;
-            rect.offsetMin = Vector2.zero;
-            rect.offsetMax = Vector2.zero;
+            rect.offsetMin = Vector2.one * GlyphBleed;
+            rect.offsetMax = -Vector2.one * GlyphBleed;
         }
     }
 }

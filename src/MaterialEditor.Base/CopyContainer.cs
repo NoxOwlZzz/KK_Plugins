@@ -1,4 +1,4 @@
-﻿using System.Collections.Generic;
+using System.Collections.Generic;
 using UnityEngine;
 
 namespace MaterialEditorAPI
@@ -20,10 +20,12 @@ namespace MaterialEditorAPI
         /// List of color property edits
         /// </summary>
         public List<MaterialColorProperty> MaterialColorPropertyList = new List<MaterialColorProperty>();
+        public List<MaterialVectorProperty> MaterialVectorPropertyList = new List<MaterialVectorProperty>();
         /// <summary>
         /// List of texture property edits
         /// </summary>
         public List<MaterialTextureProperty> MaterialTexturePropertyList = new List<MaterialTextureProperty>();
+        public List<MaterialCubemapProperty> MaterialCubemapPropertyList = new List<MaterialCubemapProperty>();
         /// <summary>
         /// List of shader edits
         /// </summary>
@@ -40,10 +42,25 @@ namespace MaterialEditorAPI
         {
             get
             {
-                if (MaterialFloatPropertyList.Count == 0 && MaterialKeywordPropertyList.Count == 0 && MaterialColorPropertyList.Count == 0 && MaterialTexturePropertyList.Count == 0 && MaterialShaderList.Count == 0 && ProjectorPropertyList.Count == 0)
-                    return true;
-                return false;
+                return !HasAny(MaterialFloatPropertyList)
+                       && !HasAny(MaterialKeywordPropertyList)
+                       && !HasAny(MaterialColorPropertyList)
+                       && !HasAny(MaterialVectorPropertyList)
+                       && !HasAny(MaterialTexturePropertyList)
+                       && !HasAny(MaterialCubemapPropertyList)
+                       && !HasAny(MaterialShaderList)
+                       && !HasAny(ProjectorPropertyList);
             }
+        }
+
+        private static bool HasAny<T>(IList<T> values) where T : class
+        {
+            if (values == null)
+                return false;
+            for (var index = 0; index < values.Count; index++)
+                if (values[index] != null)
+                    return true;
+            return false;
         }
 
         /// <summary>
@@ -54,7 +71,9 @@ namespace MaterialEditorAPI
             MaterialFloatPropertyList = new List<MaterialFloatProperty>();
             MaterialKeywordPropertyList = new List<MaterialKeywordProperty>();
             MaterialColorPropertyList = new List<MaterialColorProperty>();
+            MaterialVectorPropertyList = new List<MaterialVectorProperty>();
             MaterialTexturePropertyList = new List<MaterialTextureProperty>();
+            MaterialCubemapPropertyList = new List<MaterialCubemapProperty>();
             MaterialShaderList = new List<MaterialShader>();
             ProjectorPropertyList = new List<ProjectorProperty>();
         }
@@ -137,6 +156,18 @@ namespace MaterialEditorAPI
             }
         }
 
+        public class MaterialVectorProperty
+        {
+            public string Property;
+            public Vector4 Value;
+
+            public MaterialVectorProperty(string property, Vector4 value)
+            {
+                Property = property;
+                Value = value;
+            }
+        }
+
         /// <summary>
         /// Data storage class for texture properties
         /// </summary>
@@ -172,6 +203,21 @@ namespace MaterialEditorAPI
                 Data = data;
                 Offset = offset;
                 Scale = scale;
+            }
+        }
+
+        public class MaterialCubemapProperty
+        {
+            public string Property;
+            /// <summary>
+            /// Encoded PNG or Radiance HDR Cubemap source data.
+            /// </summary>
+            public byte[] Data;
+
+            public MaterialCubemapProperty(string property, byte[] data = null)
+            {
+                Property = property;
+                Data = data;
             }
         }
 

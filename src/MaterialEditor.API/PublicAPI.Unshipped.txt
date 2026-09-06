@@ -1,7 +1,14 @@
 const MaterialEditorAPI.MaterialEditorPropertyEditorIds.Boolean = "materialeditor.boolean" -> string
 const MaterialEditorAPI.MaterialEditorPropertyEditorIds.Color = "materialeditor.color" -> string
+const MaterialEditorAPI.MaterialEditorPropertyEditorIds.Cubemap = "materialeditor.cubemap" -> string
 const MaterialEditorAPI.MaterialEditorPropertyEditorIds.Float = "materialeditor.float" -> string
 const MaterialEditorAPI.MaterialEditorPropertyEditorIds.Texture = "materialeditor.texture" -> string
+MaterialEditorAPI.MaterialAPI.ShaderPropertyType.Cubemap = 5 -> MaterialEditorAPI.MaterialAPI.ShaderPropertyType
+MaterialEditorAPI.CopyContainer.MaterialCubemapProperty
+MaterialEditorAPI.CopyContainer.MaterialCubemapProperty.Data -> byte[]
+MaterialEditorAPI.CopyContainer.MaterialCubemapProperty.MaterialCubemapProperty(string property, byte[] data = null) -> void
+MaterialEditorAPI.CopyContainer.MaterialCubemapProperty.Property -> string
+MaterialEditorAPI.CopyContainer.MaterialCubemapPropertyList -> System.Collections.Generic.List<MaterialEditorAPI.CopyContainer.MaterialCubemapProperty>
 MaterialEditorAPI.MaterialEditorApiCapability
 MaterialEditorAPI.MaterialEditorApiCapability.EditServiceFacade = 16 -> MaterialEditorAPI.MaterialEditorApiCapability
 MaterialEditorAPI.MaterialEditorApiCapability.LabelClickEvents = 1 -> MaterialEditorAPI.MaterialEditorApiCapability
@@ -42,10 +49,12 @@ MaterialEditorAPI.MaterialEditorEditService.GetOriginalTextureScale(UnityEngine.
 MaterialEditorAPI.MaterialEditorEditService.GetProjectorProperty(UnityEngine.Projector projector, MaterialEditorAPI.MaterialAPI.ProjectorProperties property) -> float?
 MaterialEditorAPI.MaterialEditorEditService.GetProjectors() -> System.Collections.Generic.IEnumerable<UnityEngine.Projector>
 MaterialEditorAPI.MaterialEditorEditService.GetRendererProperty(UnityEngine.Renderer renderer, MaterialEditorAPI.MaterialAPI.RendererProperties property) -> string
+MaterialEditorAPI.MaterialEditorEditService.IsCubemapOriginal(UnityEngine.Material material, string propertyName) -> bool
 MaterialEditorAPI.MaterialEditorEditService.IsTextureOriginal(UnityEngine.Material material, string propertyName) -> bool
 MaterialEditorAPI.MaterialEditorEditService.PasteMaterialEdits(UnityEngine.Material material) -> void
 MaterialEditorAPI.MaterialEditorEditService.ResetBoolean(UnityEngine.Material material, string propertyName) -> void
 MaterialEditorAPI.MaterialEditorEditService.ResetColor(UnityEngine.Material material, string propertyName) -> void
+MaterialEditorAPI.MaterialEditorEditService.ResetCubemap(UnityEngine.Material material, string propertyName) -> void
 MaterialEditorAPI.MaterialEditorEditService.ResetFloat(UnityEngine.Material material, string propertyName) -> void
 MaterialEditorAPI.MaterialEditorEditService.ResetMaterialName(UnityEngine.Renderer renderer, UnityEngine.Material material) -> void
 MaterialEditorAPI.MaterialEditorEditService.ResetProjectorProperty(UnityEngine.Projector projector, MaterialEditorAPI.MaterialAPI.ProjectorProperties property) -> void
@@ -57,6 +66,7 @@ MaterialEditorAPI.MaterialEditorEditService.ResetTextureOffset(UnityEngine.Mater
 MaterialEditorAPI.MaterialEditorEditService.ResetTextureScale(UnityEngine.Material material, string propertyName) -> void
 MaterialEditorAPI.MaterialEditorEditService.SetBoolean(UnityEngine.Material material, string propertyName, bool value) -> void
 MaterialEditorAPI.MaterialEditorEditService.SetColor(UnityEngine.Material material, string propertyName, UnityEngine.Color value) -> void
+MaterialEditorAPI.MaterialEditorEditService.SetCubemapFromFile(UnityEngine.Material material, string propertyName, string filePath) -> void
 MaterialEditorAPI.MaterialEditorEditService.SetFloat(UnityEngine.Material material, string propertyName, float value) -> void
 MaterialEditorAPI.MaterialEditorEditService.SetMaterialName(UnityEngine.Renderer renderer, UnityEngine.Material material, string value) -> void
 MaterialEditorAPI.MaterialEditorEditService.SetProjectorProperty(UnityEngine.Projector projector, MaterialEditorAPI.MaterialAPI.ProjectorProperties property, float value) -> void
@@ -93,6 +103,7 @@ MaterialEditorAPI.MaterialEditorLabelClickEventArgs.Renderer.get -> UnityEngine.
 MaterialEditorAPI.MaterialEditorLabelClickEventArgs.ShiftPressed.get -> bool
 MaterialEditorAPI.MaterialEditorLabelType
 MaterialEditorAPI.MaterialEditorLabelType.ColorProperty = 6 -> MaterialEditorAPI.MaterialEditorLabelType
+MaterialEditorAPI.MaterialEditorLabelType.CubemapProperty = 10 -> MaterialEditorAPI.MaterialEditorLabelType
 MaterialEditorAPI.MaterialEditorLabelType.FloatProperty = 7 -> MaterialEditorAPI.MaterialEditorLabelType
 MaterialEditorAPI.MaterialEditorLabelType.KeywordProperty = 8 -> MaterialEditorAPI.MaterialEditorLabelType
 MaterialEditorAPI.MaterialEditorLabelType.Material = 1 -> MaterialEditorAPI.MaterialEditorLabelType
@@ -101,6 +112,7 @@ MaterialEditorAPI.MaterialEditorLabelType.Shader = 2 -> MaterialEditorAPI.Materi
 MaterialEditorAPI.MaterialEditorLabelType.ShaderRenderQueue = 3 -> MaterialEditorAPI.MaterialEditorLabelType
 MaterialEditorAPI.MaterialEditorLabelType.TextureOffsetScale = 5 -> MaterialEditorAPI.MaterialEditorLabelType
 MaterialEditorAPI.MaterialEditorLabelType.TextureProperty = 4 -> MaterialEditorAPI.MaterialEditorLabelType
+MaterialEditorAPI.MaterialEditorLabelType.VectorProperty = 9 -> MaterialEditorAPI.MaterialEditorLabelType
 MaterialEditorAPI.MaterialEditorPropertyContext
 MaterialEditorAPI.MaterialEditorPropertyContext.MaterialName.get -> string
 MaterialEditorAPI.MaterialEditorPropertyContext.ShaderName.get -> string
@@ -190,5 +202,103 @@ static MaterialEditorAPI.MaterialEditorExtensionApi.RegisterPropertyEditor(strin
 static MaterialEditorAPI.MaterialEditorExtensionApi.RegisterSelectionHandler(System.Action<MaterialEditorAPI.MaterialEditorSelectionEventArgs> handler) -> System.IDisposable
 static MaterialEditorAPI.MaterialEditorExtensionApi.Supports(MaterialEditorAPI.MaterialEditorApiCapability capabilities) -> bool
 static MaterialEditorAPI.MaterialEditorExtensionApi.UnregisterSelectionHandler(System.Action<MaterialEditorAPI.MaterialEditorSelectionEventArgs> handler) -> void
+static MaterialEditorAPI.MaterialAPI.SetCubemap(UnityEngine.GameObject gameObject, string materialName, string propertyName, UnityEngine.Cubemap value) -> bool
 static MaterialEditorAPI.MaterialEditorUI.RegisterLabelClickHandler(System.Action<MaterialEditorAPI.MaterialEditorLabelClickEventArgs> handler) -> void
 static MaterialEditorAPI.MaterialEditorUI.UnregisterLabelClickHandler(System.Action<MaterialEditorAPI.MaterialEditorLabelClickEventArgs> handler) -> void
+virtual MaterialEditorAPI.MaterialEditorUI.GetMaterialCubemapValueOriginal(object data, UnityEngine.Material material, string propertyName, UnityEngine.GameObject gameObject) -> bool
+virtual MaterialEditorAPI.MaterialEditorUI.RemoveMaterialCubemap(object data, UnityEngine.Material material, string propertyName, UnityEngine.GameObject gameObject) -> void
+virtual MaterialEditorAPI.MaterialEditorUI.SetMaterialCubemap(object data, UnityEngine.Material material, string propertyName, string filePath, UnityEngine.GameObject gameObject) -> void
+const MaterialEditorAPI.MaterialEditorPropertyEditorIds.Enum = "materialeditor.enum" -> string
+const MaterialEditorAPI.MaterialEditorPropertyEditorIds.Toggle = "materialeditor.toggle" -> string
+const MaterialEditorAPI.MaterialEditorPropertyEditorIds.Vector2 = "materialeditor.vector2" -> string
+const MaterialEditorAPI.MaterialEditorPropertyEditorIds.Vector3 = "materialeditor.vector3" -> string
+const MaterialEditorAPI.MaterialEditorPropertyEditorIds.Vector4 = "materialeditor.vector4" -> string
+MaterialEditorAPI.MaterialEditorApiCapability.ConditionalPropertyVisibility = 512 -> MaterialEditorAPI.MaterialEditorApiCapability
+MaterialEditorAPI.MaterialEditorApiCapability.EnumPropertyEditors = 128 -> MaterialEditorAPI.MaterialEditorApiCapability
+MaterialEditorAPI.MaterialEditorApiCapability.ToggleFloatPropertyEditors = 1024 -> MaterialEditorAPI.MaterialEditorApiCapability
+MaterialEditorAPI.MaterialEditorApiCapability.VectorPropertyEditors = 256 -> MaterialEditorAPI.MaterialEditorApiCapability
+MaterialEditorAPI.MaterialEditorConditionComparison
+MaterialEditorAPI.MaterialEditorConditionComparison.Equal = 0 -> MaterialEditorAPI.MaterialEditorConditionComparison
+MaterialEditorAPI.MaterialEditorConditionComparison.GreaterThan = 2 -> MaterialEditorAPI.MaterialEditorConditionComparison
+MaterialEditorAPI.MaterialEditorConditionComparison.GreaterThanOrEqual = 3 -> MaterialEditorAPI.MaterialEditorConditionComparison
+MaterialEditorAPI.MaterialEditorConditionComparison.LessThan = 4 -> MaterialEditorAPI.MaterialEditorConditionComparison
+MaterialEditorAPI.MaterialEditorConditionComparison.LessThanOrEqual = 5 -> MaterialEditorAPI.MaterialEditorConditionComparison
+MaterialEditorAPI.MaterialEditorConditionComparison.NotEqual = 1 -> MaterialEditorAPI.MaterialEditorConditionComparison
+MaterialEditorAPI.MaterialEditorEnumOption
+MaterialEditorAPI.MaterialEditorEnumOption.DisplayName.get -> string
+MaterialEditorAPI.MaterialEditorEnumOption.MaterialEditorEnumOption(float value, string displayName) -> void
+MaterialEditorAPI.MaterialEditorEnumOption.Value.get -> float
+MaterialEditorAPI.MaterialEditorEnumPropertyEditor
+MaterialEditorAPI.MaterialEditorEnumPropertyEditor.MaterialEditorEnumPropertyEditor(float value, float originalValue, System.Collections.Generic.IEnumerable<MaterialEditorAPI.MaterialEditorEnumOption> options, System.Action<float> valueChanged, System.Action reset) -> void
+MaterialEditorAPI.MaterialEditorEnumPropertyEditor.IsMixed.get -> bool
+MaterialEditorAPI.MaterialEditorEnumPropertyEditor.IsMixed.set -> void
+MaterialEditorAPI.MaterialEditorEnumPropertyEditor.Options.get -> System.Collections.Generic.IList<MaterialEditorAPI.MaterialEditorEnumOption>
+MaterialEditorAPI.MaterialEditorEnumPropertyEditor.OriginalValue.get -> float
+MaterialEditorAPI.MaterialEditorEnumPropertyEditor.Reset.get -> System.Action
+MaterialEditorAPI.MaterialEditorEnumPropertyEditor.SelectInterpolable.get -> System.Action
+MaterialEditorAPI.MaterialEditorEnumPropertyEditor.SelectInterpolable.set -> void
+MaterialEditorAPI.MaterialEditorEnumPropertyEditor.Value.get -> float
+MaterialEditorAPI.MaterialEditorEnumPropertyEditor.ValueChanged.get -> System.Action<float>
+MaterialEditorAPI.MaterialEditorPluginBase.ShaderPropertyData.DisplayName -> string
+MaterialEditorAPI.MaterialEditorPluginBase.ShaderPropertyData.EditorId -> string
+MaterialEditorAPI.MaterialEditorPluginBase.ShaderPropertyData.EnumOptions -> System.Collections.Generic.List<MaterialEditorAPI.MaterialEditorEnumOption>
+MaterialEditorAPI.MaterialEditorPluginBase.ShaderPropertyData.Group -> string
+MaterialEditorAPI.MaterialEditorPluginBase.ShaderPropertyData.OffValue -> float
+MaterialEditorAPI.MaterialEditorPluginBase.ShaderPropertyData.OnValue -> float
+MaterialEditorAPI.MaterialEditorPluginBase.ShaderPropertyData.Order -> int?
+MaterialEditorAPI.MaterialEditorPluginBase.ShaderPropertyData.ShowIf -> MaterialEditorAPI.MaterialEditorPropertyCondition
+MaterialEditorAPI.MaterialEditorPluginBase.ShaderPropertyData.TooltipText -> string
+MaterialEditorAPI.MaterialEditorPluginBase.ShaderPropertyData.VectorComponentCount -> int?
+MaterialEditorAPI.MaterialEditorPropertyCondition
+MaterialEditorAPI.MaterialEditorPropertyCondition.Comparison.get -> MaterialEditorAPI.MaterialEditorConditionComparison
+MaterialEditorAPI.MaterialEditorPropertyCondition.Evaluate(float currentValue) -> bool
+MaterialEditorAPI.MaterialEditorPropertyCondition.MaterialEditorPropertyCondition(string propertyName, MaterialEditorAPI.MaterialEditorConditionComparison comparison, float value) -> void
+MaterialEditorAPI.MaterialEditorPropertyCondition.PropertyName.get -> string
+MaterialEditorAPI.MaterialEditorPropertyCondition.Value.get -> float
+MaterialEditorAPI.MaterialEditorPropertyDescriptor.EnumOptions.get -> System.Collections.Generic.IList<MaterialEditorAPI.MaterialEditorEnumOption>
+MaterialEditorAPI.MaterialEditorPropertyDescriptor.EnumOptions.set -> void
+MaterialEditorAPI.MaterialEditorPropertyDescriptor.Group.get -> string
+MaterialEditorAPI.MaterialEditorPropertyDescriptor.Group.set -> void
+MaterialEditorAPI.MaterialEditorPropertyDescriptor.OffValue.get -> float
+MaterialEditorAPI.MaterialEditorPropertyDescriptor.OffValue.set -> void
+MaterialEditorAPI.MaterialEditorPropertyDescriptor.OnValue.get -> float
+MaterialEditorAPI.MaterialEditorPropertyDescriptor.OnValue.set -> void
+MaterialEditorAPI.MaterialEditorPropertyDescriptor.VectorComponentCount.get -> int?
+MaterialEditorAPI.MaterialEditorPropertyDescriptor.VectorComponentCount.set -> void
+MaterialEditorAPI.MaterialEditorPropertyDescriptor.VisibilityCondition.get -> MaterialEditorAPI.MaterialEditorPropertyCondition
+MaterialEditorAPI.MaterialEditorPropertyDescriptor.VisibilityCondition.set -> void
+MaterialEditorAPI.MaterialEditorTogglePropertyEditor
+MaterialEditorAPI.MaterialEditorTogglePropertyEditor.MaterialEditorTogglePropertyEditor(float value, float originalValue, float offValue, float onValue, System.Action<float> valueChanged, System.Action reset) -> void
+MaterialEditorAPI.MaterialEditorTogglePropertyEditor.IsMixed.get -> bool
+MaterialEditorAPI.MaterialEditorTogglePropertyEditor.IsMixed.set -> void
+MaterialEditorAPI.MaterialEditorTogglePropertyEditor.OffValue.get -> float
+MaterialEditorAPI.MaterialEditorTogglePropertyEditor.OnValue.get -> float
+MaterialEditorAPI.MaterialEditorTogglePropertyEditor.OriginalValue.get -> float
+MaterialEditorAPI.MaterialEditorTogglePropertyEditor.Reset.get -> System.Action
+MaterialEditorAPI.MaterialEditorTogglePropertyEditor.SelectInterpolable.get -> System.Action
+MaterialEditorAPI.MaterialEditorTogglePropertyEditor.SelectInterpolable.set -> void
+MaterialEditorAPI.MaterialEditorTogglePropertyEditor.Value.get -> float
+MaterialEditorAPI.MaterialEditorTogglePropertyEditor.ValueChanged.get -> System.Action<float>
+MaterialEditorAPI.MaterialEditorVectorPropertyEditor
+MaterialEditorAPI.MaterialEditorVectorPropertyEditor.ComponentCount.get -> int
+MaterialEditorAPI.MaterialEditorVectorPropertyEditor.ComponentChanged.get -> System.Action<int, float>
+MaterialEditorAPI.MaterialEditorVectorPropertyEditor.ComponentChanged.set -> void
+MaterialEditorAPI.MaterialEditorVectorPropertyEditor.MixedComponents.get -> System.Collections.Generic.IList<bool>
+MaterialEditorAPI.MaterialEditorVectorPropertyEditor.MixedComponents.set -> void
+MaterialEditorAPI.MaterialEditorVectorPropertyEditor.MaterialEditorVectorPropertyEditor(UnityEngine.Vector4 value, UnityEngine.Vector4 originalValue, int componentCount, System.Action<UnityEngine.Vector4> valueChanged, System.Action reset) -> void
+MaterialEditorAPI.MaterialEditorVectorPropertyEditor.OriginalValue.get -> UnityEngine.Vector4
+MaterialEditorAPI.MaterialEditorVectorPropertyEditor.Reset.get -> System.Action
+MaterialEditorAPI.MaterialEditorVectorPropertyEditor.SelectInterpolable.get -> System.Action
+MaterialEditorAPI.MaterialEditorVectorPropertyEditor.SelectInterpolable.set -> void
+MaterialEditorAPI.MaterialEditorVectorPropertyEditor.Value.get -> UnityEngine.Vector4
+MaterialEditorAPI.MaterialEditorVectorPropertyEditor.ValueChanged.get -> System.Action<UnityEngine.Vector4>
+MaterialEditorAPI.CopyContainer.MaterialVectorProperty
+MaterialEditorAPI.CopyContainer.MaterialVectorProperty.MaterialVectorProperty(string property, UnityEngine.Vector4 value) -> void
+MaterialEditorAPI.CopyContainer.MaterialVectorProperty.Property -> string
+MaterialEditorAPI.CopyContainer.MaterialVectorProperty.Value -> UnityEngine.Vector4
+MaterialEditorAPI.CopyContainer.MaterialVectorPropertyList -> System.Collections.Generic.List<MaterialEditorAPI.CopyContainer.MaterialVectorProperty>
+MaterialEditorAPI.MaterialAPI.ShaderPropertyType.Vector = 4 -> MaterialEditorAPI.MaterialAPI.ShaderPropertyType
+MaterialEditorAPI.MaterialEditorEditService.GetOriginalVector(UnityEngine.Material material, string propertyName) -> UnityEngine.Vector4?
+MaterialEditorAPI.MaterialEditorEditService.ResetVector(UnityEngine.Material material, string propertyName) -> void
+MaterialEditorAPI.MaterialEditorEditService.SetVector(UnityEngine.Material material, string propertyName, UnityEngine.Vector4 value) -> void
+static MaterialEditorAPI.MaterialAPI.SetVector(UnityEngine.GameObject gameObject, string materialName, string propertyName, UnityEngine.Vector4 value) -> bool

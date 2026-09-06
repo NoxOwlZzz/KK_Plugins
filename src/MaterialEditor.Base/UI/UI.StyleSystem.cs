@@ -1,397 +1,713 @@
-﻿using UILib;
+using System.Collections;
+using UILib;
 using UnityEngine;
 using UnityEngine.UI;
 
 namespace MaterialEditorAPI
 {
-    internal static class MaterialEditorLayout
+    internal static class MaterialEditorStyles
     {
-        internal const float Margin = 5f;
-        internal const float HeaderHeight = 20f;
-        internal const float ScrollbarOffset = -15f;
-        internal const float RowHeight = 22f;
-        internal const float CategoryNavigatorWidth = 150f;
-        internal const int PropertyLabelInset = 3;
+        internal static Color WindowColor =>
+            MaterialEditorPanelTextStyles.WindowColor;
+        internal static Color LeftPanelColor =>
+            MaterialEditorPanelTextStyles.LeftPanelColor;
+        internal static Color CenterPanelColor =>
+            MaterialEditorPanelTextStyles.CenterPanelColor;
+        internal static Color RightPanelColor =>
+            MaterialEditorPanelTextStyles.RightPanelColor;
+        internal static Color MainPanelColor =>
+            MaterialEditorPanelTextStyles.MainPanelColor;
+        internal static Color HeaderColor =>
+            MaterialEditorPanelTextStyles.HeaderColor;
+        internal static Color SidePanelColor =>
+            MaterialEditorPanelTextStyles.SidePanelColor;
+        internal static Color NavigatorShaderHeaderColor =>
+            MaterialEditorPanelTextStyles.NavigatorShaderHeaderColor;
+        internal static Color RowColor =>
+            MaterialEditorPanelTextStyles.RowColor;
+        internal static Color RendererColor =>
+            MaterialEditorPanelTextStyles.RendererColor;
+        internal static Color MaterialColor =>
+            MaterialEditorPanelTextStyles.MaterialColor;
+        internal static Color ShaderColor =>
+            MaterialEditorPanelTextStyles.ShaderColor;
+        internal static Color CategoryColor =>
+            MaterialEditorPanelTextStyles.CategoryColor;
+        internal static Color SubcategoryColor =>
+            MaterialEditorPanelTextStyles.SubcategoryColor;
+        internal static Color PropertyColor =>
+            MaterialEditorPanelTextStyles.PropertyColor;
+        internal static Color AlternatePropertyColor =>
+            MaterialEditorPanelTextStyles.AlternatePropertyColor;
+        internal static Color TransparentRowColor =>
+            MaterialEditorPanelTextStyles.TransparentRowColor;
+        internal static Color ChangedRowColor =>
+            MaterialEditorPanelTextStyles.ChangedRowColor;
+        internal static Color ScrollbarColor =>
+            MaterialEditorPanelTextStyles.ScrollbarColor;
+        internal static Color ShaderHintUnderlineColor =>
+            MaterialEditorPanelTextStyles.ShaderHintUnderlineColor;
 
-        internal const float LabelWidth = 0f;
-        internal const float ButtonWidth = 100f;
-        internal const float SmallButtonWidth = 20f;
-        internal const float ResetButtonWidth = SmallButtonWidth * 2f;
-        internal const float InterpolableButtonWidth = SmallButtonWidth;
-        internal const float ContentWidth = 316f;
-        internal const float AdvancedPropertyAccentWidth = 5f;
-        internal const float AdvancedPropertyAccentVerticalInset = 2f;
+        internal static void ApplyPanel(
+            Image panel,
+            MaterialEditorPanelRole role)
+        {
+            MaterialEditorPanelTextStyles.ApplyPanel(panel, role);
+        }
 
-        internal const float RendererButtonWidth = ButtonWidth;
-        internal const float RendererToggleWidth = 20f;
-        internal const float RendererDropdownWidth = 94f;
-        internal const float MaterialButtonWidth = ButtonWidth * 0.75f;
-        internal const float MaterialRenameButtonWidth = SmallButtonWidth;
-        internal const float ShaderModeButtonWidth = 70f;
-        internal const float ShaderDropdownWidth = ContentWidth;
-        internal const float RenderQueueInputWidth = 94f;
-        internal const float OffsetScaleLabelXWidth = 48f;
-        internal const float OffsetScaleLabelYWidth = 10f;
-        internal const float OffsetScaleInputWidth = 50f;
-        internal const float ColorLabelWidth = 10f;
-        internal const float ColorInputWidth = 64f;
-        internal const float ColorEditButtonWidth = 20f;
-        internal const float FloatSliderWidth = ContentWidth - 94f;
-        internal const float FloatInputWidth = 94f;
-        internal const float KeywordToggleWidth = ContentWidth;
-        internal const int DropdownFontSize = 16;
-        internal const int DropdownMinimumFontSize = 12;
-        internal const float DropdownTextVerticalInset = 1f;
+        internal static void ApplyText(
+            Text text,
+            MaterialEditorTextRole role =
+                MaterialEditorTextRole.PreserveHorizontal)
+        {
+            MaterialEditorPanelTextStyles.ApplyText(text, role);
+        }
 
-        internal static readonly RectOffset RowPadding = new RectOffset(1, 1, 1, 1);
+        internal static void ApplyTypography(GameObject root)
+        {
+            MaterialEditorPanelTextStyles.ApplyTypography(root);
+        }
+
+        internal static void ApplyButton(Button button)
+        {
+            MaterialEditorSelectionStyles.ApplyButton(button);
+        }
+
+        internal static void SetControlAvailability(
+            Button button,
+            bool available,
+            MaterialEditorControlAvailabilityMode mode =
+                MaterialEditorControlAvailabilityMode.Disabled)
+        {
+            if (button == null)
+                return;
+
+            var state = button.GetComponent<MaterialEditorControlStyleState>()
+                        ?? MaterialEditorControlStyleState.Assign(
+                            button,
+                            MaterialEditorControlStyleRole.Button);
+            state.SetAvailability(available, mode);
+
+            if (mode == MaterialEditorControlAvailabilityMode.Hidden)
+            {
+                if (button.gameObject.activeSelf != available)
+                    button.gameObject.SetActive(available);
+                if (!available)
+                    return;
+            }
+
+            ReapplyControlState(state);
+        }
+
+        internal static void ReapplyControlState(
+            MaterialEditorControlStyleState state)
+        {
+            if (state == null || !state.BeginApply())
+                return;
+
+            try
+            {
+                MaterialEditorSelectionStyles.ReapplyTheme(state);
+                MaterialEditorInputStyles.ReapplyTheme(state);
+                MaterialEditorDropdownStyles.ReapplyTheme(state);
+                ApplyControlAvailability(state);
+            }
+            finally
+            {
+                state.EndApply();
+            }
+        }
+
+        private static void ApplyControlAvailability(
+            MaterialEditorControlStyleState state)
+        {
+            var selectable = state.GetComponent<Selectable>();
+            if (selectable == null)
+                return;
+
+            // Swatch color is data, not theme state. Its binder remains the
+            // sole owner of the target graphic tint.
+            if (state.Role == MaterialEditorControlStyleRole.Swatch)
+                return;
+
+            if (state.AvailabilityMode
+                    == MaterialEditorControlAvailabilityMode.Hidden
+                && !state.Available)
+            {
+                if (selectable.gameObject.activeSelf)
+                    selectable.gameObject.SetActive(false);
+                return;
+            }
+
+            selectable.enabled = true;
+            if (state.AvailabilityMode
+                    == MaterialEditorControlAvailabilityMode.LegacyPassive
+                && !state.Available
+                && MaterialEditorTheme.Mode == MaterialEditorThemeMode.Legacy)
+            {
+                selectable.interactable = true;
+                MaterialEditorScrollSelectableStyles.SynchronizeCurrentState(
+                    selectable);
+                ApplyUnavailableText(selectable, Color.gray);
+                // Unavailable Light controls retain their normal white surface
+                // and gray text, while the disabled Behaviour rejects pointer input.
+                selectable.enabled = false;
+                return;
+            }
+
+            selectable.interactable = state.Available;
+            MaterialEditorScrollSelectableStyles.SynchronizeCurrentState(
+                selectable);
+            if (!state.Available
+                && MaterialEditorTheme.Mode == MaterialEditorThemeMode.Dark)
+            {
+                ApplyUnavailableText(
+                    selectable,
+                    MaterialEditorTheme.Colors.DisabledText);
+            }
+        }
+
+        private static void ApplyUnavailableText(
+            Selectable selectable,
+            Color color)
+        {
+            foreach (var text in selectable.GetComponentsInChildren<Text>(true))
+            {
+                text.color = color;
+                MaterialEditorPanelTextStyles.RefreshTextRendering(text);
+            }
+        }
+        internal static void ApplyPropertyCategoryButton(Button button)
+        {
+            MaterialEditorSelectionStyles.ApplyPropertyCategoryButton(button);
+        }
+
+        internal static void SetPropertyCategoryExpanded(
+            Button button,
+            bool expanded)
+        {
+            MaterialEditorSelectionStyles.SetPropertyCategoryExpanded(
+                button,
+                expanded);
+        }
+
+        internal static void ApplyPropertySubcategoryButton(Button button)
+        {
+            MaterialEditorSelectionStyles.ApplyPropertySubcategoryButton(
+                button);
+        }
+
+        internal static void SetPropertySubcategoryExpanded(
+            Button button,
+            bool expanded)
+        {
+            MaterialEditorSelectionStyles.SetPropertySubcategoryExpanded(
+                button,
+                expanded);
+        }
+
+        internal static void ApplyCategoryNavigationButton(Button button)
+        {
+            MaterialEditorSelectionStyles.ApplyCategoryNavigationButton(
+                button);
+        }
+
+        internal static void ApplySelectionListRowButton(Button button)
+        {
+            MaterialEditorSelectionStyles.ApplySelectionListRowButton(button);
+        }
+
+        internal static void SetCategoryNavigationSelected(
+            Button button,
+            bool selected)
+        {
+            MaterialEditorSelectionStyles.SetCategoryNavigationSelected(
+                button,
+                selected);
+        }
+
+        internal static void SetSelectionListSelected(
+            Button button,
+            bool selected)
+        {
+            MaterialEditorSelectionStyles.SetSelectionListSelected(
+                button,
+                selected);
+        }
+
+        internal static void ApplySwatchButton(Button button)
+        {
+            MaterialEditorSelectionStyles.ApplySwatchButton(button);
+        }
+
+        internal static void ApplyInputField(InputField inputField)
+        {
+            MaterialEditorInputStyles.ApplyInputField(inputField);
+        }
+
+        internal static void ApplyToggle(Toggle toggle)
+        {
+            MaterialEditorInputStyles.ApplyToggle(toggle);
+        }
+
+        internal static void ApplyDropdown(Dropdown dropdown)
+        {
+            MaterialEditorDropdownStyles.ApplyDropdown(dropdown);
+        }
+
+        internal static void ApplyDropdownPopup(
+            Dropdown dropdown,
+            Transform popupRoot,
+            InputField filter,
+            Button clearButton)
+        {
+            MaterialEditorDropdownStyles.ApplyDropdownPopup(
+                dropdown,
+                popupRoot,
+                filter,
+                clearButton);
+        }
+
+        internal static void ApplyDropdownItemState(
+            Toggle toggle,
+            Text text,
+            bool selected)
+        {
+            MaterialEditorDropdownStyles.ApplyDropdownItemState(
+                toggle,
+                text,
+                selected);
+        }
+
+        internal static void ApplyScrollView(ScrollRect scrollRect)
+        {
+            MaterialEditorScrollSelectableStyles.ApplyScrollView(scrollRect);
+        }
+
+        internal static void ApplySlider(Slider slider)
+        {
+            MaterialEditorInputStyles.ApplySlider(slider);
+        }
+
+        internal static void ApplyRow(GameObject row)
+        {
+            MaterialEditorSelectionStyles.ApplyRow(row);
+        }
+
+        internal static void ApplyGraphicColor(
+            Graphic graphic,
+            MaterialEditorThemeColorRole role)
+        {
+            if (graphic == null)
+                return;
+
+            MaterialEditorGraphicStyleState.Assign(graphic, role);
+            graphic.color = MaterialEditorTheme.Colors.Resolve(role);
+            graphic.SetVerticesDirty();
+        }
+
+        internal static void ApplyOutline(
+            Graphic graphic,
+            MaterialEditorThemeColorRole role)
+        {
+            MaterialEditorScrollSelectableStyles.ApplyControlOutline(
+                graphic,
+                role);
+        }
+
+        internal static void ReapplyTheme(GameObject root)
+        {
+            if (root == null)
+                return;
+
+            foreach (var panelState in
+                     root.GetComponentsInChildren<MaterialEditorPanelStyleState>(true))
+            {
+                MaterialEditorPanelTextStyles.ApplyPanel(
+                    panelState.GetComponent<Image>(),
+                    panelState.Role);
+            }
+
+            foreach (var textState in
+                     root.GetComponentsInChildren<MaterialEditorTextStyleState>(true))
+            {
+                MaterialEditorPanelTextStyles.ApplyText(
+                    textState.GetComponent<Text>(),
+                    textState.Role);
+            }
+
+            foreach (var controlState in
+                     root.GetComponentsInChildren<MaterialEditorControlStyleState>(true))
+                ReapplyControlState(controlState);
+            foreach (var scrollState in
+                     root.GetComponentsInChildren<MaterialEditorScrollStyleState>(true))
+                MaterialEditorScrollSelectableStyles.ReapplyTheme(scrollState);
+
+            foreach (var outlineState in
+                     root.GetComponentsInChildren<MaterialEditorOutlineStyleState>(true))
+                MaterialEditorScrollSelectableStyles.ReapplyOutline(
+                    outlineState);
+
+            foreach (var graphicState in
+                     root.GetComponentsInChildren<MaterialEditorGraphicStyleState>(true))
+            {
+                var graphic = graphicState.GetComponent<Graphic>();
+                if (graphic == null)
+                    continue;
+                graphic.canvasRenderer.SetColor(Color.white);
+                graphic.canvasRenderer.SetAlpha(
+                    MaterialEditorTheme.States.VisibleAlpha);
+                graphic.color =
+                    MaterialEditorTheme.Colors.Resolve(graphicState.Role);
+                graphic.SetVerticesDirty();
+            }
+
+            foreach (var popupStyle in
+                     root.GetComponentsInChildren<MaterialEditorDropdownPopupStyle>(true))
+                popupStyle.ReapplyTheme();
+
+            foreach (var itemStyle in
+                     root.GetComponentsInChildren<MaterialEditorDropdownItemStyle>(true))
+                itemStyle.ReapplyTheme();
+
+            foreach (var underline in
+                     root.GetComponentsInChildren<ShaderHintUnderline>(true))
+            {
+                underline.color =
+                    MaterialEditorTheme.Colors.ShaderHintUnderline;
+                underline.SetVerticesDirty();
+            }
+
+            // Selectable reapplication can start ColorTint work and dropdown
+            // templates can activate while the semantic pass is running. Text
+            // is therefore synchronized last, after all owners have assigned
+            // their final role colors.
+            RefreshTextRendering(root, true);
+        }
+
+        internal static void RefreshTextRendering(
+            GameObject root,
+            bool includeInactive)
+        {
+            if (root == null)
+                return;
+
+            foreach (var text in
+                     root.GetComponentsInChildren<Text>(includeInactive))
+            {
+                MaterialEditorPanelTextStyles.RefreshTextRendering(text);
+            }
+        }
     }
 
     internal enum MaterialEditorTextRole
     {
         PreserveHorizontal,
         Title,
+        Chrome,
+        SecondaryChrome,
         Label,
         CenteredLabel,
         Button,
         Input,
+        Placeholder,
         Tooltip
     }
 
     internal enum MaterialEditorPanelRole
     {
         Default,
+        Window,
         Main,
+        CenterPanel,
         Header,
         SidePanel,
+        LeftPanel,
+        RightPanel,
         Row,
+        PropertyRow,
+        AlternatePropertyRow,
         RendererRow,
         MaterialRow,
+        ShaderRow,
         CategoryRow,
-        TransparentRow
-    }
-
-    internal static class MaterialEditorStyles
-    {
-        internal static readonly Color MainPanelColor = Color.white;
-        internal static readonly Color HeaderColor = Color.gray;
-        internal static readonly Color SidePanelColor = new Color(0.42f, 0.42f, 0.42f);
-        internal static readonly Color NavigatorShaderHeaderColor = new Color(0.64f, 0.64f, 0.64f);
-        internal static readonly Color RowColor = new Color(1f, 1f, 1f, 0.6f);
-        internal static readonly Color RendererColor = new Color(0.984f, 0.600f, 0.008f, 0.5f);
-        internal static readonly Color MaterialColor = new Color(0.400f, 0.690f, 0.196f, 0.5f);
-        internal static readonly Color CategoryColor = new Color(0.627f, 0.004f, 0.812f, 0.5f);
-        internal static readonly Color TransparentRowColor = new Color(1f, 1f, 1f, 0f);
-        internal static readonly Color ChangedRowColor = new Color(0f, 0f, 0f, 0.3f);
-        internal static readonly Color ScrollbarColor = new Color(1f, 1f, 1f, 0.6f);
-        internal static readonly Color ShaderHintUnderlineColor =
-            new Color(0.05f, 0.45f, 1f, 1f);
-        internal static readonly Color AdvancedPropertyAccentColor =
-            new Color32(0x4A, 0xA3, 0xFF, 0xFF);
-
-        internal static void ApplyPanel(Image panel, MaterialEditorPanelRole role)
-        {
-            if (panel == null)
-                return;
-
-            switch (role)
-            {
-                case MaterialEditorPanelRole.Main:
-                    panel.color = MainPanelColor;
-                    break;
-                case MaterialEditorPanelRole.Header:
-                    panel.color = HeaderColor;
-                    break;
-                case MaterialEditorPanelRole.SidePanel:
-                    panel.color = SidePanelColor;
-                    break;
-                case MaterialEditorPanelRole.Row:
-                    panel.color = RowColor;
-                    break;
-                case MaterialEditorPanelRole.RendererRow:
-                    panel.color = RendererColor;
-                    break;
-                case MaterialEditorPanelRole.MaterialRow:
-                    panel.color = MaterialColor;
-                    break;
-                case MaterialEditorPanelRole.CategoryRow:
-                    panel.color = CategoryColor;
-                    break;
-                case MaterialEditorPanelRole.TransparentRow:
-                    panel.color = TransparentRowColor;
-                    break;
-            }
-        }
-
-        internal static void ApplyText(Text text, MaterialEditorTextRole role = MaterialEditorTextRole.PreserveHorizontal)
-        {
-            if (text == null)
-                return;
-
-            text.alignment = GetAlignment(text.alignment, role);
-            text.fontSize = Mathf.Min(text.fontSize, UIUtility.defaultFontSize);
-            if (text.resizeTextForBestFit)
-                text.resizeTextMaxSize = Mathf.Min(text.resizeTextMaxSize, UIUtility.defaultFontSize);
-
-            var styleState = text.GetComponent<MaterialEditorTextStyleState>()
-                             ?? text.gameObject.AddComponent<MaterialEditorTextStyleState>();
-            styleState.SetRole(role);
-
-            var visualCenter = text.GetComponent<RowTextVisualCenter>();
-            if (visualCenter == null)
-                visualCenter = text.gameObject.AddComponent<RowTextVisualCenter>();
-            visualCenter.SetMode(
-                role == MaterialEditorTextRole.Tooltip
-                    ? TextVisualCenterMode.VisibleBounds
-                    : TextVisualCenterMode.TypographicBody);
-            visualCenter.enabled = true;
-
-            text.SetVerticesDirty();
-        }
-
-        internal static void ApplyTypography(GameObject root)
-        {
-            if (root == null)
-                return;
-
-            foreach (var text in root.GetComponentsInChildren<Text>(true))
-            {
-                var styleState = text.GetComponent<MaterialEditorTextStyleState>();
-                ApplyText(
-                    text,
-                    styleState != null
-                        ? styleState.Role
-                        : MaterialEditorTextRole.PreserveHorizontal);
-            }
-        }
-
-        internal static void ApplyButton(Button button)
-        {
-            if (button == null)
-                return;
-
-            foreach (var text in button.GetComponentsInChildren<Text>(true))
-                ApplyText(text, MaterialEditorTextRole.Button);
-        }
-
-        internal static void ApplyInputField(InputField inputField)
-        {
-            if (inputField == null)
-                return;
-
-            inputField.lineType = InputField.LineType.SingleLine;
-            inputField.textComponent.resizeTextForBestFit = true;
-            inputField.textComponent.resizeTextMinSize = 2;
-            inputField.textComponent.resizeTextMaxSize = UIUtility.defaultFontSize;
-            inputField.textComponent.horizontalOverflow = HorizontalWrapMode.Wrap;
-            inputField.textComponent.verticalOverflow = VerticalWrapMode.Truncate;
-
-            ApplyText(inputField.textComponent, MaterialEditorTextRole.Input);
-            if (inputField.placeholder is Text placeholder)
-            {
-                placeholder.resizeTextForBestFit = true;
-                placeholder.resizeTextMinSize = 2;
-                placeholder.resizeTextMaxSize = UIUtility.defaultFontSize;
-                ApplyText(placeholder, MaterialEditorTextRole.Input);
-            }
-        }
-
-        internal static void ApplyToggle(Toggle toggle)
-        {
-            if (toggle == null)
-                return;
-
-            foreach (var text in toggle.GetComponentsInChildren<Text>(true))
-                ApplyText(text);
-        }
-
-        internal static void ApplyDropdown(Dropdown dropdown)
-        {
-            if (dropdown == null)
-                return;
-
-            ApplyDropdownText(dropdown.captionText);
-            ApplyDropdownText(dropdown.itemText);
-            ApplyTypography(dropdown.gameObject);
-        }
-
-        private static void ApplyDropdownText(Text text)
-        {
-            if (text == null)
-                return;
-
-            ApplyText(text, MaterialEditorTextRole.Input);
-            text.fontSize = MaterialEditorLayout.DropdownFontSize;
-            text.resizeTextForBestFit = true;
-            text.resizeTextMinSize =
-                MaterialEditorLayout.DropdownMinimumFontSize;
-            text.resizeTextMaxSize = MaterialEditorLayout.DropdownFontSize;
-            text.horizontalOverflow = HorizontalWrapMode.Wrap;
-            text.verticalOverflow = VerticalWrapMode.Truncate;
-
-            var rect = text.rectTransform;
-            rect.offsetMin = new Vector2(
-                rect.offsetMin.x,
-                MaterialEditorLayout.DropdownTextVerticalInset);
-            rect.offsetMax = new Vector2(
-                rect.offsetMax.x,
-                -MaterialEditorLayout.DropdownTextVerticalInset);
-            text.SetVerticesDirty();
-        }
-
-        internal static void ApplyScrollView(ScrollRect scrollRect)
-        {
-            if (scrollRect?.verticalScrollbar == null)
-                return;
-
-            var image = scrollRect.verticalScrollbar.GetComponent<Image>();
-            if (image != null)
-                image.color = ScrollbarColor;
-        }
-
-        internal static void ApplyRow(GameObject row)
-        {
-            if (row == null)
-                return;
-
-            foreach (var layout in row.GetComponentsInChildren<HorizontalLayoutGroup>(true))
-            {
-                layout.childAlignment = TextAnchor.MiddleLeft;
-                layout.childControlHeight = true;
-                layout.childForceExpandHeight = true;
-
-                var panelRect = layout.GetComponent<RectTransform>();
-                if (panelRect == null)
-                    continue;
-
-                panelRect.anchorMin = Vector2.zero;
-                panelRect.anchorMax = Vector2.one;
-                panelRect.offsetMin = Vector2.zero;
-                panelRect.offsetMax = Vector2.zero;
-                panelRect.localScale = Vector3.one;
-            }
-
-            ApplyTypography(row);
-        }
-
-        private static TextAnchor GetAlignment(TextAnchor current, MaterialEditorTextRole role)
-        {
-            switch (role)
-            {
-                case MaterialEditorTextRole.Title:
-                case MaterialEditorTextRole.CenteredLabel:
-                case MaterialEditorTextRole.Button:
-                    return TextAnchor.MiddleCenter;
-                case MaterialEditorTextRole.Label:
-                case MaterialEditorTextRole.Input:
-                    return TextAnchor.MiddleLeft;
-                default:
-                    return WithMiddleVerticalAlignment(current);
-            }
-        }
-
-        private static TextAnchor WithMiddleVerticalAlignment(TextAnchor alignment)
-        {
-            switch (alignment)
-            {
-                case TextAnchor.UpperCenter:
-                case TextAnchor.MiddleCenter:
-                case TextAnchor.LowerCenter:
-                    return TextAnchor.MiddleCenter;
-                case TextAnchor.UpperRight:
-                case TextAnchor.MiddleRight:
-                case TextAnchor.LowerRight:
-                    return TextAnchor.MiddleRight;
-                default:
-                    return TextAnchor.MiddleLeft;
-            }
-        }
+        SubcategoryRow,
+        SelectedRow,
+        HoverRow,
+        DisabledRow,
+        ModifiedRow,
+        TransparentRow,
+        RowStencilMask,
+        StencilMask,
+        RowBackdrop
     }
 
     internal sealed class MaterialEditorTextStyleState : MonoBehaviour
     {
         [SerializeField] private MaterialEditorTextRole _role;
+        [SerializeField] private bool _assigned;
 
         internal MaterialEditorTextRole Role => _role;
+        internal bool Assigned => _assigned;
 
         internal void SetRole(MaterialEditorTextRole role)
+        {
+            _role = role;
+            _assigned = true;
+        }
+
+        private void OnEnable()
+        {
+            var text = GetComponent<Text>();
+            if (!_assigned)
+            {
+                MaterialEditorPanelTextStyles.RefreshTextRendering(text);
+                return;
+            }
+
+            MaterialEditorPanelTextStyles.ApplyText(text, _role);
+            var owner = GetComponentInParent<MaterialEditorControlStyleState>();
+            if (owner != null)
+                MaterialEditorStyles.ReapplyControlState(owner);
+        }
+    }
+
+    internal sealed class MaterialEditorPanelStyleState : MonoBehaviour
+    {
+        [SerializeField] private MaterialEditorPanelRole _role;
+
+        internal MaterialEditorPanelRole Role => _role;
+
+        internal void SetRole(MaterialEditorPanelRole role)
         {
             _role = role;
         }
     }
 
-    internal static class MaterialEditorControlFactory
+    internal enum MaterialEditorControlStyleRole
     {
-        internal static Canvas CreateNewUISystem(string name)
+        Button,
+        PropertyCategory,
+        PropertySubcategory,
+        CategoryNavigation,
+        SelectionListRow,
+        Swatch,
+        InputField,
+        Toggle,
+        Dropdown,
+        Slider
+    }
+
+    internal enum MaterialEditorControlAvailabilityMode
+    {
+        Disabled,
+        LegacyPassive,
+        Hidden,
+        TimelineSlot
+    }
+
+    internal sealed class MaterialEditorControlStyleState : MonoBehaviour
+    {
+        [SerializeField] private MaterialEditorControlStyleRole _role;
+        [SerializeField] private bool _logicalState;
+        [SerializeField] private bool _available = true;
+        [SerializeField] private MaterialEditorControlAvailabilityMode _availabilityMode;
+        [SerializeField] private bool _assigned;
+        private bool _applying;
+
+        internal MaterialEditorControlStyleRole Role => _role;
+        internal bool LogicalState => _logicalState;
+        internal bool Available => _available;
+        internal MaterialEditorControlAvailabilityMode AvailabilityMode =>
+            _availabilityMode;
+
+        internal static MaterialEditorControlStyleState Assign(
+            Selectable selectable,
+            MaterialEditorControlStyleRole role)
         {
-            return UIUtility.CreateNewUISystem(name);
+            if (selectable == null)
+                return null;
+
+            var state = selectable.GetComponent<MaterialEditorControlStyleState>();
+            if (state == null)
+                state = selectable.gameObject.AddComponent<MaterialEditorControlStyleState>();
+            if (!state._assigned)
+            {
+                state._available = true;
+                state._availabilityMode =
+                    MaterialEditorControlAvailabilityMode.Disabled;
+            }
+            state._role = role;
+            state._assigned = true;
+            return state;
         }
 
-        internal static Image CreatePanel(string name, Transform parent, MaterialEditorPanelRole role = MaterialEditorPanelRole.Default)
+        internal void SetLogicalState(bool value)
         {
-            var panel = UIUtility.CreatePanel(name, parent);
-            MaterialEditorStyles.ApplyPanel(panel, role);
-            return panel;
+            if (_logicalState == value)
+                return;
+            _logicalState = value;
+            if (_assigned && !_applying)
+                MaterialEditorStyles.ReapplyControlState(this);
         }
 
-        internal static Text CreateText(string name, Transform parent, string value = "", MaterialEditorTextRole role = MaterialEditorTextRole.PreserveHorizontal)
+        internal void SetAvailability(
+            bool available,
+            MaterialEditorControlAvailabilityMode mode)
         {
-            var text = UIUtility.CreateText(name, parent, value);
-            MaterialEditorStyles.ApplyText(text, role);
-            return text;
+            _available = available;
+            _availabilityMode = mode;
         }
 
-        internal static Button CreateButton(string name, Transform parent, string value)
+        internal bool BeginApply()
         {
-            var button = UIUtility.CreateButton(name, parent, value);
-            MaterialEditorStyles.ApplyButton(button);
-            return button;
+            if (_applying)
+                return false;
+            _applying = true;
+            return true;
         }
 
-        internal static InputField CreateInputField(
-            string name,
-            Transform parent,
-            string placeholder = "")
+        internal void EndApply()
         {
-            var inputField = UIUtility.CreateInputField(name, parent, placeholder);
-            MaterialEditorStyles.ApplyInputField(inputField);
-            return inputField;
+            _applying = false;
         }
 
-        internal static NumericInputView CreateNumericInput(
-            string name,
-            Transform parent,
-            NumericInputSpec spec)
+        private void OnEnable()
         {
-            var inputField = CreateInputField(name, parent);
-            var view = inputField.gameObject.AddComponent<NumericInputView>();
-            view.Initialize(spec);
-            return view;
+            // AddComponent invokes OnEnable before Assign can set the role.
+            // Existing pooled controls, however, already own complete semantic
+            // state and must restore it synchronously when reactivated.
+            if (_assigned && !_applying)
+                MaterialEditorStyles.ReapplyControlState(this);
+        }
+    }
+    internal sealed class MaterialEditorScrollStyleState : MonoBehaviour
+    {
+        [SerializeField] private bool _popup;
+
+        internal bool Popup => _popup;
+
+        internal static MaterialEditorScrollStyleState Assign(
+            ScrollRect scrollRect,
+            bool popup)
+        {
+            if (scrollRect == null)
+                return null;
+
+            var state = scrollRect.GetComponent<MaterialEditorScrollStyleState>()
+                        ?? scrollRect.gameObject.AddComponent<MaterialEditorScrollStyleState>();
+            state._popup = popup;
+            return state;
+        }
+    }
+
+    internal sealed class MaterialEditorGraphicStyleState : MonoBehaviour
+    {
+        [SerializeField] private MaterialEditorThemeColorRole _role;
+
+        internal MaterialEditorThemeColorRole Role => _role;
+
+        internal static MaterialEditorGraphicStyleState Assign(
+            Graphic graphic,
+            MaterialEditorThemeColorRole role)
+        {
+            if (graphic == null)
+                return null;
+            var state = graphic.GetComponent<MaterialEditorGraphicStyleState>()
+                        ?? graphic.gameObject.AddComponent<MaterialEditorGraphicStyleState>();
+            state._role = role;
+            return state;
+        }
+    }
+
+    internal sealed class MaterialEditorOutlineStyleState : MonoBehaviour
+    {
+        [SerializeField] private MaterialEditorThemeColorRole _role;
+
+        internal MaterialEditorThemeColorRole Role => _role;
+
+        internal static MaterialEditorOutlineStyleState Assign(
+            Graphic graphic,
+            MaterialEditorThemeColorRole role)
+        {
+            if (graphic == null)
+                return null;
+            var state = graphic.GetComponent<MaterialEditorOutlineStyleState>()
+                        ?? graphic.gameObject.AddComponent<MaterialEditorOutlineStyleState>();
+            state._role = role;
+            return state;
+        }
+    }
+
+    // Theme application assigns semantic colors immediately. This component
+    // owns only the render-cache synchronization needed by Unity UI after an
+    // inactive/pooled hierarchy is enabled or a Selectable transition settles.
+    // Each request replaces the previous two-frame pass, so repeated theme
+    // toggles cannot accumulate coroutines or stale work.
+    internal sealed class MaterialEditorThemeRepaintCoordinator : MonoBehaviour
+    {
+        private Coroutine _routine;
+        private int _generation;
+        private bool _pending;
+
+        internal void RequestRepaint()
+        {
+            _pending = true;
+            _generation++;
+            SynchronizeActiveText();
+
+            if (isActiveAndEnabled)
+                Restart(_generation);
         }
 
-        internal static Toggle CreateToggle(string name, Transform parent, string value)
+        private void OnEnable()
         {
-            var toggle = UIUtility.CreateToggle(name, parent, value);
-            MaterialEditorStyles.ApplyToggle(toggle);
-            return toggle;
+            if (_pending)
+                Restart(_generation);
         }
 
-        internal static Dropdown CreateDropdown(string name, Transform parent)
+        private void OnDisable()
         {
-            var dropdown = UIUtility.CreateDropdown(name, parent);
-            MaterialEditorStyles.ApplyDropdown(dropdown);
-            return dropdown;
+            _generation++;
+            if (_routine != null)
+                StopCoroutine(_routine);
+            _routine = null;
         }
 
-        internal static Slider CreateSlider(string name, Transform parent)
+        private void Restart(int generation)
         {
-            return UIUtility.CreateSlider(name, parent);
+            if (_routine != null)
+                StopCoroutine(_routine);
+            _routine = StartCoroutine(RepaintAfterActivation(generation));
         }
 
-        internal static ScrollRect CreateScrollView(string name, Transform parent)
+        private IEnumerator RepaintAfterActivation(int generation)
         {
-            var scrollView = UIUtility.CreateScrollView(name, parent);
-            MaterialEditorStyles.ApplyScrollView(scrollView);
-            return scrollView;
+            // One frame lets parent activation and virtual-row binding finish.
+            yield return null;
+            if (!CanContinue(generation))
+                yield break;
+            SynchronizeActiveText();
+
+            // A second frame catches dropdown clones and the final ColorTint
+            // tick without rebuilding presentation data or the row layout.
+            yield return null;
+            if (!CanContinue(generation))
+                yield break;
+            SynchronizeActiveText();
+
+            _pending = false;
+            _routine = null;
+        }
+
+        private bool CanContinue(int generation)
+        {
+            return generation == _generation && isActiveAndEnabled;
+        }
+
+        private void SynchronizeActiveText()
+        {
+            MaterialEditorStyles.RefreshTextRendering(gameObject, false);
         }
     }
 }

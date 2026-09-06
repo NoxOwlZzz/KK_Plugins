@@ -1,6 +1,7 @@
 using MaterialEditorAPI;
 using MessagePack;
 using System;
+using System.Collections.Generic;
 using UnityEngine;
 using static MaterialEditorAPI.MaterialAPI;
 using KKAPI.Studio.SaveLoad;
@@ -278,6 +279,31 @@ namespace KK_Plugins.MaterialEditor
             }
         }
 
+        [Serializable]
+        [MessagePackObject]
+        public class MaterialVectorProperty
+        {
+            [Key("ID")]
+            public int ID;
+            [Key("MaterialName")]
+            public string MaterialName;
+            [Key("Property")]
+            public string Property;
+            [Key("Value")]
+            public Vector4 Value;
+            [Key("ValueOriginal")]
+            public Vector4 ValueOriginal;
+
+            public MaterialVectorProperty(int id, string materialName, string property, Vector4 value, Vector4 valueOriginal)
+            {
+                ID = id;
+                MaterialName = materialName.FormatShadingObjectName();
+                Property = property;
+                Value = value;
+                ValueOriginal = valueOriginal;
+            }
+        }
+
         /// <summary>
         /// Data storage class for texture properties
         /// </summary>
@@ -360,6 +386,106 @@ namespace KK_Plugins.MaterialEditor
             /// </summary>
             /// <returns></returns>
             public bool NullCheck() => TexID == null && Offset == null && Scale == null;
+        }
+
+        [Serializable]
+        [MessagePackObject]
+        public class MaterialCubemapProperty
+        {
+            /// <summary>
+            /// ID of the Studio object.
+            /// </summary>
+            [Key("ID")]
+            public int ID;
+
+            [Key("MaterialName")]
+            public string MaterialName;
+
+            [Key("Property")]
+            public string Property;
+
+            /// <summary>
+            /// ID of the encoded Cubemap source in the shared byte store.
+            /// </summary>
+            [Key("TexID")]
+            public int? TexID;
+
+            private MaterialCubemapOriginalState _cubemapOriginalState;
+
+            [IgnoreMember]
+            internal MaterialCubemapOriginalState CubemapOriginalState
+            {
+                get
+                {
+                    if (_cubemapOriginalState == null)
+                        _cubemapOriginalState = new MaterialCubemapOriginalState();
+                    return _cubemapOriginalState;
+                }
+            }
+
+            public MaterialCubemapProperty(
+                int id,
+                string materialName,
+                string property,
+                int? texID = null)
+            {
+                ID = id;
+                MaterialName = materialName.FormatShadingObjectName();
+                Property = property;
+                TexID = texID;
+            }
+
+            internal void InheritCubemapOriginalSnapshot(
+                MaterialCubemapProperty source,
+                GameObject sourceGameObject)
+            {
+                CubemapOriginalState.InheritFrom(
+                    source == null ? null : source.CubemapOriginalState,
+                    sourceGameObject,
+                    source == null ? null : source.MaterialName,
+                    source == null ? null : source.Property);
+            }
+
+            internal void InheritCubemapOriginalSnapshotSameMaterials(
+                MaterialCubemapProperty source,
+                GameObject sourceGameObject)
+            {
+                CubemapOriginalState.InheritSameMaterialsFrom(
+                    source == null ? null : source.CubemapOriginalState,
+                    sourceGameObject,
+                    source == null ? null : source.MaterialName,
+                    source == null ? null : source.Property);
+            }
+
+            internal bool SynchronizeCubemapOriginalSnapshot(GameObject gameObject)
+            {
+                return CubemapOriginalState.Synchronize(
+                    gameObject,
+                    MaterialName,
+                    Property);
+            }
+
+            internal bool RestoreCubemapOriginalSnapshot(GameObject gameObject)
+            {
+                return CubemapOriginalState.RestoreOriginal(
+                    gameObject,
+                    MaterialName,
+                    Property);
+            }
+
+            internal void ClearCubemapOriginalSnapshot()
+            {
+                CubemapOriginalState.Clear();
+            }
+
+            /// <summary>
+            /// Checks whether this edit has no persisted Cubemap value.
+            /// </summary>
+            /// <returns>True when the edit can be removed.</returns>
+            public bool NullCheck()
+            {
+                return TexID == null || Property == null || MaterialName == null;
+            }
         }
 
         /// <summary>

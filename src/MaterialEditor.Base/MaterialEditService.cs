@@ -7,6 +7,8 @@ namespace MaterialEditorAPI
 {
     internal sealed class MaterialEditService
     {
+        private static readonly ProjectorProperties[] ClipboardProjectorProperties =
+            (ProjectorProperties[])Enum.GetValues(typeof(ProjectorProperties));
         private readonly Func<object, IMaterialEditRepository> _repositoryResolver;
 
         internal MaterialEditService(IMaterialEditRepository repository)
@@ -54,11 +56,90 @@ namespace MaterialEditorAPI
         internal IEnumerable<Projector> GetProjectorList(object data, GameObject gameObject) =>
             GetRepository(data).GetProjectorList(data, gameObject);
 
-        internal void MaterialCopyEdits(object data, Material material, GameObject gameObject) =>
+        internal void MaterialCopyEdits(object data, Material material, GameObject gameObject)
+        {
+            MaterialEditorClipboardState.EnsureClipboard();
             GetRepository(data).MaterialCopyEdits(data, material, gameObject);
+        }
 
-        internal void MaterialPasteEdits(object data, Material material, GameObject gameObject) =>
-            GetRepository(data).MaterialPasteEdits(data, material, gameObject);
+        internal void MaterialPasteEdits(object data, Material material, GameObject gameObject)
+        {
+            var clipboard = MaterialEditorPluginBase.CopyData;
+            if (clipboard == null)
+                return;
+            using (new MaterialEditorClipboardPasteLease(
+                       clipboard,
+                       false))
+            {
+                GetRepository(data).MaterialPasteEdits(data, material, gameObject);
+            }
+        }
+
+        internal void MaterialCopyEdits(
+            object data,
+            Material material,
+            Projector projector,
+            GameObject gameObject)
+        {
+            MaterialEditorClipboardState.EnsureClipboard();
+            var repository = GetRepository(data);
+            repository.MaterialCopyEdits(data, material, gameObject);
+
+            var clipboard = MaterialEditorClipboardState.EnsureClipboard();
+            if (clipboard.ProjectorPropertyList == null)
+                clipboard.ProjectorPropertyList = new List<CopyContainer.ProjectorProperty>();
+            else
+                clipboard.ProjectorPropertyList.Clear();
+            if (projector == null)
+                return;
+
+            for (var index = 0; index < ClipboardProjectorProperties.Length; index++)
+            {
+                var property = ClipboardProjectorProperties[index];
+                var value = repository.GetProjectorPropertyValue(
+                    data,
+                    projector,
+                    property,
+                    gameObject);
+                if (value.HasValue)
+                {
+                    clipboard.ProjectorPropertyList.Add(
+                        new CopyContainer.ProjectorProperty(property, value.Value));
+                }
+            }
+        }
+
+        internal void MaterialPasteEdits(
+            object data,
+            Material material,
+            Projector projector,
+            GameObject gameObject)
+        {
+            var clipboard = MaterialEditorPluginBase.CopyData;
+            if (clipboard == null)
+                return;
+            var repository = GetRepository(data);
+
+            using (var paste = new MaterialEditorClipboardPasteLease(
+                       clipboard,
+                       true))
+            {
+                repository.MaterialPasteEdits(data, material, gameObject);
+
+                if (projector == null)
+                    return;
+                for (var index = 0; index < paste.ProjectorEdits.Count; index++)
+                {
+                    var edit = paste.ProjectorEdits[index];
+                    repository.SetProjectorProperty(
+                        data,
+                        projector,
+                        edit.Property,
+                        edit.Value,
+                        gameObject);
+                }
+            }
+        }
 
         internal void MaterialCopyRemove(object data, Material material, GameObject gameObject) =>
             GetRepository(data).MaterialCopyRemove(data, material, gameObject);
@@ -96,8 +177,77 @@ namespace MaterialEditorAPI
         internal void SetMaterialTexture(object data, Material material, string propertyName, string filePath, GameObject gameObject) =>
             GetRepository(data).SetMaterialTexture(data, material, propertyName, filePath, gameObject);
 
+        internal void SetMaterialTexture(
+            object data,
+            Material material,
+            string propertyName,
+            string filePath,
+            GameObject gameObject,
+            Action<bool> completed)
+        {
+            var repository = GetRepository(data);
+            var completionRepository = repository as IMaterialTextureImportCompletionRepository;
+            if (completionRepository != null)
+            {
+                completionRepository.SetMaterialTexture(
+                    data,
+                    material,
+                    propertyName,
+                    filePath,
+                    gameObject,
+                    completed);
+                return;
+            }
+
+            try
+            {
+                repository.SetMaterialTexture(data, material, propertyName, filePath, gameObject);
+            }
+            catch
+            {
+                completed?.Invoke(false);
+                throw;
+            }
+
+            completed?.Invoke(true);
+        }
+
         internal void RemoveMaterialTexture(object data, Material material, string propertyName, GameObject gameObject) =>
             GetRepository(data).RemoveMaterialTexture(data, material, propertyName, gameObject);
+
+        internal bool GetMaterialCubemapValueOriginal(object data, Material material, string propertyName, GameObject gameObject) =>
+            GetRepository(data).GetMaterialCubemapValueOriginal(data, material, propertyName, gameObject);
+
+        internal void SetMaterialCubemap(object data, Material material, string propertyName, string filePath, GameObject gameObject) =>
+            GetRepository(data).SetMaterialCubemap(data, material, propertyName, filePath, gameObject);
+
+        internal bool SupportsMaterialCubemapDataImport(object data) =>
+            GetRepository(data) is IMaterialCubemapDataImportRepository;
+
+        internal bool SetMaterialCubemap(
+            object data,
+            Material material,
+            string propertyName,
+            byte[] encodedData,
+            MaterialEditorCubemapContentKey contentKey,
+            GameObject gameObject)
+        {
+            var repository = GetRepository(data);
+            var dataRepository = repository as IMaterialCubemapDataImportRepository;
+            if (dataRepository == null)
+                return false;
+
+            return dataRepository.SetMaterialCubemap(
+                data,
+                material,
+                propertyName,
+                encodedData,
+                contentKey,
+                gameObject);
+        }
+
+        internal void RemoveMaterialCubemap(object data, Material material, string propertyName, GameObject gameObject) =>
+            GetRepository(data).RemoveMaterialCubemap(data, material, propertyName, gameObject);
 
         internal Vector2? GetMaterialTextureOffsetOriginal(object data, Material material, string propertyName, GameObject gameObject) =>
             GetRepository(data).GetMaterialTextureOffsetOriginal(data, material, propertyName, gameObject);
@@ -125,6 +275,15 @@ namespace MaterialEditorAPI
 
         internal void RemoveMaterialColorProperty(object data, Material material, string propertyName, GameObject gameObject) =>
             GetRepository(data).RemoveMaterialColorProperty(data, material, propertyName, gameObject);
+
+        internal Vector4? GetMaterialVectorPropertyValueOriginal(object data, Material material, string propertyName, GameObject gameObject) =>
+            GetRepository(data).GetMaterialVectorPropertyValueOriginal(data, material, propertyName, gameObject);
+
+        internal void SetMaterialVectorProperty(object data, Material material, string propertyName, Vector4 value, GameObject gameObject) =>
+            GetRepository(data).SetMaterialVectorProperty(data, material, propertyName, value, gameObject);
+
+        internal void RemoveMaterialVectorProperty(object data, Material material, string propertyName, GameObject gameObject) =>
+            GetRepository(data).RemoveMaterialVectorProperty(data, material, propertyName, gameObject);
 
         internal float? GetMaterialFloatPropertyValueOriginal(object data, Material material, string propertyName, GameObject gameObject) =>
             GetRepository(data).GetMaterialFloatPropertyValueOriginal(data, material, propertyName, gameObject);

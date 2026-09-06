@@ -19,6 +19,7 @@ namespace MaterialEditorAPI
             if (assComp == null)
                 assComp = scrollbar.gameObject.AddComponent<AutoScrollToSelectionWithDropdown>();
             assComp._target = dropdown;
+            assComp.enabled = true;
         }
 
         [SerializeField] private Dropdown _target;
@@ -33,11 +34,14 @@ namespace MaterialEditorAPI
 
         private void LateUpdate()
         {
-            if (!_autoScrolled)
-            {
-                _autoScrolled = true;
-                AutoScroll();
-            }
+            if (_autoScrolled)
+                return;
+
+            _autoScrolled = true;
+            AutoScroll();
+            // Runtime dropdown templates are cloned per opening. After the
+            // single post-layout pass there is no reason to poll every frame.
+            enabled = false;
         }
 
         private void AutoScroll()
@@ -45,7 +49,20 @@ namespace MaterialEditorAPI
             if (_target == null)
                 return;
 
-            int items = _target.options.Count;
+            var selectedIndex = _target.value;
+            var items = _target.options.Count;
+            var filter = GetComponentInParent<DropdownFilter>();
+            if (filter != null
+                && !filter.TryGetVisibleOptionPosition(
+                    selectedIndex,
+                    out selectedIndex,
+                    out items))
+            {
+                // The selected option is filtered out. Keep the filter-owned
+                // scroll position instead of centering an invisible full-list
+                // index into the shortened content.
+                return;
+            }
 
             if (items <= 1)
                 return;
@@ -76,7 +93,7 @@ namespace MaterialEditorAPI
 
             float viewAreaRatio = (viewSize / itemSize) / items;
 
-            float scroll = (float)_target.value / items - viewAreaRatio * 0.5f;
+            float scroll = (float)selectedIndex / items - viewAreaRatio * 0.5f;
             scroll = Mathf.Clamp(scroll, 0f, 1f - viewAreaRatio);
             scroll = Mathf.InverseLerp(0, 1f - viewAreaRatio, scroll);
 

@@ -71,7 +71,9 @@ namespace MaterialEditorAPI
                 var rendererName = rend.NameFormatted();
                 rendererName = string.Concat(rendererName.Split(Path.GetInvalidFileNameChars())).Trim();
                 string filename = Path.Combine(MaterialEditorPluginBase.ExportPath, $"{rendererName}_{x}.png");
-                File.WriteAllBytes(filename, png.EncodeToPNG());
+                File.WriteAllBytes(
+                    filename,
+                    MaterialEditorPluginBase.EncodeTextureToPng(png));
                 Object.DestroyImmediate(png);
                 MaterialEditorPluginBase.Logger.LogInfo($"Exported {filename}");
                 if (!openedFile)
